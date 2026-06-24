@@ -78,9 +78,9 @@ class PRISM():
         print(transcript_message)
         current_date = datetime.now().strftime('%Y-%m-%d')
         if self.mode == "test":
-            file_path = f'C:/github/prism/prism/logs/transcripts/test_transcript.txt'
+            file_path = f'C:/github/prism/logs/transcripts/test_transcript.txt'
         else:
-            file_path = f'C:/github/prism/prism/logs/transcripts/{current_date}_transcript.txt'
+            file_path = f'C:/github/prism/logs/transcripts/{current_date}_transcript.txt'
         try:
             with open(file_path, 'a') as file:
                 file.write(f"{datetime.now().strftime('%H:%M:%S')} - {transcript_message}\n")
@@ -92,9 +92,9 @@ class PRISM():
         try:
             today_date = datetime.now().strftime('%Y-%m-%d')
             if self.mode == "test":
-                transcript_path = f'C:/github/prism/prism/logs/{target}s/test_{target}.txt'
+                transcript_path = f'C:/github/prism/logs/{target}s/test_{target}.txt'
             else:
-                transcript_path = f'C:/github/prism/prism/logs/{target}s/{today_date}_{target}.txt'
+                transcript_path = f'C:/github/prism/logs/{target}s/{today_date}_{target}.txt'
             try:
                 with open(transcript_path, 'r') as f:
                     num_lines = int(num_lines)
