@@ -210,7 +210,7 @@ class ParticipantManager(TaskManager):
             column_name = task_column_map.get(task_type)
 
             if column_name:
-                with open("C:/github/prism/prism/config/reminders.csv", "r", newline="") as file:
+                with open("C:/github/prism/config/reminders.csv", "r", newline="") as file:
                     reader = csv.DictReader(file)
                     for row in reader:
                         if row["unique_id"] == str(participant_id):
