@@ -23,7 +23,7 @@ class SystemTaskManager(TaskManager):
     def get_r_script_tasks(self):
         data = {
             (f[:-2]): (f[:-2])
-            for f in os.listdir('../../../proj_optimize/automation/')
+            for f in os.listdir('../../proj_optimize/automation/')
             if f.endswith('.R')
         }
         return data

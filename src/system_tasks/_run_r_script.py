@@ -20,7 +20,7 @@ class RunRScript(SystemTask):
         self.task_type = f"RUN_R_SCRIPT (script path: {self.r_script_path})"
         self.app.add_to_transcript(f"{self.task_type} #{self.task_number} initiated.")
         initial_dir = os.getcwd()
-        scripts_dir = os.path.abspath(os.path.join(initial_dir, '../../../proj_optimize/automation/'))
+        scripts_dir = os.path.abspath(os.path.join(initial_dir, '../../proj_optimize/automation/'))
         if not os.path.exists(scripts_dir):
             self.app.add_to_transcript(f"Scripts directory {scripts_dir} does not exist. Please check the path.", "ERROR")
             return 1
