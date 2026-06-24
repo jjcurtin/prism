@@ -1,0 +1,11 @@
+redirect standard error into logs
+
+Security
+Database instead of CSV files
+Possible 2FA/confirmation that the correct person is receiving the message
+Better type checking
+
+Considerations
+Is it necessary to send survey link every single time or will the text message reminder alone suffice?
+
+Reconfigure message generation as a task
