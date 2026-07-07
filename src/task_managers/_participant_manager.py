@@ -203,18 +203,18 @@ class ParticipantManager(TaskManager):
             
             # reminder checking logic
             task_column_map = {
-                "ema_reminder": "ema_opened",
-                "feedback_reminder": "feedback_opened"
+                "ema_reminder": "remind_ema",
+                "feedback_reminder": "remind_feedback"
             }
 
             column_name = task_column_map.get(task_type)
 
             if column_name:
-                with open("C:/github/prism/config/reminders.csv", "r", newline="") as file:
+                with open("S:/optimize/data_raw/participants/reminders.csv", "r", newline="") as file:
                     reader = csv.DictReader(file)
                     for row in reader:
                         if row["unique_id"] == str(participant_id):
-                            if row[column_name].strip() == "yes":
+                            if row[column_name].strip() == "no":
                                 return 0  # Already opened
                             break
 
