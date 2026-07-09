@@ -558,7 +558,7 @@ def move_cursor(self, x, y):
         sys.stdout.write(f"\033[{y+1};{x+1}H")
         sys.stdout.flush()
     except Exception as e:
-        if self.debug:
+        if getattr(self, 'debug', False):
             print(f"error moving: {x if x is not None else 'None'}, {y if y is not None else 'None'}")
 
 def clear_column(self, x, y, width, height):

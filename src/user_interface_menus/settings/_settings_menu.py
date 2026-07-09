@@ -113,6 +113,7 @@ def tokens_parameter(self):
             return 0
     except Exception as e:
         error("Invalid input. Please try again.")
+        return 0
     set_assistant_tokens(int(new_tokens))
 
 def menu_delay_parameter(self):
@@ -158,6 +159,7 @@ def param_set_type_speed(self):
             return 0
     except Exception as e:
         error("Invalid input. Please try again.")
+        return 0
     set_assistant_type_speed(float(new_speed))
 
 def print_params(self):

@@ -204,21 +204,21 @@ def test_tokens_parameter_non_positive(fake_interface, monkeypatch, capsys):
     assert "must be a positive integer" in capsys.readouterr().out
 
 
-def test_tokens_parameter_non_numeric_raises_bug(fake_interface, monkeypatch):
-    """BUG (documented, not fixed): settings/_settings_menu.py:110-116
-    (tokens_parameter)'s `except Exception:` branch prints "Invalid input..."
-    but doesn't `return`, so execution falls through to
-    `set_assistant_tokens(int(new_tokens))` (line 116) OUTSIDE the try/except,
-    which re-raises the same ValueError uncaught. Selecting 'tokens' and
-    typing a non-numeric value crashes the interface instead of showing the
-    printed error message and returning to the menu.
+def test_tokens_parameter_non_numeric_returns_without_raising(fake_interface, monkeypatch, capsys):
+    """Regression test for a fixed bug: settings/_settings_menu.py's
+    tokens_parameter `except Exception:` branch used to print "Invalid
+    input..." but not `return`, so execution fell through to
+    `set_assistant_tokens(int(new_tokens))` OUTSIDE the try/except, which
+    re-raised the same ValueError uncaught. Now returns cleanly after
+    reporting the error.
     """
     mock_set = MagicMock()
     monkeypatch.setattr(_settings_menu, 'set_assistant_tokens', mock_set)
     fake_interface.inputs_queue.put('notanumber')
-    with pytest.raises(ValueError):
-        _settings_menu.tokens_parameter(fake_interface)
+    result = _settings_menu.tokens_parameter(fake_interface)
+    assert result == 0
     mock_set.assert_not_called()
+    assert 'Invalid input' in capsys.readouterr().out
 
 
 # ------------------------------------------------------------
@@ -292,19 +292,20 @@ def test_param_set_type_speed_out_of_range(fake_interface, monkeypatch, capsys):
     assert "between 0.001 and 0.03" in capsys.readouterr().out
 
 
-def test_param_set_type_speed_non_numeric_raises_bug(fake_interface, monkeypatch):
-    """BUG (documented, not fixed): same missing-return pattern as
-    tokens_parameter, at settings/_settings_menu.py:154-161
-    (param_set_type_speed). Non-numeric input prints "Invalid input..." then
-    falls through to `set_assistant_type_speed(float(new_speed))` (line
-    161), re-raising the ValueError uncaught.
+def test_param_set_type_speed_non_numeric_returns_without_raising(fake_interface, monkeypatch, capsys):
+    """Regression test for a fixed bug: same missing-return pattern as
+    tokens_parameter, at settings/_settings_menu.py's param_set_type_speed.
+    Non-numeric input now returns cleanly after reporting the error instead
+    of falling through to set_assistant_type_speed(float(new_speed)) and
+    re-raising.
     """
     mock_set = MagicMock()
     monkeypatch.setattr(_settings_menu, 'set_assistant_type_speed', mock_set)
     fake_interface.inputs_queue.put('notanumber')
-    with pytest.raises(ValueError):
-        _settings_menu.param_set_type_speed(fake_interface)
+    result = _settings_menu.param_set_type_speed(fake_interface)
+    assert result == 0
     mock_set.assert_not_called()
+    assert 'Invalid input' in capsys.readouterr().out
 
 
 # ------------------------------------------------------------

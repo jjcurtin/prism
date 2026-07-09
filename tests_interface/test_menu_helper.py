@@ -340,13 +340,12 @@ def test_load_params_rejects_non_numeric_value(fake_repo, capsys):
     assert "INVALID" in capsys.readouterr().out
 
 
-def test_load_params_right_align_only_toggles_on_false(fake_repo):
-    """Documents existing (fragile) behavior, not fixing it: RIGHT_ALIGN is
-    never set directly from the file -- load_params() only calls
-    toggle_right_align() when the file says "False", implicitly assuming
-    the in-memory value is currently True. If the in-memory value is
-    already False, or the file says "True", nothing happens either way.
-    A file value of "True" is silently a no-op regardless of current state.
+def test_load_params_right_align_sets_directly_from_file(fake_repo):
+    """Regression test for a fixed bug: RIGHT_ALIGN used to only ever be
+    toggled (never set) when the file said "False", implicitly assuming the
+    in-memory value was currently True -- a file value of "True" was a
+    silent no-op regardless of current state. Now set directly from the
+    file value in both directions, like every other field.
     """
     menu_helper.RIGHT_ALIGN = True
     (fake_repo / "config" / "uiconfig.txt").write_text("RIGHT_ALIGN=False\n")
@@ -356,9 +355,7 @@ def test_load_params_right_align_only_toggles_on_false(fake_repo):
     menu_helper.RIGHT_ALIGN = False
     (fake_repo / "config" / "uiconfig.txt").write_text("RIGHT_ALIGN=True\n")
     menu_helper.load_params()
-    # BUG (pre-existing, not fixed here): file says RIGHT_ALIGN=True but
-    # nothing sets it back to True from False -- stays False.
-    assert menu_helper.RIGHT_ALIGN is False
+    assert menu_helper.RIGHT_ALIGN is True
 
 
 # ------------------------------------------------------------

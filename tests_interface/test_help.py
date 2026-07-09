@@ -160,17 +160,15 @@ def test_research_assistant_documentation_leaf_infopages_render(fake_interface, 
     assert "task management system" in capsys.readouterr().out
 
 
-def test_research_assistant_documentation_navigation_advanced_missing_self_param(fake_interface, monkeypatch):
-    """BUG (documented, not fixed): navigation_advanced() is defined with no
-    parameters (help/_research_assistant_documentation.py, ~line 26), unlike
-    every other menu_caller in this file, which all take `self`. The real
-    dispatch path (utils/_menu_navigation.py goto_menu() -> menu_caller(self))
-    always calls it with one positional arg, so selecting "navigation
-    advanced" from the RA help menu raises TypeError instead of showing its
-    content; goto_menu's own try/except silently swallows it into a generic
-    "An error occurred while navigating to the menu" message, so the content
-    is simply unreachable from the running interface. This test pins the
-    underlying TypeError so a future fix is visible.
+def test_research_assistant_documentation_navigation_advanced_callable_with_self(fake_interface, monkeypatch, capsys):
+    """Regression test for a fixed bug: navigation_advanced() used to be
+    defined with no parameters (help/_research_assistant_documentation.py,
+    ~line 26), unlike every other menu_caller in this file, which all take
+    `self`. The real dispatch path (utils/_menu_navigation.py goto_menu() ->
+    menu_caller(self)) always calls it with one positional arg, so selecting
+    "navigation advanced" from the RA help menu used to raise TypeError
+    instead of showing its content. Now fixed -- confirms it's callable with
+    `self` and renders its content.
     """
     captured = {}
 
@@ -182,5 +180,6 @@ def test_research_assistant_documentation_navigation_advanced_missing_self_param
     _research_assistant_documentation.research_assistant_documentation(fake_interface)
     menu_caller = captured['menu_options']['navigation advanced']['menu_caller']
 
-    with pytest.raises(TypeError):
-        menu_caller(fake_interface)
+    menu_caller(fake_interface)
+
+    assert 'navigation advanced' in capsys.readouterr().out

@@ -327,9 +327,15 @@ def load_params():
             global_var = line.split("=")[0].strip()
             val = line.split("=")[1].strip()
             if global_var and val:
-                if global_var == "RIGHT_ALIGN" and val == "False":
-                    toggle_right_align()
-                    print(global_var, val)
+                if global_var == "RIGHT_ALIGN":
+                    if val == "True":
+                        RIGHT_ALIGN = True
+                        print(global_var, val)
+                    elif val == "False":
+                        RIGHT_ALIGN = False
+                        print(global_var, val)
+                    else:
+                        print(global_var, "INVALID, please update")
                 elif global_var == "WINDOW_WIDTH":
                     try:
                         if int(val) and int(val) > 0 and int(val) < 200:

@@ -48,7 +48,7 @@ def remove_task_menu(self):
             else:
                 error("No tasks scheduled to remove.", self)
     except Exception as e:
-        error(f"Invalid input: {e}", self)
+        error(f"An error occurred while removing the task: {e}", self)
 
 # ------------------------------------------------------------
 

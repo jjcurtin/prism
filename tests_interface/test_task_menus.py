@@ -129,14 +129,15 @@ def test_remove_task_menu_no_tasks_scheduled(fake_interface, capsys):
     assert 'No tasks scheduled to remove.' in capsys.readouterr().out
 
 
-def test_remove_task_menu_outer_exception_mislabeled_as_invalid_input(fake_interface, capsys):
-    """BUG (documented, not fixed): tasks/_system_task_menu.py:50-51 -- the
-    whole body of remove_task_menu is wrapped in one
-    `try: ... except Exception as e: error(f"Invalid input: {e}", self)`.
-    That's fine for the inner `int(index)` ValueError it's clearly meant to
-    catch, but it also swallows *any other* exception (e.g. a real network
-    failure surfaced by self.api raising) and mislabels it "Invalid input",
-    which is misleading for debugging.
+def test_remove_task_menu_outer_exception_reported_accurately(fake_interface, capsys):
+    """Regression test for a fixed bug: tasks/_system_task_menu.py's
+    remove_task_menu wraps its whole body in one
+    `try: ... except Exception as e: error(...)`. The outer handler's
+    message used to say "Invalid input: {e}" regardless of cause, which was
+    fine for the inner int(index) ValueError it's clearly meant to catch,
+    but misleading for any other exception (e.g. a real network failure
+    surfaced by self.api raising). Now the outer message doesn't claim
+    "invalid input" for a non-input-related failure.
     """
     fake_interface.commands_queue = deque(['x'])
     fake_interface.api = MagicMock(side_effect=RuntimeError('connection reset'))
@@ -144,7 +145,8 @@ def test_remove_task_menu_outer_exception_mislabeled_as_invalid_input(fake_inter
     stm.remove_task_menu(fake_interface)
 
     out = capsys.readouterr().out
-    assert 'Invalid input: connection reset' in out
+    assert 'connection reset' in out
+    assert 'Invalid input' not in out
 
 
 # ------------------------------------------------------------

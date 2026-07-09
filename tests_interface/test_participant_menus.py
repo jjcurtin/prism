@@ -37,11 +37,11 @@ def _no_log_file(monkeypatch):
     monkeypatch.setattr(menu_helper, 'write_to_interface_log', lambda msg: None)
 
 
-def _participant(unique_id, first_name, last_name, on_study=True):
+def _participant(unique_id, initials, subid, on_study=True):
     return {
         'unique_id': unique_id,
-        'first_name': first_name,
-        'last_name': last_name,
+        'initials': initials,
+        'subid': subid,
         'on_study': on_study,
     }
 
@@ -68,21 +68,20 @@ def test_refresh_participants_menu_not_confirmed(fake_interface, capsys):
     fake_interface.api.assert_not_called()
 
 
-def test_refresh_participants_menu_failure_crashes_on_second_api_call(fake_interface):
-    """BUG (documented, not fixed): _participant_management_menus.py:14 --
-    on failure, the error-message f-string calls `self.api(...)` a SECOND
-    time (a wasted duplicate network call) and immediately chains
-    `.get('status_code', 'Unknown')` onto its result. A real failed/
-    unreachable request (per PRISMInterface.api, src/prism_interface.py)
-    returns None, not a dict -- so `.get()` raises AttributeError before
-    error() is ever even invoked. This documents that the function crashes
-    (uncaught) rather than reporting the failure gracefully.
+def test_refresh_participants_menu_failure_reports_error_without_second_call(fake_interface, capsys):
+    """Regression test for a fixed bug: _participant_management_menus.py's
+    refresh_participants_menu used to call `self.api(...)` a SECOND time in
+    its error-message f-string (a wasted duplicate network call) and chain
+    `.get('status_code', 'Unknown')` onto the result -- a real failed/
+    unreachable request (per PRISMInterface.api) returns None, not a dict,
+    so `.get()` raised AttributeError before error() was ever invoked. Now
+    calls self.api once and reports the failure without crashing.
     """
     fake_interface.inputs_queue.put('y')
     fake_interface.api = MagicMock(return_value=None)
-    with pytest.raises(AttributeError):
-        pmm.refresh_participants_menu(fake_interface)
-    assert fake_interface.api.call_count == 2
+    pmm.refresh_participants_menu(fake_interface)
+    assert fake_interface.api.call_count == 1
+    assert 'Failed to refresh participants' in capsys.readouterr().out
 
 
 # ------------------------------------------------------------
@@ -268,9 +267,9 @@ def test_participant_management_menu_default_sort_is_unique_id(fake_interface, m
     pmm.participant_management_menu(fake_interface)
 
     menu_options = mock_pmo.call_args[0][1]
-    assert menu_options['1']['description'] == 'Young, Alice (100)'
-    assert menu_options['2']['description'] == 'Xavier, Bob (200)'
-    assert menu_options['3']['description'] == 'Zed, Charlie (300)'
+    assert menu_options['1']['description'] == 'Young (Alice, 100)'
+    assert menu_options['2']['description'] == 'Xavier (Bob, 200)'
+    assert menu_options['3']['description'] == 'Zed (Charlie, 300)'
     assert fake_interface.participant_display_mode == 'unique_id'
 
 
@@ -287,8 +286,8 @@ def test_participant_management_menu_sort_by_name(fake_interface, monkeypatch):
     pmm.participant_management_menu(fake_interface)
 
     menu_options = mock_pmo.call_args[0][1]
-    assert menu_options['1']['description'] == 'Adams, Zed (100)'
-    assert menu_options['2']['description'] == 'Baker, Amy (200)'
+    assert menu_options['1']['description'] == 'Adams (Zed, 100)'
+    assert menu_options['2']['description'] == 'Baker (Amy, 200)'
 
 
 def test_participant_management_menu_sort_by_on_study(fake_interface, monkeypatch):
@@ -307,7 +306,7 @@ def test_participant_management_menu_sort_by_on_study(fake_interface, monkeypatc
     menu_options = mock_pmo.call_args[0][1]
     # on_study True participants first (sorted by unique_id), then False
     assert [menu_options[str(i)]['description'] for i in (1, 2, 3)] == [
-        'A, A (100)', 'B, B (200)', 'C, C (300)',
+        'A (A, 100)', 'B (B, 200)', 'C (C, 300)',
     ]
 
 
@@ -324,7 +323,7 @@ def test_participant_management_menu_filter_on_study_true(fake_interface, monkey
     pmm.participant_management_menu(fake_interface)
 
     menu_options = mock_pmo.call_args[0][1]
-    assert menu_options['1']['description'] == 'A, A (100)'
+    assert menu_options['1']['description'] == 'A (A, 100)'
     assert '2' not in menu_options
 
 
@@ -341,7 +340,7 @@ def test_participant_management_menu_filter_on_study_false(fake_interface, monke
     pmm.participant_management_menu(fake_interface)
 
     menu_options = mock_pmo.call_args[0][1]
-    assert menu_options['1']['description'] == 'B, B (200)'
+    assert menu_options['1']['description'] == 'B (B, 200)'
     assert '2' not in menu_options
 
 

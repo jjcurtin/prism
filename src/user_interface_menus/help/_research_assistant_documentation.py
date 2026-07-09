@@ -23,7 +23,7 @@ def research_assistant_documentation(self):
             f"You can also append a search query using the form {yellow('command <query>')} or {yellow('?<query>')}.",
         ], title = "help ra navigation")
 
-    def navigation_advanced():
+    def navigation_advanced(self):
         infopage(self, content = [
             f"\nSome actions are mapped to multiple commands; this is to allow for flexibility.",   
             f"For example, you can use {yellow('tasks add rscript')} or {yellow('add rscript')} to schedule an R script.",

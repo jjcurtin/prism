@@ -8,10 +8,11 @@ from user_interface_menus.participants._add_participant_menu import add_particip
 
 def refresh_participants_menu(self):
     if prompt_confirmation(self, prompt = "Refresh participants from CSV?"):
-        if self.api("POST", "participants/refresh_participants"):
+        result = self.api("POST", "participants/refresh_participants")
+        if result:
             success("Participants refreshed from CSV.", self)
         else:
-            error(f"Failed to refresh participants. Error code: {self.api('POST', 'participants/refresh_participants').get('status_code', 'Unknown')}", self)
+            error("Failed to refresh participants.", self)
     else:
         success("Refresh cancelled.", self)
 
@@ -68,7 +69,7 @@ def participant_management_menu(self):
 
     def _sort(participants):
         if self.participant_display_mode == "name":
-            return sorted(participants, key = lambda x: (x['last_name'].lower(), x['first_name'].lower()))
+            return sorted(participants, key = lambda x: (x['subid'].lower(), x['initials'].lower()))
         elif self.participant_display_mode == "unique_id":
             return sorted(participants, key = lambda x: int(x['unique_id']))
         elif self.participant_display_mode == "on_study":
@@ -142,7 +143,7 @@ def participant_management_menu(self):
             if participants and not self.commands_queue:
                 for i, p in enumerate(_sort(_filter(participants)), 1):
                     menu_options[str(i)] = {
-                        'description': f"{p['last_name']}, {p['first_name']} ({p['unique_id']})",
+                        'description': f"{p['subid']} ({p['initials']}, {p['unique_id']})",
                         'menu_caller': lambda self, participant_id = p['unique_id']: individual_participant_menu(self, participant_id)
                     }
                 print("Enter an index to select a participant, or, choose another option.")
