@@ -73,7 +73,7 @@ class PRISM():
             'prism_drive_subpath': 'optimize/prism',
         }
         try:
-            df = pd.read_csv(str(repo_root / 'config' / 'repo_paths.csv'), quotechar='"', skipinitialspace=True)
+            df = pd.read_csv(str(repo_root / 'config' / 'repo_paths.csv'), quotechar='"', skipinitialspace=True, dtype=str)
             repo_paths = {str(row['key']).strip(): str(row['value']).strip() for _, row in df.iterrows()}
         except Exception:
             repo_paths = {}
@@ -100,7 +100,7 @@ class PRISM():
 
         paths_csv = self._resolve_drive_path(f"S:/{repo_paths['prism_drive_subpath']}/{self.environment}/config/paths.csv")
         try:
-            df = pd.read_csv(paths_csv, quotechar='"', skipinitialspace=True)
+            df = pd.read_csv(paths_csv, quotechar='"', skipinitialspace=True, dtype=str)
             raw = {str(row['key']).strip(): str(row['path']).strip() for _, row in df.iterrows()}
         except Exception as e:
             self.add_to_transcript(f"Failed to load paths configuration from {paths_csv}: {e}", "ERROR")
@@ -150,7 +150,7 @@ class PRISM():
 
         def load_keys(file_name, field_map, label):
             try:
-                df = pd.read_csv(str(api_dir / file_name), quotechar='"')
+                df = pd.read_csv(str(api_dir / file_name), quotechar='"', dtype=str)
             except Exception as e:
                 self.add_to_transcript(f"Failed to load {label} API keys from {file_name}: {e}", "ERROR")
                 return
