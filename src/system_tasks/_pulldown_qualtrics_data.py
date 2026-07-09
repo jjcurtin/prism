@@ -3,7 +3,7 @@
 import pandas as pd
 import time
 import requests
-from requests.exceptions import ConnectionError, Timeout
+from requests.exceptions import RequestException
 import os
 import warnings
 
@@ -61,7 +61,7 @@ class PulldownQualtricsData(SystemTask):
 
         try:
             response = requests.post(url, headers = headers, json = body)
-        except (ConnectionError, Timeout) as e:
+        except RequestException as e:
             self.app.add_to_transcript(f"Connection error occurred: {str(e)}", "ERROR")
             return None
 
@@ -88,7 +88,7 @@ class PulldownQualtricsData(SystemTask):
 
             try:
                 response = requests.get(url, headers = headers)
-            except (ConnectionError, Timeout) as e:
+            except RequestException as e:
                 self.app.add_to_transcript(f"Connection error occurred: {str(e)}", "ERROR")
                 return None
 
@@ -135,7 +135,7 @@ class PulldownQualtricsData(SystemTask):
                 self.app.add_to_transcript(f"Failed to download report {file_id}", "ERROR")
                 self.app.add_to_transcript(f"Status code: {response.status_code}", "ERROR")
                 return None
-        except (ConnectionError, Timeout) as e:
+        except RequestException as e:
             self.app.add_to_transcript(f"Connection error occurred: {str(e)}", "ERROR")
             return None
 

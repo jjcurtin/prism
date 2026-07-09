@@ -4,7 +4,7 @@ import os
 import sys
 import subprocess
 import requests
-from requests.exceptions import ConnectionError, Timeout
+from requests.exceptions import RequestException
 
 from system_tasks._system_task import SystemTask
 from system_tasks._push_data_to_research_drive import PushDataToResearchDrive
@@ -104,7 +104,7 @@ class CheckSystem(SystemTask):
                 return 0
             self.app.add_to_transcript(f"Status code: {response.status_code}", "ERROR")
             return 1
-        except (ConnectionError, Timeout) as e:
+        except RequestException as e:
             self.app.add_to_transcript(f"Connection error occurred: {str(e)}", "ERROR")
             return 1
 
@@ -119,7 +119,7 @@ class CheckSystem(SystemTask):
                 return 0
             self.app.add_to_transcript(f"FollowMee connection failed. Status code: {response.status_code}", "ERROR")
             return 1
-        except (ConnectionError, Timeout) as e:
+        except RequestException as e:
             self.app.add_to_transcript(f"FollowMee connection error occurred: {str(e)}", "ERROR")
             return 1
         

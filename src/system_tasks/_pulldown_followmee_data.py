@@ -6,7 +6,7 @@ from datetime import datetime
 import pytz
 from datetime import timedelta
 import requests
-from requests.exceptions import ConnectionError, Timeout
+from requests.exceptions import RequestException
 from collections import defaultdict
 import os
 
@@ -57,7 +57,7 @@ class PulldownFollowmeeData(SystemTask):
                 self.app.add_to_transcript(f"Failed to retrieve device list. Status code: {response.status_code}", "ERROR")
                 self.app.add_to_transcript(f"Response Text: {response.text}", "ERROR")
                 return None
-        except (ConnectionError, Timeout) as e:
+        except RequestException as e:
             self.app.add_to_transcript(f"Connection error occurred: {str(e)}", "ERROR")
             return None
 
@@ -106,7 +106,7 @@ class PulldownFollowmeeData(SystemTask):
                 self.app.add_to_transcript(f"Failed to download FollowMee data. Status code: {response.status_code}", "ERROR")
                 self.app.add_to_transcript(f"Response Text: {response.text}", "ERROR")
                 return 1
-        except (ConnectionError, Timeout) as e:
+        except RequestException as e:
             self.app.add_to_transcript(f"Connection error occurred: {str(e)}", "ERROR")
             return 1
         

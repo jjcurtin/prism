@@ -26,26 +26,31 @@ class ParticipantManager(TaskManager):
             self.tasks.clear()
             with open(self.file_path, 'r') as file:
                 lines = file.readlines()
-                for line in lines[1:]:
-                    if line.strip():
-                        parts = line.strip().split(',')
-                        participant = {
-                            'initials': parts[0].strip('"'),
-                            'subid': parts[1].strip('"'),
-                            'unique_id': parts[2].strip('"'),
-                            'on_study': parts[3].strip('"').lower() == 'yes',
-                            'phone_number': parts[4].strip('"'),
-                            'ema_time': parts[5].strip('"'),
-                            'ema_reminder_time': parts[6].strip('"'),
-                            'feedback_time': parts[7].strip('"'),
-                            'feedback_reminder_time': parts[8].strip('"')
-                        }
-                        self.participants.append(participant)
-                        self.schedule_participant_tasks(participant)
-            return 0
         except Exception as e:
             self.app.add_to_transcript(f"Failed to load participants from CSV: {e}", "ERROR")
             return 1
+
+        for row_number, line in enumerate(lines[1:], start = 2):
+            if not line.strip():
+                continue
+            try:
+                parts = line.strip().split(',')
+                participant = {
+                    'initials': parts[0].strip('"'),
+                    'subid': parts[1].strip('"'),
+                    'unique_id': parts[2].strip('"'),
+                    'on_study': parts[3].strip('"').lower() == 'yes',
+                    'phone_number': parts[4].strip('"'),
+                    'ema_time': parts[5].strip('"'),
+                    'ema_reminder_time': parts[6].strip('"'),
+                    'feedback_time': parts[7].strip('"'),
+                    'feedback_reminder_time': parts[8].strip('"')
+                }
+                self.participants.append(participant)
+                self.schedule_participant_tasks(participant)
+            except Exception as e:
+                self.app.add_to_transcript(f"Skipping malformed participant row {row_number}: {e}", "ERROR")
+        return 0
         
     def get_participant(self, unique_id):
         try:
@@ -86,23 +91,29 @@ class ParticipantManager(TaskManager):
         try:
             with open(file_path, 'r') as file:
                 lines = file.readlines()
-                for line in lines[1:]:
-                    if line.strip():
-                        parts = line.strip().split(',')
-                        if parts[0].strip('"') == unique_id:
-                            payload.append({
-                                'unique_id': parts[0].strip('"'),
-                                'latitude': float(parts[3].strip('"')),
-                                'longitude': float(parts[4].strip('"')),
-                            })
-            if payload:
-                self.app.add_to_transcript(f"Retrieved coordinates for participant {unique_id}.", "INFO")
-                return payload
-            self.app.add_to_transcript(f"Coordinates for participant {unique_id} not found.", "ERROR")
-            return None
         except Exception as e:
             self.app.add_to_transcript(f"Failed to retrieve coordinates for participant {unique_id}: {e}", "ERROR")
             return None
+
+        for row_number, line in enumerate(lines[1:], start = 2):
+            if not line.strip():
+                continue
+            try:
+                parts = line.strip().split(',')
+                if parts[0].strip('"') == unique_id:
+                    payload.append({
+                        'unique_id': parts[0].strip('"'),
+                        'latitude': float(parts[3].strip('"')),
+                        'longitude': float(parts[4].strip('"')),
+                    })
+            except Exception as e:
+                self.app.add_to_transcript(f"Skipping malformed coordinate row {row_number}: {e}", "ERROR")
+
+        if payload:
+            self.app.add_to_transcript(f"Retrieved coordinates for participant {unique_id}.", "INFO")
+            return payload
+        self.app.add_to_transcript(f"Coordinates for participant {unique_id} not found.", "ERROR")
+        return None
         
     def save_participants(self):
         try:
@@ -120,6 +131,14 @@ class ParticipantManager(TaskManager):
             participant = self.get_participant(unique_id)
             if participant:
                 if field in participant:
+                    if field == 'on_study':
+                        if str(value).strip().lower() in ('true', 'yes'):
+                            value = True
+                        elif str(value).strip().lower() in ('false', 'no'):
+                            value = False
+                        else:
+                            self.app.add_to_transcript(f"Invalid value '{value}' for on_study; expected true/false.", "ERROR")
+                            return 1
                     participant[field] = value
                     self.save_participants()
                     for task_type, field_name in self.survey_types.items():
@@ -140,8 +159,11 @@ class ParticipantManager(TaskManager):
         
     def add_participant(self, participant):
         self.participants.append(participant)
-        self.save_participants()
+        if self.save_participants():
+            self.participants.remove(participant)
+            return 1
         self.schedule_participant_tasks(participant)
+        return 0
 
     def schedule_participant_tasks(self, participant):
         for task_type, field_name in self.survey_types.items():

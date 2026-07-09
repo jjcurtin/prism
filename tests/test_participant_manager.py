@@ -162,6 +162,80 @@ def test_update_participant_unknown_id_returns_1(fake_app):
     assert result == 1
 
 
+def test_add_participant_success_returns_0(fake_app):
+    pm = make_manager(fake_app)
+    pm.save_participants = lambda: None  # None == success, per save_participants' convention
+    new_participant = dict(PARTICIPANT)
+
+    result = pm.add_participant(new_participant)
+
+    assert result == 0
+    assert new_participant in pm.participants
+
+
+def test_add_participant_write_failure_returns_1_and_rolls_back(fake_app):
+    """Regression test for a fixed bug: add_participant used to have no
+    return statement at all and never checked save_participants()'s result,
+    so a CSV write failure (disk full, permissions) was logged internally
+    but the caller (the /participants/add_participant route) always
+    reported success. Now returns 1 on a write failure and doesn't leave
+    the unsaved participant in memory.
+    """
+    pm = make_manager(fake_app)
+    pm.save_participants = lambda: 1  # simulate a write failure
+    new_participant = dict(PARTICIPANT)
+
+    result = pm.add_participant(new_participant)
+
+    assert result == 1
+    assert new_participant not in pm.participants
+
+
+def test_update_participant_on_study_coerces_string_to_bool(fake_app):
+    """Regression test for a fixed bug: update_participant used to store
+    whatever raw URL string was passed for on_study (e.g. "false") without
+    coercing it to a real bool -- since any non-empty string is truthy in
+    Python, an explicitly off-study participant set via this endpoint still
+    read as on-study everywhere else (e.g. study_announcement's on-study
+    filter). Now coerces "true"/"false"/"yes"/"no" (case-insensitive) to an
+    actual bool.
+    """
+    pm = make_manager(fake_app)
+    participant = dict(PARTICIPANT)
+    pm.participants = [participant]
+    pm.save_participants = lambda: None
+
+    result = pm.update_participant('000000000', 'on_study', 'False')
+
+    assert result == 0
+    assert participant['on_study'] is False
+
+
+def test_update_participant_on_study_accepts_yes_no(fake_app):
+    pm = make_manager(fake_app)
+    participant = dict(PARTICIPANT)
+    participant['on_study'] = True
+    pm.participants = [participant]
+    pm.save_participants = lambda: None
+
+    result = pm.update_participant('000000000', 'on_study', 'no')
+
+    assert result == 0
+    assert participant['on_study'] is False
+
+
+def test_update_participant_on_study_rejects_invalid_value(fake_app):
+    pm = make_manager(fake_app)
+    participant = dict(PARTICIPANT)
+    pm.participants = [participant]
+
+    result = pm.update_participant('000000000', 'on_study', 'maybe')
+
+    assert result == 1
+    assert participant['on_study'] is True  # unchanged
+    assert any('Invalid value' in msg for _, msg in fake_app.transcript)
+
+
 def test_update_participant_updates_field_and_reschedules_task(fake_app):
     pm = make_manager(fake_app)
     participant = dict(PARTICIPANT)

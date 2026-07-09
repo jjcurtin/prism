@@ -210,7 +210,8 @@ def create_flask_app(app_instance):
         required_fields = ['unique_id', 'last_name', 'first_name', 'on_study', 'phone_number', 'ema_time', 'ema_reminder_time', 'feedback_time', 'feedback_reminder_time']
         if not all(field in data for field in required_fields):
             return jsonify({"error": "Missing required fields"}), 400
-        app_instance.participant_manager.add_participant(data)
+        if app_instance.participant_manager.add_participant(data) != 0:
+            return jsonify({"error": "Failed to save participant"}), 500
         app_instance.add_to_transcript(f"Participant #{data['unique_id']} added via API.", "INFO")
         return jsonify({"message": "Participant added successfully"}), 200
     
@@ -246,7 +247,8 @@ def create_flask_app(app_instance):
         if not participant:
             return jsonify({"error": "Participant not found"}), 404
         if app_instance.mode == "prod":
-            send_sms(app_instance, [participant['phone_number']], [data['message']])
+            if send_sms(app_instance, [participant['phone_number']], [data['message']]) != 0:
+                return jsonify({"error": f"Failed to send SMS to participant {unique_id}"}), 502
         return jsonify({"message": f"Custom SMS sent to participant {unique_id}"}), 200
     
     @flask_app.route('/participants/study_announcement/<require_on_study>', methods = ['POST'])
@@ -269,10 +271,19 @@ def create_flask_app(app_instance):
             return jsonify({"error": "No participants on study"}), 404
         
         if app_instance.mode == "prod":
+            attempted = 0
+            failed = 0
             for phone_number in phone_numbers:
                 if phone_number.strip():
-                    send_sms(app_instance, [phone_number], [data['message']])
-                    app_instance.add_to_transcript(f"Study announcement sent to {phone_number}", "INFO")
+                    attempted += 1
+                    if send_sms(app_instance, [phone_number], [data['message']]) != 0:
+                        failed += 1
+                    else:
+                        app_instance.add_to_transcript(f"Study announcement sent to {phone_number}", "INFO")
+            if attempted and failed == attempted:
+                return jsonify({"error": "Failed to send study announcement to any participant"}), 502
+            if failed:
+                return jsonify({"message": f"Study announcement sent, but failed for {failed} of {attempted} participants."}), 200
         else:
             app_instance.add_to_transcript(f"Simulated sending messages.")
         return jsonify({"message": f"Study announcement sent to all participants, require on study: {require_on_study}"}), 200

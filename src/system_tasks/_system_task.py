@@ -11,7 +11,16 @@ class SystemTask:
         self.task_start = datetime.now()
 
     def execute(self):
-        result = self.run()
+        try:
+            result = self.run()
+        except Exception as e:
+            # self.task_type is normally set as the first line of run() --
+            # if run() raised before reaching it, fall back to the class
+            # name so notify_via_sms()'s message still makes sense.
+            if not hasattr(self, 'task_type'):
+                self.task_type = self.__class__.__name__
+            self.app.add_to_transcript(f"{self.task_type} #{self.task_number} raised an unhandled exception: {e}", "ERROR")
+            result = 1
         self.outcome = "SUCCESS" if result == 0 else "FAILURE"
         self.app.add_to_transcript(f"{self.task_type} #{self.task_number} completed with status: {self.outcome}.", "INFO")
         if self.app.mode == "prod":
