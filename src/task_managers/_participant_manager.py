@@ -15,8 +15,7 @@ class ParticipantManager(TaskManager):
                 'feedback_reminder': 'feedback_reminder_time'
             }
             self.participants = []
-            #self.file_path = '../config/study_participants.csv'
-            self.file_path = 'S:/optimize/data_raw/participants/study_participants.csv'
+            self.file_path = self.app.participants_path
             self.load_participants()
         except Exception as e:
             self.app.add_to_transcript({e})
@@ -82,7 +81,7 @@ class ParticipantManager(TaskManager):
             return []
         
     def get_coords(self, unique_id):
-        file_path = f'../config/followmee_coords.csv'
+        file_path = self.app.followmee_coords_path
         payload = []
         try:
             with open(file_path, 'r') as file:
@@ -210,7 +209,7 @@ class ParticipantManager(TaskManager):
             column_name = task_column_map.get(task_type)
 
             if column_name:
-                with open("C:/github/prism/config/reminders.csv", "r", newline="") as file:
+                with open(self.app.reminders_path, "r", newline="") as file:
                     reader = csv.DictReader(file)
                     for row in reader:
                         if row["unique_id"] == str(participant_id):

@@ -24,8 +24,8 @@ class RunRScriptPipeline(SystemTask):
             self.app.add_to_transcript(f"Scripts directory {scripts_dir} does not exist. Please check the path.", "ERROR")
             return 1
         try:
-            if os.path.exists('../config/script_pipeline.csv'):
-                script_df = pd.read_csv('../config/script_pipeline.csv')
+            if os.path.exists(self.app.script_pipeline_path):
+                script_df = pd.read_csv(self.app.script_pipeline_path)
                 self.script_paths = script_df['script_path'].tolist()
                 self.args = [args.split() for args in script_df['arguments'].tolist()]
                 self.enabled_scripts = []

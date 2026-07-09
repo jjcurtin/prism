@@ -24,7 +24,7 @@ class SystemTask:
 
     def notify_via_sms(self):
         try:
-            with open('../config/study_coordinators.csv', 'r') as f:
+            with open(self.app.study_coordinators_path, 'r') as f:
                 lines = f.readlines()
                 lines = lines[1:]
                 for line in lines:

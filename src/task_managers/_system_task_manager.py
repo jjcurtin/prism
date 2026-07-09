@@ -10,7 +10,7 @@ class SystemTaskManager(TaskManager):
     def __init__(self, app, name = "SystemTaskManager"):
         super().__init__(app, name)
         self.task_types = self.get_task_types()
-        self.file_path = '../config/system_task_schedule.csv'
+        self.file_path = self.app.system_task_schedule_path
         self.load_task_schedule()
 
     def get_task_types(self):
@@ -23,7 +23,7 @@ class SystemTaskManager(TaskManager):
     def get_r_script_tasks(self):
         data = {
             (f[:-2]): (f[:-2])
-            for f in os.listdir('../../proj_optimize/automation/')
+            for f in os.listdir(self.app.r_scripts_dir)
             if f.endswith('.R')
         }
         return data

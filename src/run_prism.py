@@ -2,6 +2,7 @@
 
 import os
 from datetime import datetime
+from pathlib import Path
 from _routes import create_flask_app
 import pandas as pd
 from waitress import serve
@@ -23,6 +24,7 @@ class PRISM():
         clear()
         self.mode = mode
         self.start_time = datetime.now()
+        self.load_paths()
         self.add_to_transcript("Initializing PRISM application...", "INFO")
 
         self.load_api_keys()
@@ -36,6 +38,31 @@ class PRISM():
         self.launch_web_app()
 
     # system methods
+
+    def load_paths(self):
+        # repo root is the parent of this file's directory (src/)
+        repo_root = Path(__file__).resolve().parent.parent
+        # sane defaults in case config/paths.api is missing or unreadable, so
+        # add_to_transcript (called immediately after this) always has a
+        # logs_dir to write to.
+        defaults = {
+            'logs_dir': 'logs',
+            'participants_path': 'config/study_participants.csv',
+            'reminders_path': 'config/reminders.csv',
+            'followmee_coords_path': 'config/followmee_coords.csv',
+            'system_task_schedule_path': 'config/system_task_schedule.csv',
+            'study_coordinators_path': 'config/study_coordinators.csv',
+            'r_scripts_dir': '../proj_optimize/automation',
+            'script_pipeline_path': 'config/script_pipeline.csv',
+        }
+        for name, rel_path in defaults.items():
+            setattr(self, name, str((repo_root / rel_path).resolve()))
+        try:
+            df = pd.read_csv('../config/paths.api', quotechar='"')
+            for column in df.columns:
+                setattr(self, column, str((repo_root / df.loc[0, column]).resolve()))
+        except Exception as e:
+            self.add_to_transcript(f"Failed to load paths configuration from ../config/paths.api, using defaults: {e}", "WARNING")
 
     def load_api_keys(self):
         def load_keys(file_path, field_map, label):
@@ -78,9 +105,10 @@ class PRISM():
         print(transcript_message)
         current_date = datetime.now().strftime('%Y-%m-%d')
         if self.mode == "test":
-            file_path = f'C:/github/prism/logs/transcripts/test_transcript.txt'
+            file_path = os.path.join(self.logs_dir, 'transcripts', 'test_transcript.txt')
         else:
-            file_path = f'C:/github/prism/logs/transcripts/{current_date}_transcript.txt'
+            file_path = os.path.join(self.logs_dir, 'transcripts', f'{current_date}_transcript.txt')
+        os.makedirs(os.path.dirname(file_path), exist_ok = True)
         try:
             with open(file_path, 'a') as file:
                 file.write(f"{datetime.now().strftime('%H:%M:%S')} - {transcript_message}\n")
@@ -92,9 +120,10 @@ class PRISM():
         try:
             today_date = datetime.now().strftime('%Y-%m-%d')
             if self.mode == "test":
-                transcript_path = f'C:/github/prism/logs/{target}s/test_{target}.txt'
+                transcript_path = os.path.join(self.logs_dir, f'{target}s', f'test_{target}.txt')
             else:
-                transcript_path = f'C:/github/prism/logs/{target}s/{today_date}_{target}.txt'
+                transcript_path = os.path.join(self.logs_dir, f'{target}s', f'{today_date}_{target}.txt')
+            os.makedirs(os.path.dirname(transcript_path), exist_ok = True)
             try:
                 with open(transcript_path, 'r') as f:
                     num_lines = int(num_lines)
