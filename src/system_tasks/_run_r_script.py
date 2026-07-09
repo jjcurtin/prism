@@ -24,7 +24,10 @@ class RunRScript(SystemTask):
         if not os.path.exists(scripts_dir):
             self.app.add_to_transcript(f"Scripts directory {scripts_dir} does not exist. Please check the path.", "ERROR")
             return 1
-        self.change_directory(scripts_dir)
+        try:
+            self.change_directory(scripts_dir)
+        except Exception:
+            return 1
         if not os.path.exists(self.r_script_path):
             self.app.add_to_transcript(f"R script {self.r_script_path} does not exist in {scripts_dir}. Please check the path.", "ERROR")
             self.change_directory(initial_dir)

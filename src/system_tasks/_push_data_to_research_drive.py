@@ -24,8 +24,8 @@ class PushDataToResearchDrive(SystemTask):
                 else:
                     raise ConnectionError("Failed to map network drive. Please check your credentials and ensure you are connected to WiscVPN.")
             except Exception as e:
-                self.app.add_to_transcript(f"ERROR: Authentication failed: {e}")
-                self.app.add_to_transcript("ERROR: Authentication failed. Please try again.")
+                self.app.add_to_transcript(f"Authentication failed: {e}", "ERROR")
+                self.app.add_to_transcript("Authentication failed. Please try again.", "ERROR")
                 return 1
         else:
             self.app.add_to_transcript(f"INFO: Drive {self.app.drive_letter} is already mapped. Skipping authentication.")
@@ -39,9 +39,15 @@ class PushDataToResearchDrive(SystemTask):
             source_folder = source_path.split("/")[-1]
             destination_folder = f"{self.app.drive_letter}\\{self.app.destination_path}\\{source_folder}"
             try:
-                os.system(f"robocopy {source_path} {destination_folder} /MIR")
+                result = os.system(f"robocopy {source_path} {destination_folder} /MIR")
             except Exception as e:
-                self.app.add_to_transcript(f"ERROR: Failed to copy {source_folder} to Research Drive. Error: {str(e)}")
+                self.app.add_to_transcript(f"ERROR: Failed to copy {source_folder} to Research Drive. Error: {str(e)}", "ERROR")
+                return 1
+            # robocopy exit codes are a bitmask: 0-7 are various degrees of
+            # success (files copied/extra/mismatched), 8+ means at least one
+            # file failed to copy or a more serious error occurred.
+            if result >= 8:
+                self.app.add_to_transcript(f"ERROR: robocopy reported failure copying {source_folder} to Research Drive (exit code {result}).", "ERROR")
                 return 1
             self.app.add_to_transcript(f"INFO: {source_folder} copied to Research Drive.")
         return 0

@@ -37,8 +37,8 @@ class RunRScriptPipeline(SystemTask):
             self.app.add_to_transcript(f"Failed to load script pipeline configuration. Error message: {e}", "ERROR")
             return 1
         try:
+            scripts_run = 0
             for index, script_path in enumerate(self.script_paths):
-                scripts_run = 0
                 if self.enabled_scripts[index]:
                     self.app.add_to_transcript(f"{self.task_type} #{self.task_number} now attempting to run {script_path} with arguments {self.args[index]}...", "INFO")
                     self.change_directory(scripts_dir)

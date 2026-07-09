@@ -71,16 +71,22 @@ class CheckSystem(SystemTask):
                 ] # tasks
             ]
 
+            all_present = True
             for index, (directory, files_list) in enumerate(zip(directories, files)):
                 if not os.path.exists(directory):
-                    self.app.add_to_transcript(f"ERROR: The '{directory}' directory is missing.")
+                    self.app.add_to_transcript(f"The '{directory}' directory is missing.", "ERROR")
+                    all_present = False
                 for file in files_list:
                     file_path = os.path.join(directory, file)
                     if not os.path.isfile(file_path):
-                        self.app.add_to_transcript(f"ERROR: The file '{file_path}' is missing.")
+                        self.app.add_to_transcript(f"The file '{file_path}' is missing.", "ERROR")
+                        all_present = False
+
+            if not all_present:
+                return 1
 
         except Exception as e:
-            self.app.add_to_transcript(f"ERROR: {e}")
+            self.app.add_to_transcript(f"Error checking file system: {e}", "ERROR")
             return 1
 
         return 0
@@ -96,12 +102,12 @@ class CheckSystem(SystemTask):
             response = requests.get(url, headers = headers, timeout = 10)
             if response.status_code == 200:
                 return 0
-            self.app.add_to_transcript(f"ERROR: Status code: {response.status_code}")
+            self.app.add_to_transcript(f"Status code: {response.status_code}", "ERROR")
             return 1
         except (ConnectionError, Timeout) as e:
-            self.app.add_to_transcript(f"ERROR: Connection error occurred: {str(e)}")
+            self.app.add_to_transcript(f"Connection error occurred: {str(e)}", "ERROR")
             return 1
-        
+
     def check_followmee(self):
         self.app.add_to_transcript(f"INFO: Now checking FollowMee connection...")
         username = self.app.followmee_username
@@ -111,10 +117,10 @@ class CheckSystem(SystemTask):
             response = requests.get(url, timeout = 10)
             if response.status_code == 200:
                 return 0
-            self.app.add_to_transcript(f"ERROR: FollowMee connection failed. Status code: {response.status_code}")
+            self.app.add_to_transcript(f"FollowMee connection failed. Status code: {response.status_code}", "ERROR")
             return 1
         except (ConnectionError, Timeout) as e:
-            self.app.add_to_transcript(f"ERROR: FollowMee connection error occurred: {str(e)}")
+            self.app.add_to_transcript(f"FollowMee connection error occurred: {str(e)}", "ERROR")
             return 1
         
     def check_research_drive(self):
@@ -124,7 +130,7 @@ class CheckSystem(SystemTask):
             researchdrivetest.task_type = "PUSH_DATA_TO_RESEARCH_DRIVE"
             result = researchdrivetest.map_network_drive()
             if result != 0:
-                self.app.add_to_transcript("ERROR: Failed to connect to Research Drive.")
+                self.app.add_to_transcript("Failed to connect to Research Drive.", "ERROR")
                 return 1
             self.app.add_to_transcript("INFO: Successfully connected to Research Drive.")
         return 0

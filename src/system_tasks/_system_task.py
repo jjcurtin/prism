@@ -14,31 +14,42 @@ class SystemTask:
         result = self.run()
         self.outcome = "SUCCESS" if result == 0 else "FAILURE"
         self.app.add_to_transcript(f"{self.task_type} #{self.task_number} completed with status: {self.outcome}.", "INFO")
-        if self.outcome == "FAILURE":
-            if self.app.mode == "prod":
-                sms_result = self.notify_via_sms()
-                if sms_result != 0:
-                    self.app.add_to_transcript(f"Failed to send {sms_result} SMS notifications.", "ERROR")
-            return 1
-        return 0
+        if self.app.mode == "prod":
+            sms_result = self.notify_via_sms()
+            if sms_result != 0:
+                self.app.add_to_transcript(f"Failed to send {sms_result} SMS notifications.", "ERROR")
+        return 1 if self.outcome == "FAILURE" else 0
 
     def notify_via_sms(self):
         try:
             with open(self.app.study_coordinators_path, 'r') as f:
                 lines = f.readlines()
                 lines = lines[1:]
-                for line in lines:
-                    line = line.strip()
-                    if line:
-                        name, phone_number = line.split(',')
-                        name = name.strip('"')
-                        phone_number = phone_number.strip('"')
-                        if phone_number and phone_number != "":
-                            body = f"{name}: {self.task_type} #{self.task_number} {self.outcome}. Script was executed at {self.task_start.strftime('%m/%d/%Y at %I:%M:%S %p')}."
-                            return send_sms(self.app, [phone_number], [body])
         except FileNotFoundError:
             self.app.add_to_transcript("No study coordinators found. SMS notifications will not be sent.", "WARNING")
             return 1
         except Exception as e:
-            self.app.add_to_transcript(f"Failed to send SMS notifications. Error message: {e}", "ERROR")
+            self.app.add_to_transcript(f"Failed to read study coordinators. Error message: {e}", "ERROR")
             return 1
+
+        phone_numbers = []
+        bodies = []
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                name, phone_number = line.split(',')
+                name = name.strip('"')
+                phone_number = phone_number.strip('"')
+                if phone_number and phone_number != "":
+                    body = f"{name}: {self.task_type} #{self.task_number} {self.outcome}. Script was executed at {self.task_start.strftime('%m/%d/%Y at %I:%M:%S %p')}."
+                    phone_numbers.append(phone_number)
+                    bodies.append(body)
+            except Exception as e:
+                self.app.add_to_transcript(f"Skipping malformed study coordinator entry: {e}", "ERROR")
+
+        if not phone_numbers:
+            return 0
+
+        return send_sms(self.app, phone_numbers, bodies)

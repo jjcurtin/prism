@@ -37,24 +37,28 @@ class PulldownFollowmeeData(SystemTask):
         try:
             response = requests.get(url, timeout=10)
             if response.status_code == 200:
-                devices = response.json().get('Data', [])
+                try:
+                    devices = response.json().get('Data', [])
+                except ValueError as e:
+                    self.app.add_to_transcript(f"Unexpected response shape from FollowMee: {e}", "ERROR")
+                    return None
                 if len(devices) == 0:
-                    self.app.add_to_transcript("ERROR: No devices found.")
+                    self.app.add_to_transcript("No devices found.", "ERROR")
                     return None
                 else:
-                    self.app.add_to_transcript(f"INFO: Retrieved {len(devices)} devices.")
+                    self.app.add_to_transcript(f"Retrieved {len(devices)} devices.", "INFO")
                     file_path = f"../data/followmee/raw/followmee_device_list.json"
                     os.makedirs(os.path.dirname(file_path), exist_ok = True)
                     with open(file_path, "w") as file:
                         json.dump(devices, file, indent = 4)
-                    self.app.add_to_transcript(f"INFO: Device list saved to followmee_device_list.json.")
+                    self.app.add_to_transcript(f"Device list saved to followmee_device_list.json.", "INFO")
                     return file_path
             else:
-                self.app.add_to_transcript(f"ERROR: Failed to retrieve device list. Status code: {response.status_code}")
-                self.app.add_to_transcript(f"ERROR: Response Text: {response.text}")
+                self.app.add_to_transcript(f"Failed to retrieve device list. Status code: {response.status_code}", "ERROR")
+                self.app.add_to_transcript(f"Response Text: {response.text}", "ERROR")
                 return None
         except (ConnectionError, Timeout) as e:
-            self.app.add_to_transcript(f"ERROR: Connection error occurred: {str(e)}")
+            self.app.add_to_transcript(f"Connection error occurred: {str(e)}", "ERROR")
             return None
 
     def pull_down_followmee_data(self, raw_file_name, processed_file_name):
@@ -65,10 +69,13 @@ class PulldownFollowmeeData(SystemTask):
         if not device_list_file:
             return 1
 
-        with open(device_list_file, "r") as file:
-            devices = json.load(file)
-
-        device_ids = [device['DeviceID'] for device in devices]
+        try:
+            with open(device_list_file, "r") as file:
+                devices = json.load(file)
+            device_ids = [device['DeviceID'] for device in devices]
+        except (ValueError, KeyError, OSError) as e:
+            self.app.add_to_transcript(f"Failed to read device list from {device_list_file}: {e}", "ERROR")
+            return 1
         from_date = self.get_one_day_ago_date()
         to_date = datetime.now(pytz.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -78,25 +85,29 @@ class PulldownFollowmeeData(SystemTask):
         try:
             response = requests.get(url, timeout=10)
             if response.status_code == 200:
-                data = response.json()
+                try:
+                    data = response.json()
+                except ValueError as e:
+                    self.app.add_to_transcript(f"Unexpected response shape from FollowMee: {e}", "ERROR")
+                    return 1
 
                 filepath = f"../data/followmee/raw/{raw_file_name}"
                 os.makedirs(os.path.dirname(filepath), exist_ok = True)
                 with open(filepath, "w") as file:
                     json.dump(data, file, indent=4)
 
-                self.app.add_to_transcript(f"INFO: FollowMee data saved to {raw_file_name}.")
-                
+                self.app.add_to_transcript(f"FollowMee data saved to {raw_file_name}.", "INFO")
+
                 if self.process_followmee_data(raw_file_name, processed_file_name) == 0:
                     return 0
                 else:
                     return 1
             else:
-                self.app.add_to_transcript(f"ERROR: Failed to download FollowMee data. Status code: {response.status_code}")
-                self.app.add_to_transcript(f"ERROR: Response Text: {response.text}")
+                self.app.add_to_transcript(f"Failed to download FollowMee data. Status code: {response.status_code}", "ERROR")
+                self.app.add_to_transcript(f"Response Text: {response.text}", "ERROR")
                 return 1
         except (ConnectionError, Timeout) as e:
-            self.app.add_to_transcript(f"ERROR: Connection error occurred: {str(e)}")
+            self.app.add_to_transcript(f"Connection error occurred: {str(e)}", "ERROR")
             return 1
         
     def process_followmee_data(self, raw_file_name, processed_file_name):
@@ -118,8 +129,8 @@ class PulldownFollowmeeData(SystemTask):
                 new_entries_df = pd.DataFrame(entries)
                 updated_data = pd.concat([existing_data, new_entries_df]).drop_duplicates()
                 updated_data.to_csv(device_processed_file, index=False)
-                self.app.add_to_transcript(f"INFO: Processed data for device {device_id} saved to {device_processed_file}.")
+                self.app.add_to_transcript(f"Processed data for device {device_id} saved to {device_processed_file}.", "INFO")
             return 0
         except Exception as e:
-            self.app.add_to_transcript(f"ERROR: Failed to process FollowMee data. Exception: {str(e)}")
+            self.app.add_to_transcript(f"Failed to process FollowMee data. Exception: {str(e)}", "ERROR")
             return 1

@@ -66,8 +66,11 @@ class PulldownQualtricsData(SystemTask):
             return None
 
         if response.status_code == 200:
-            data = response.json()
-            export_progress_id = data["result"]["progressId"]
+            try:
+                export_progress_id = response.json()["result"]["progressId"]
+            except (ValueError, KeyError) as e:
+                self.app.add_to_transcript(f"Unexpected response shape from Qualtrics: {e}", "ERROR")
+                return None
             self.app.add_to_transcript(f"Report generation request received by Qualtrics.", "INFO")
             return export_progress_id
         else:
@@ -90,16 +93,24 @@ class PulldownQualtricsData(SystemTask):
                 return None
 
             if response.status_code == 200:
-                data = response.json()
-                status = data["result"]["status"]
+                try:
+                    data = response.json()
+                    status = data["result"]["status"]
+                except (ValueError, KeyError) as e:
+                    self.app.add_to_transcript(f"Unexpected response shape from Qualtrics: {e}", "ERROR")
+                    return None
                 self.app.add_to_transcript(f"Report Status: {status}. Time Elapsed: {elapsed_time} seconds", "INFO")
                 if status == "complete":
-                    return data["result"]["fileId"]
+                    try:
+                        return data["result"]["fileId"]
+                    except KeyError as e:
+                        self.app.add_to_transcript(f"Unexpected response shape from Qualtrics: {e}", "ERROR")
+                        return None
             else:
                 self.app.add_to_transcript(f"Failed to get export status for report. Status code: {response.status_code}", "ERROR")
                 return None
 
-        self.app.add_to_transcript(f"ERROR: Timeout. Elapsed Time: {elapsed_time} seconds")
+        self.app.add_to_transcript(f"Timeout. Elapsed Time: {elapsed_time} seconds", "ERROR")
         return None
 
     def download_qualtrics_report(self, survey_id, file_id, raw_file_name):
