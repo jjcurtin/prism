@@ -40,7 +40,7 @@ class SystemTaskManager(TaskManager):
                         task_type, task_time_str, r_script_path, run_today = [x.strip('"') for x in line.strip().split(',')]
                         task_time = datetime.strptime(task_time_str, '%H:%M:%S').time()
                         if task_type not in self.task_types:
-                            self.app.app.add_to_transcript(f"Unknown task type: {task_type}", "ERROR")
+                            self.app.add_to_transcript(f"Unknown task type: {task_type}", "ERROR")
                             continue
                         self.add_task(task_type, task_time, r_script_path = r_script_path)
                     except ValueError:
