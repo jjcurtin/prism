@@ -39,10 +39,26 @@ Every folder in this repo has two docs, kept deliberately separate:
 ## Changelist
 
 ### In progress
-- Repo-wide documentation pass (this file): add/refresh the navigation guide
-  above and this changelist. *(2026-07-08)*
+- Error handling / input validation / exception surfacing audit across the
+  whole app (routes, task managers, system tasks, server bootstrap, and the
+  interface client) — several real bugs found and fixed so far this pass
+  (an unhandled crash in two schedule-lookup endpoints, an SMS notifier that
+  only ever alerted the first study coordinator, a research-drive push
+  whose failures were reported as success, missing JSON-body validation on
+  5 routes, and more); a handful of higher-risk findings that touch
+  HTTP/return-value contracts are being tracked separately pending
+  confirmation before changing. *(2026-07-09)*
 
 ### Completed
+- Cross-platform port: server and interface now run on Linux (previously
+  Windows-only — hard-coded paths centralized, the Windows-only `msvcrt`
+  keypress module replaced with a `platform.system()`-branched
+  `_keyboard.py`, a busy-wait CPU bug fixed). *(2026-07-09)*
+- Automated test suite: 449 tests total — 59 server-side (`tests/`, config
+  loading, task scheduling, participant management) and 390 interface-side
+  (`tests_interface/`, full `user_interface_menus/` coverage). Runs via
+  `make test-server` / `make test-client` / `make test-all`, with GitHub
+  Actions CI split into semantically-grouped jobs per side. *(2026-07-09)*
 - Added README.md docs for the entire `src/user_interface_menus/` menu tree
   (main menu + assistant/check/help/logs/participants/settings/tasks/utils),
   paired with each folder's existing CLAUDE.md. *(2026-07-08)*
@@ -56,8 +72,8 @@ Every folder in this repo has two docs, kept deliberately separate:
   *(2026-07-08)*
 
 ### Planned
-Pulled from the per-folder CLAUDE.md "Improvements" notes — see those files
-for full detail:
+Pulled from the per-folder CLAUDE.md "Improvements" notes and this
+session's error-handling audit — see those files for full detail:
 - Add authentication to the Flask backend (every route is currently open,
   including shutdown and arbitrary R-script execution).
 - Close the open SMS relay (unvalidated participant/announcement endpoints
@@ -65,6 +81,12 @@ for full detail:
 - Fix command injection and plaintext-credential handling in the
   research-drive sync (`os.system()` calls building shell strings from
   plaintext passwords).
-- Remove hard-coded Windows-only paths so the server can run cross-platform.
-- Add an automated test suite (currently only a manual, macro-driven smoke
-  test exists).
+- Resolve the `first_name`/`last_name` vs. `initials`/`subid` participant
+  schema mismatch between `_participant_manager.py` and several still-stale
+  call sites (`_routes.py`'s `add_participant`/EMA/feedback routes,
+  `_check_system.py`'s `check_participants()`) — deferred pending
+  confirmation of real external callers.
+- Reconsider `self.api()`'s (`prism_interface.py`) collapsing of "server
+  unreachable," "server returned an error," and certain success cases into
+  one indistinguishable `None` — touches ~390 interface tests and every
+  menu function if changed, so needs a design decision first.
