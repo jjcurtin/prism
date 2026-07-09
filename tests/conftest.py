@@ -19,7 +19,6 @@ RESEARCH_DRIVE_API = (
     '"destination_path","drive_letter","network_domain","network_username","wisc_netid","wisc_password"\n'
     '"fake_dest","Z","fake_domain","fake_netuser","fake_netid","fake_password"\n'
 )
-NGROK_API = '"auth_token","domain"\n"fake_ngrok_token","fake_ngrok_domain"\n'
 
 STUDY_COORDINATORS_CSV = '"name","phone_number"\n"Test Coordinator","5555550100"\n'
 SYSTEM_TASK_SCHEDULE_CSV = '"task_type","task_time","r_script_path","run_today"\n"CHECK_SYSTEM","03:00:00","","no"\n'
@@ -70,7 +69,6 @@ def fake_prism_env(tmp_path):
     (config_base / 'api' / 'followmee.api').write_text(FOLLOWMEE_API)
     (config_base / 'api' / 'twilio.api').write_text(TWILIO_API)
     (config_base / 'api' / 'research_drive.api').write_text(RESEARCH_DRIVE_API)
-    (config_base / 'api' / 'ngrok.api').write_text(NGROK_API)
     (config_base / 'config' / 'study_coordinators.csv').write_text(STUDY_COORDINATORS_CSV)
     (config_base / 'config' / 'system_task_schedule.csv').write_text(SYSTEM_TASK_SCHEDULE_CSV)
     (config_base / 'config' / 'script_pipeline.csv').write_text(SCRIPT_PIPELINE_CSV)
@@ -119,3 +117,40 @@ class FakeApp:
 @pytest.fixture
 def fake_app():
     return FakeApp()
+
+
+@pytest.fixture
+def routes_app_instance(tmp_path, monkeypatch):
+    """A FakeApp wired up the way `_routes.py`'s routes expect: mocked
+    `system_task_manager`/`participant_manager` (assign `.return_value`/
+    `.task_types` per test before making a request), a real `start_time`,
+    and cwd set to a fake `src/` so the EMA/feedback routes' hardcoded
+    `"../logs/ema_logs/..."`/`"../logs/feedback_logs/..."` relative paths
+    resolve under tmp_path instead of the real repo.
+    """
+    from datetime import datetime
+    from unittest.mock import MagicMock
+
+    app = FakeApp(mode='test')
+    app.start_time = datetime.now()
+    app.system_task_manager = MagicMock()
+    app.system_task_manager.task_types = {'CHECK_SYSTEM': 'CheckSystem', 'RUN_R_SCRIPT': 'RunRScript'}
+    app.participant_manager = MagicMock()
+    app.get_transcript = MagicMock(return_value='fake transcript line\n')
+    app.shutdown = MagicMock()
+
+    (tmp_path / 'src').mkdir()
+    (tmp_path / 'logs' / 'ema_logs').mkdir(parents=True)
+    (tmp_path / 'logs' / 'feedback_logs').mkdir(parents=True)
+    monkeypatch.chdir(tmp_path / 'src')
+
+    return app
+
+
+@pytest.fixture
+def routes_client(routes_app_instance):
+    from _routes import create_flask_app
+
+    flask_app = create_flask_app(routes_app_instance)
+    flask_app.config['TESTING'] = True
+    return flask_app.test_client()
