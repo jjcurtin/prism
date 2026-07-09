@@ -10,12 +10,15 @@ plan/
 
 # prism files
 
+environment
+
 api/*
 !api/*.template
 
 config/*.csv
 config/*.txt
 !config/*.csv.template
+!config/repo_paths.csv
 
 data/qualtrics/
 data/followmee/

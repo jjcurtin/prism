@@ -1,2 +1,0 @@
-"logs_dir","participants_path","reminders_path","followmee_coords_path","system_task_schedule_path","study_coordinators_path","r_scripts_dir","script_pipeline_path"
-"logs","config/study_participants.csv","config/reminders.csv","config/followmee_coords.csv","config/system_task_schedule.csv","config/study_coordinators.csv","../proj_optimize/automation","config/script_pipeline.csv"

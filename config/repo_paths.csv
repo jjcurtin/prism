@@ -1,0 +1,5 @@
+"key","value"
+"logs_dir","logs"
+"drive_mount_windows","S:"
+"drive_mount_posix","/mnt/research_drive"
+"prism_drive_subpath","optimize/prism"

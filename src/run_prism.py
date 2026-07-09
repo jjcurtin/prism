@@ -40,63 +40,142 @@ class PRISM():
 
     # system methods
 
+    def _resolve_drive_path(self, raw_path):
+        # translates an "S:/..." literal (as written on the drive's own
+        # paths.csv, which is authored from Windows) into this platform's
+        # real path. Non-drive-letter (relative) values are returned as-is,
+        # for the caller to resolve against config_base.
+        raw_path = str(raw_path).strip()
+        if platform.system() == 'Windows':
+            return str(Path(raw_path))
+        if len(raw_path) >= 2 and raw_path[1] == ':':
+            raw_path = raw_path[2:].lstrip('/\\')
+            return str((Path(self.drive_mount) / raw_path).resolve())
+        return raw_path
+
     def load_paths(self):
         # repo root is the parent of this file's directory (src/)
         repo_root = Path(__file__).resolve().parent.parent
-        # sane defaults in case config/paths.api is missing or unreadable, so
-        # add_to_transcript (called immediately after this) always has a
-        # logs_dir to write to.
-        # participants_path historically lived on the S: research drive on
-        # Windows (a real, working mapped drive, not repo-relative) — keep
-        # using it there instead of the local placeholder Linux falls back to.
-        participants_default = (
-            'S:/optimize/data_raw/participants/study_participants.csv'
-            if platform.system() == 'Windows'
-            else 'config/study_participants.csv'
-        )
-        defaults = {
+
+        # repo_paths.csv is tracked (not gitignored, unlike everything else
+        # in config/) — it holds resolution facts internal to this repo
+        # checkout itself (where logs live locally, how the research drive
+        # mounts on this platform, which drive subpath this project lives
+        # under), as opposed to research-drive-specific paths, which come
+        # from the drive's own paths.csv below.
+        repo_paths_defaults = {
             'logs_dir': 'logs',
-            'participants_path': participants_default,
-            'reminders_path': 'config/reminders.csv',
-            'followmee_coords_path': 'config/followmee_coords.csv',
-            'system_task_schedule_path': 'config/system_task_schedule.csv',
-            'study_coordinators_path': 'config/study_coordinators.csv',
-            'r_scripts_dir': '../proj_optimize/automation',
-            'script_pipeline_path': 'config/script_pipeline.csv',
+            'drive_mount_windows': 'S:',
+            'drive_mount_posix': '/mnt/research_drive',
+            'prism_drive_subpath': 'optimize/prism',
         }
-        for name, rel_path in defaults.items():
-            setattr(self, name, str((repo_root / rel_path).resolve()))
         try:
-            df = pd.read_csv('../config/paths.api', quotechar='"')
-            for column in df.columns:
-                setattr(self, column, str((repo_root / df.loc[0, column]).resolve()))
+            df = pd.read_csv(str(repo_root / 'config' / 'repo_paths.csv'), quotechar='"', skipinitialspace=True)
+            repo_paths = {str(row['key']).strip(): str(row['value']).strip() for _, row in df.iterrows()}
+        except Exception:
+            repo_paths = {}
+        repo_paths = {**repo_paths_defaults, **repo_paths}
+
+        # logs stay local to this checkout (per-machine operational data,
+        # not shared study config) — set first so add_to_transcript (called
+        # right after this) always has somewhere to write.
+        self.logs_dir = str((repo_root / repo_paths['logs_dir']).resolve())
+        self.drive_mount = repo_paths['drive_mount_windows'] if platform.system() == 'Windows' else repo_paths['drive_mount_posix']
+
+        # environment marker: a git-ignored, single-line file at the repo
+        # root containing "dev" or "prod", selecting which paths.csv (and
+        # everything under its config_base) this checkout loads from. This
+        # stays gitignored (unlike repo_paths.csv above) because it's a
+        # per-deployment choice, not something every checkout should share.
+        # Defaults to "dev" (the safer default) if missing.
+        env_file = repo_root / 'environment'
+        self.environment = 'dev'
+        if env_file.exists() and env_file.read_text().strip():
+            self.environment = env_file.read_text().strip()
+        else:
+            self.add_to_transcript(f"No environment file at {env_file} (or it's empty) — defaulting to 'dev'.", "WARNING")
+
+        paths_csv = self._resolve_drive_path(f"S:/{repo_paths['prism_drive_subpath']}/{self.environment}/config/paths.csv")
+        try:
+            df = pd.read_csv(paths_csv, quotechar='"', skipinitialspace=True)
+            raw = {str(row['key']).strip(): str(row['path']).strip() for _, row in df.iterrows()}
         except Exception as e:
-            self.add_to_transcript(f"Failed to load paths configuration from ../config/paths.api, using defaults: {e}", "WARNING")
+            self.add_to_transcript(f"Failed to load paths configuration from {paths_csv}: {e}", "ERROR")
+            raw = {}
+
+        self.config_base = self._resolve_drive_path(raw.get('config_base', f"S:/optimize/prism/{self.environment}/"))
+
+        key_to_attr = {
+            'participants': 'participants_path',
+            'reminders': 'reminders_path',
+            'scripts': 'r_scripts_dir',
+        }
+        for key, attr in key_to_attr.items():
+            value = raw.get(key)
+            if value is None:
+                self.add_to_transcript(f"paths.csv missing key '{key}' — {attr} left unset.", "WARNING")
+                continue
+            resolved = self._resolve_drive_path(value)
+            if not Path(resolved).is_absolute():
+                resolved = str((Path(self.config_base) / resolved).resolve())
+            setattr(self, attr, resolved)
+
+        # These used to be separate paths.csv/paths.api entries; they now
+        # live directly under config_base/config/ alongside everything else.
+        config_dir = Path(self.config_base) / 'config'
+        self.followmee_coords_path = str(config_dir / 'followmee_coords.csv')
+        self.system_task_schedule_path = str(config_dir / 'system_task_schedule.csv')
+        self.study_coordinators_path = str(config_dir / 'study_coordinators.csv')
+        self.script_pipeline_path = str(config_dir / 'script_pipeline.csv')
+
+    # sane defaults for fields that may not exist yet in an older api CSV
+    # (e.g. the message columns, added after qualtrics.api files already
+    # existed on the drive) — load_keys only overwrites these if the column
+    # is actually present, so one missing column doesn't take down the
+    # whole file's worth of fields.
+    API_FIELD_DEFAULTS = {
+        'ema_message': "Hello, it's time to take your daily survey.",
+        'ema_reminder_message': "Hello, you have not yet completed your daily survey for today.",
+        'feedback_message': "Hello, it's time to see your daily recovery message.",
+        'feedback_reminder_message': "Hello, you have not yet viewed your daily recovery message for today.",
+    }
 
     def load_api_keys(self):
-        def load_keys(file_path, field_map, label):
+        api_dir = Path(self.config_base) / 'api'
+        for attr, default in self.API_FIELD_DEFAULTS.items():
+            setattr(self, attr, default)
+
+        def load_keys(file_name, field_map, label):
             try:
-                df = pd.read_csv(file_path, quotechar='"')
-                for attr, column in field_map.items():
-                    setattr(self, attr, df.loc[0, column])
+                df = pd.read_csv(str(api_dir / file_name), quotechar='"')
             except Exception as e:
-                self.add_to_transcript(f"Failed to load {label} API keys: {e}", "ERROR")
-        load_keys('../api/qualtrics.api', {
+                self.add_to_transcript(f"Failed to load {label} API keys from {file_name}: {e}", "ERROR")
+                return
+            for attr, column in field_map.items():
+                if column in df.columns:
+                    setattr(self, attr, df.loc[0, column])
+                elif attr not in self.API_FIELD_DEFAULTS:
+                    self.add_to_transcript(f"{label} API file {file_name} missing column '{column}' — {attr} left unset.", "WARNING")
+        load_keys('qualtrics.api', {
             'qualtrics_api_token': 'api_token',
             'qualtrics_data_center': 'datacenter',
             'ema_survey_id': 'ema_survey_id',
-            'feedback_survey_id': 'feedback_survey_id'
+            'feedback_survey_id': 'feedback_survey_id',
+            'ema_message': 'ema_message',
+            'ema_reminder_message': 'ema_reminder_message',
+            'feedback_message': 'feedback_message',
+            'feedback_reminder_message': 'feedback_reminder_message'
         }, "Qualtrics")
-        load_keys('../api/followmee.api', {
+        load_keys('followmee.api', {
             'followmee_username': 'username',
             'followmee_api_token': 'api_token'
         }, "FollowMee")
-        load_keys('../api/twilio.api', {
+        load_keys('twilio.api', {
             'twilio_account_sid': 'account_sid',
             'twilio_auth_token': 'auth_token',
             'twilio_from_number': 'from_number'
         }, "Twilio")
-        load_keys('../api/research_drive.api', {
+        load_keys('research_drive.api', {
             'destination_path': 'destination_path',
             'drive_letter': 'drive_letter',
             'network_domain': 'network_domain',
@@ -104,7 +183,7 @@ class PRISM():
             'wisc_netid': 'wisc_netid',
             'wisc_password': 'wisc_password'
         }, "Research Drive")
-        load_keys('../api/ngrok.api', {
+        load_keys('ngrok.api', {
             'ngrok_auth_token': 'auth_token',
             'ngrok_domain': 'domain'
         }, "Ngrok")

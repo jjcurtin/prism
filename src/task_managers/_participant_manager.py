@@ -221,10 +221,10 @@ class ParticipantManager(TaskManager):
             participant_phone_number = participant['phone_number']
             self.app.add_to_transcript(f"Processing SMS task: {task_type} for participant {participant_id}", "INFO")
             task_map = {
-                'ema': (self.app.ema_survey_id, "Hello, it's time to take your daily survey."),
-                'ema_reminder': (self.app.ema_survey_id,"Hello, you have not yet completed your daily survey for today."),
-                'feedback': (self.app.feedback_survey_id,"Hello, it's time to see your daily recovery message."),
-                'feedback_reminder': (self.app.feedback_survey_id,"Hello, you have not yet viewed your daily recovery message for today.")
+                'ema': (self.app.ema_survey_id, self.app.ema_message),
+                'ema_reminder': (self.app.ema_survey_id, self.app.ema_reminder_message),
+                'feedback': (self.app.feedback_survey_id, self.app.feedback_message),
+                'feedback_reminder': (self.app.feedback_survey_id, self.app.feedback_reminder_message)
             }
             if task_type not in task_map:
                 self.app.add_to_transcript(f"Unknown SMS task type: {task_type}", "ERROR")
