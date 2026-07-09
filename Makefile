@@ -10,7 +10,7 @@ PIP := $(VENV)/bin/pip
 PY_SYS := python3
 endif
 
-.PHONY: setup run
+.PHONY: setup run interface
 
 .DEFAULT_GOAL := run
 
@@ -37,3 +37,6 @@ endif
 run:
 	$(PY_SYS) stop_server.py
 	cd src && $(PYTHON) run_prism.py -mode test
+
+interface:
+	cd src && $(PYTHON) prism_interface.py
