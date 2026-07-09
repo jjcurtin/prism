@@ -7,7 +7,8 @@ on:
     branches: [dev, main]
 
 jobs:
-  pytest:
+  config-loading:
+    name: config-loading
     runs-on: ubuntu-latest
     permissions:
       checks: write
@@ -15,27 +16,131 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           # pandas==2.2.1 (pinned in requirements.txt) has no prebuilt wheel
           # for cp313 — pip would build it from source, which is slow even
           # on x86_64. 3.12 has wheels for every pin in requirements.txt.
           python-version: '3.12'
-
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
-
       - name: Run tests
-        run: python -m pytest tests -v --junitxml=test-results.xml
-
+        run: python -m pytest tests/test_config_loading.py -v --junitxml=test-results.xml
       - name: Publish test results
         uses: dorny/test-reporter@v1
         if: always()
         with:
-          name: pytest results
+          name: config-loading tests
+          path: test-results.xml
+          reporter: java-junit
+          fail-on-error: false
+
+  task-scheduling-base:
+    name: task-scheduling-base
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      pull-requests: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Run tests
+        run: python -m pytest tests/test_task_manager.py tests/test_system_task.py -v --junitxml=test-results.xml
+      - name: Publish test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: task-scheduling-base tests
+          path: test-results.xml
+          reporter: java-junit
+          fail-on-error: false
+
+  system-task-manager:
+    name: system-task-manager
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      pull-requests: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Run tests
+        run: python -m pytest tests/test_system_task_manager.py -v --junitxml=test-results.xml
+      - name: Publish test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: system-task-manager tests
+          path: test-results.xml
+          reporter: java-junit
+          fail-on-error: false
+
+  participant-manager:
+    name: participant-manager
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      pull-requests: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Run tests
+        run: python -m pytest tests/test_participant_manager.py -v --junitxml=test-results.xml
+      - name: Publish test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: participant-manager tests
+          path: test-results.xml
+          reporter: java-junit
+          fail-on-error: false
+
+  system-tasks:
+    name: system-tasks
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      pull-requests: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Run tests
+        run: python -m pytest tests/test_run_r_script.py -v --junitxml=test-results.xml
+      - name: Publish test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: system-tasks tests
           path: test-results.xml
           reporter: java-junit
           fail-on-error: false
