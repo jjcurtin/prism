@@ -474,6 +474,27 @@ def test_write_and_read_interface_log(fake_repo):
     assert content == "hello\nworld\n"
 
 
+def test_write_to_interface_log_creates_missing_directory(tmp_path, monkeypatch):
+    """Regression test for a fixed bug: write_to_interface_log() opened
+    "../logs/interface_logs/test_interface_log.txt" directly with no
+    os.makedirs() first, unlike the analogous server-side logging functions
+    in run_prism.py -- on a fresh checkout (logs/interface_logs/ is
+    git-ignored and doesn't exist until something creates it), this raised
+    FileNotFoundError, caught by the broad except and printed as "Error:
+    Could not write to log file: ..." instead of writing the entry.
+    """
+    src_dir = tmp_path / "src"
+    (tmp_path / "logs").mkdir(parents=True)  # logs/ exists, interface_logs/ deliberately does not
+    src_dir.mkdir()
+    monkeypatch.chdir(src_dir)
+
+    menu_helper.write_to_interface_log("hello")
+
+    assert (tmp_path / "logs" / "interface_logs" / "test_interface_log.txt").exists()
+    content = menu_helper.read_from_interface_log()
+    assert content == "hello\n"
+
+
 def test_read_from_interface_log_missing_file(fake_repo, capsys):
     result = menu_helper.read_from_interface_log()
     assert result == ""

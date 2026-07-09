@@ -473,7 +473,7 @@ def print_fixed_terminal_prompt(self = None, submenu = True):
                     if len(recovered_string) == 0 and not submenu:
                         continue
                     break
-                elif key == '\b' and len(recovered_string) > 0:
+                elif key in ('\b', '\x7f') and len(recovered_string) > 0:
                     recovered_string = recovered_string[:-1]
                 elif len(recovered_string) < WINDOW_WIDTH - len(prompt) - 1:
                     if key is not None and key.isprintable() and key < '\u0080':

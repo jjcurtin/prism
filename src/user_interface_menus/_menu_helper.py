@@ -468,6 +468,8 @@ def load_menus():
 
 def write_to_interface_log(message):
     try:
+        import os
+        os.makedirs("../logs/interface_logs", exist_ok=True)
         with open("../logs/interface_logs/test_interface_log.txt", "a") as file:
             file.write(f"{message}\n")
     except Exception as e:

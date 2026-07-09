@@ -243,7 +243,7 @@ jobs:
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
       - name: Run tests
-        run: python -m pytest tests_interface/test_display.py -v --junitxml=test-results.xml
+        run: python -m pytest tests_interface/test_display.py tests_interface/test_terminal_prompt.py -v --junitxml=test-results.xml
       - name: Publish test results
         uses: dorny/test-reporter@v1
         if: always()
