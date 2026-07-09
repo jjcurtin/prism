@@ -18,7 +18,7 @@ class ParticipantManager(TaskManager):
             self.file_path = self.app.participants_path
             self.load_participants()
         except Exception as e:
-            self.app.add_to_transcript({e})
+            self.app.add_to_transcript(f"Failed to initialize ParticipantManager: {e}", "ERROR")
 
     def load_participants(self):
         try:
@@ -183,7 +183,7 @@ class ParticipantManager(TaskManager):
             data.sort(key = lambda x: (x['participant_id'], x['task_time']))
             return data
         except Exception as e:
-            self.add_to_transcript(f"Failed to retrieve system task schedule: {e}", "ERROR")
+            self.app.add_to_transcript(f"Failed to retrieve system task schedule: {e}", "ERROR")
             return []
     
     def process_task(self, task):

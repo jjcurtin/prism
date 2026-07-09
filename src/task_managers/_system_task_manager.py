@@ -21,12 +21,15 @@ class SystemTaskManager(TaskManager):
         }
     
     def get_r_script_tasks(self):
-        data = {
-            (f[:-2]): (f[:-2])
-            for f in os.listdir(self.app.r_scripts_dir)
-            if f.endswith('.R')
-        }
-        return data
+        try:
+            return {
+                (f[:-2]): (f[:-2])
+                for f in os.listdir(self.app.r_scripts_dir)
+                if f.endswith('.R')
+            }
+        except Exception as e:
+            self.app.add_to_transcript(f"Failed to list R scripts: {e}", "ERROR")
+            return {}
     
     def load_task_schedule(self):
         self.tasks.clear()
@@ -68,7 +71,7 @@ class SystemTaskManager(TaskManager):
                 } for task in self.tasks
             ]
         except Exception as e:
-            self.add_to_transcript(f"Failed to retrieve system task schedule: {e}", "ERROR")
+            self.app.add_to_transcript(f"Failed to retrieve system task schedule: {e}", "ERROR")
             return []
         
     def save_tasks(self):

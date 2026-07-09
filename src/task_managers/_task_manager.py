@@ -65,7 +65,8 @@ class TaskManager():
             except queue.Empty:
                 pass
             except Exception as e:
-                self.app.add_to_transcript(f"An error occurred while processing tasks: {e}")
+                task_type = task.get('task_type', '?') if 'task' in locals() else '?'
+                self.app.add_to_transcript(f"An error occurred while processing task {task_type}: {e}", "ERROR")
                 # note: changed print to add_to_transcript and removed the thing that kills the manager
         self.app.add_to_transcript(f"{self.name} processor stopped.", "INFO")
 

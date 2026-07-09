@@ -99,6 +99,10 @@ def create_flask_app(app_instance):
     def add_system_task(task_type, task_time):
         if task_type not in app_instance.system_task_manager.task_types:
             return jsonify({"error": "Invalid task type"}), 400
+        try:
+            datetime.strptime(task_time, '%H:%M:%S')
+        except ValueError:
+            return jsonify({"error": "Invalid time format."}), 400
         app_instance.system_task_manager.add_task(task_type, task_time, r_script_path = "")
         app_instance.system_task_manager.save_tasks()
         app_instance.add_to_transcript(f"Added system task via API: {task_type} at {task_time}", "INFO")
@@ -108,7 +112,11 @@ def create_flask_app(app_instance):
     def remove_system_task(task_type, task_time):
         if task_type not in app_instance.system_task_manager.task_types:
             return jsonify({"error": "Invalid task type."}), 400
-        elif app_instance.system_task_manager.remove_task(task_type, task_time = task_time) != 0:
+        try:
+            datetime.strptime(task_time, '%H:%M:%S')
+        except ValueError:
+            return jsonify({"error": "Invalid time format."}), 400
+        if app_instance.system_task_manager.remove_task(task_type, task_time = task_time) != 0:
             return jsonify({"error": "Task not found."}), 404
         return jsonify({"message": "Task removed successfully."}), 200
     
@@ -143,7 +151,11 @@ def create_flask_app(app_instance):
     def remove_r_script_task(r_script_path, task_time):
         if not r_script_path:
             return jsonify({"error": "R script path cannot be empty."}), 400
-        elif app_instance.system_task_manager.remove_task("RUN_R_SCRIPT", task_time = task_time, r_script_path = r_script_path) != 0:
+        try:
+            datetime.strptime(task_time, '%H:%M:%S')
+        except ValueError:
+            return jsonify({"error": "Invalid time format."}), 400
+        if app_instance.system_task_manager.remove_task("RUN_R_SCRIPT", task_time = task_time, r_script_path = r_script_path) != 0:
             return jsonify({"error": "R script task not found."}), 404
         return jsonify({"message": "R script task removed successfully."}), 200
     
@@ -192,7 +204,9 @@ def create_flask_app(app_instance):
 
     @flask_app.route('/participants/add_participant', methods = ['POST'])
     def add_participant():
-        data = request.get_json()
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({"error": "Request body must be a JSON object"}), 400
         required_fields = ['unique_id', 'last_name', 'first_name', 'on_study', 'phone_number', 'ema_time', 'ema_reminder_time', 'feedback_time', 'feedback_reminder_time']
         if not all(field in data for field in required_fields):
             return jsonify({"error": "Missing required fields"}), 400
@@ -225,8 +239,8 @@ def create_flask_app(app_instance):
 
     @flask_app.route('/participants/send_custom_sms/<unique_id>', methods = ['POST'])
     def send_custom_sms(unique_id):
-        data = request.get_json()
-        if not data or 'message' not in data:
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict) or 'message' not in data:
             return jsonify({"error": "Message content is required"}), 400
         participant = app_instance.participant_manager.get_participant(unique_id)
         if not participant:
@@ -237,8 +251,8 @@ def create_flask_app(app_instance):
     
     @flask_app.route('/participants/study_announcement/<require_on_study>', methods = ['POST'])
     def study_announcement(require_on_study):
-        data = request.get_json()
-        if not data or 'message' not in data:
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict) or 'message' not in data:
             app_instance.add_to_transcript("Study announcement failed: message content is required", "ERROR")
             return jsonify({"error": "Message content is required"}), 400
         if not app_instance.participant_manager.participants:
@@ -334,7 +348,9 @@ def create_flask_app(app_instance):
 
     @flask_app.route('/EMA/submit_ema', methods=['POST'])
     def submit_ema():
-        data = request.get_json()
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({"error": "Request body must be a JSON object"}), 400
 
         participant_id = data.get('participantID')
         subject_name = data.get('subjectName')
@@ -417,7 +433,9 @@ def create_flask_app(app_instance):
         
     @flask_app.route('/feedback_survey/submit_feedback', methods=['POST'])
     def submit_recommendations():
-        data = request.get_json()
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({"error": "Request body must be a JSON object"}), 400
 
         participant_id = data.get('participantID')
         subject_name = data.get('subjectName')
