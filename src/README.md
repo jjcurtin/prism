@@ -19,8 +19,7 @@ RAs use, and the background task machinery that runs behind them.
 
 ## Everything else in this folder
 
-- **`_routes.py`** — the server's API surface (every URL the interface,
-  Qualtrics, and the JS in `../qualtrics_js/` call).
+- **`_routes.py`** — the server's API surface (every URL the interface calls).
 - **`_helper.py`** — small shared utilities (sending SMS via Twilio,
   clearing the terminal).
 - **`system_tasks/`** — the individual background jobs PRISM can run or

@@ -73,7 +73,7 @@ def test_developer_documentation_top_level_structure(fake_interface, monkeypatch
     _developer_documentation.developer_documentation(fake_interface)
 
     top_level = captured['menu_options']
-    assert set(top_level) == {'start', 'architecture', 'backend', 'server', 'ui', 'qualtrics'}
+    assert set(top_level) == {'start', 'architecture', 'backend', 'server', 'ui'}
     for key, option in top_level.items():
         assert callable(option['menu_caller']), f"{key} menu_caller not callable"
     assert captured['recommended_actions'] == ['start']
@@ -119,7 +119,7 @@ def test_developer_documentation_nested_submenus_run_without_raising(fake_interf
 
     top_level['server']['menu_caller'](fake_interface)
     assert set(captured['menu_options']) == {
-        'system_endpoints', 'participant_endpoints', 'qualtrics_endpoints'
+        'system_endpoints', 'participant_endpoints'
     }
 
 

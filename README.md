@@ -16,8 +16,6 @@ participants and background tasks.
 - **data/** — output for pulled-down Qualtrics/FollowMee data. See
   `data/README.md`.
 - **logs/** — transcripts and activity logs. See `logs/README.md`.
-- **qualtrics_js/** — the JavaScript the Qualtrics survey pages use to talk to
-  the PRISM server. See `qualtrics_js/README.md`.
 - **scripts/** *(git-ignored, created at runtime)* — R scripts for the script
   pipeline; auto-detected by the task system.
 - **src/** — the PRISM server, interface, and system tasks. See

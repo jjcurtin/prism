@@ -112,7 +112,7 @@ def developer_documentation(self):
         def system_endpoints(self):
             infopage(self, content = [
                 f"PRISM runs a Flask server served with Waitress.",
-                f"The server provides endpoints for system purposes and Qualtrics integration.",
+                f"The server provides endpoints for system management.",
                 f"The following endpoints are available for system management:",
                 f"1. GET /system/get_mode - Returns the current mode of the application.",
                 f"2. GET /system/uptime - Returns the uptime of the application.",
@@ -148,27 +148,15 @@ def developer_documentation(self):
                 f"10. POST /participants/study_announcement/<require_on_study> - Sends a study announcement to participants."
             ], title = "help dev server participants")
 
-        def qualtrics_endpoints(self):
-            infopage(self, content = [
-                f"PRISM integrates with Qualtrics for survey management.",
-                f"The following endpoints are available for Qualtrics integration:",
-                f"1. GET /qualtrics/access_ema/<unique_id> - Provides access to the EMA survey for a participant.",
-                f"2. GET /qualtrics/request_coords/<unique_id> - Requests the coordinates of a participant.",
-                f"3. POST /qualtrics/submit_ema - Submits the EMA survey.",
-                f"4. GET /qualtrics/access_feedback/<unique_id> - Provides access to the feedback survey for a participant.",
-                f"5. POST /qualtrics/submit_feedback - Submits the feedback survey."
-            ], title = "help dev server qualtrics")
-
         menu_options = {
             'system_endpoints': {'description': 'System Endpoints', 'menu_caller': system_endpoints},
-            'participant_endpoints': {'description': 'Participant Endpoints', 'menu_caller': participant_endpoints},
-            'qualtrics_endpoints': {'description': 'Qualtrics Endpoints', 'menu_caller': qualtrics_endpoints}
+            'participant_endpoints': {'description': 'Participant Endpoints', 'menu_caller': participant_endpoints}
         }
         while True:
             if not self.commands_queue:
                 print_menu_header("PRISM Server and API Endpoints")
             print("PRISM runs a Flask server served with Waitress.")
-            print("PRISM has endpoints for system purposes and Qualtrics integration.")
+            print("PRISM has endpoints for system and participant management.")
             print("Below is the documentation for the available endpoints:")
             print()
             if print_menu_options(self, menu_options, submenu = True):
@@ -184,15 +172,6 @@ def developer_documentation(self):
             f"\nThe {green('user_interface_menus/documentation/')} folder contains the documentation for the application (which is where the content you are viewing is loaded from)."
         ], title = "help dev ui")
 
-    def qualtrics_interface_documentation(self):
-        infopage(self, content = [
-            f"The Qualtrics interface is used to manage and interact with Qualtrics surveys.",
-            f"The code that I have written for Qualtrics is in the {green('../qualtrics_js/')} folder.",
-            f"Each script must be added to the appropriate survey question in the desired Qualtrics survey.",
-            f"Note: there are additional survey requirements for the Qualtrics interface to work correctly (e.g. layout and question types).",
-            f"Additionally, the interface requires PRISM to be running."
-        ], title = "help dev qualtrics")
-
     def architecture_overview(self):
         infopage(self, content = [
             f"PRISM is designed with many components that work together.",
@@ -202,8 +181,6 @@ def developer_documentation(self):
             f"The code for this lies in the {green('system_tasks/')} and {green('task_managers/')} folders and {green('_helper.py')} and {green('_routes.py')}.",
             f"\nThere is also this user interface, which is initiated by the {green('prism_interface.py')} file.",
             f"The code for this lies in the {green('user_interface_menus/')} folder.",
-            f"\nThere is also a Qualtrics interface, which the code for is in the {green('qualtrics_js/')} folder.",
-            f"There are a few things that need to be set up in Qualtrics for this to work (namely the right question/survey setup).",
             f"\nFeel free to contact me directly for any questions.",
             f"The {yellow('assistant')} may also be able to help with some questions."
         ], title = "help dev architecture")
@@ -214,7 +191,6 @@ def developer_documentation(self):
         'backend': {'description': 'PRISM Backend Logic', 'menu_caller': prism_backend_logic_documentation},
         'server': {'description': 'PRISM Server and API Endpoints', 'menu_caller': prism_server_and_api_endpoints_documentation},
         'ui': {'description': 'PRISM User Interface', 'menu_caller': prism_user_interface_documentation},
-        'qualtrics': {'description': 'Qualtrics Interface', 'menu_caller': qualtrics_interface_documentation},
     }
     while True:
         if not self.commands_queue:

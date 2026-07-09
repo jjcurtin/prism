@@ -51,17 +51,14 @@ class CheckSystem(SystemTask):
             directories = [
                 '../config',
                 '../data',
-                '../qualtrics_js',
                 '../scripts',
                 '../logs',
                 'system_tasks'
             ]
             files = [
-                ['system_task_schedule.csv', 'study_coordinators.csv', 
+                ['system_task_schedule.csv', 'study_coordinators.csv',
                  'script_pipeline.csv', 'study_participants.csv'], # config
                 [], # data
-                ['EMA_load_logic.js', 'EMA_submit_logic.js', 
-                 'recommendationLoad.js', 'recommendationSubmit.js'], # qualtrics_js
                 [], # scripts
                 [], # logs
                 ['_check_system.py', # obviously

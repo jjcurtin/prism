@@ -120,13 +120,10 @@ def fake_app():
 
 
 @pytest.fixture
-def routes_app_instance(tmp_path, monkeypatch):
+def routes_app_instance():
     """A FakeApp wired up the way `_routes.py`'s routes expect: mocked
     `system_task_manager`/`participant_manager` (assign `.return_value`/
-    `.task_types` per test before making a request), a real `start_time`,
-    and cwd set to a fake `src/` so the EMA/feedback routes' hardcoded
-    `"../logs/ema_logs/..."`/`"../logs/feedback_logs/..."` relative paths
-    resolve under tmp_path instead of the real repo.
+    `.task_types` per test before making a request) and a real `start_time`.
     """
     from datetime import datetime
     from unittest.mock import MagicMock
@@ -138,11 +135,6 @@ def routes_app_instance(tmp_path, monkeypatch):
     app.participant_manager = MagicMock()
     app.get_transcript = MagicMock(return_value='fake transcript line\n')
     app.shutdown = MagicMock()
-
-    (tmp_path / 'src').mkdir()
-    (tmp_path / 'logs' / 'ema_logs').mkdir(parents=True)
-    (tmp_path / 'logs' / 'feedback_logs').mkdir(parents=True)
-    monkeypatch.chdir(tmp_path / 'src')
 
     return app
 
