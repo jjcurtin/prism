@@ -40,8 +40,13 @@ def test_shutdown_confirmed_success(fake_interface, monkeypatch, capsys):
     ]
 
 
-def test_shutdown_confirmed_connection_error_reports_already_down(fake_interface, monkeypatch, capsys):
-    fake_interface.api = MagicMock(side_effect=[{"uptime": "1h"}, requests.ConnectionError()])
+def test_shutdown_confirmed_failure_response_is_reported(fake_interface, monkeypatch, capsys):
+    """Regression test for a fixed bug: the shutdown POST's return value used
+    to be discarded, so a failed/unreachable shutdown request (self.api()
+    returning None) still unconditionally printed "PRISM shut down." Now the
+    return value is checked and a failure is reported instead.
+    """
+    fake_interface.api = MagicMock(side_effect=[{"uptime": "1h"}, None])
     fake_interface.inputs_queue.put('y')
     exit_calls = []
     monkeypatch.setattr('builtins.exit', lambda code=0: exit_calls.append(code))
@@ -49,8 +54,31 @@ def test_shutdown_confirmed_connection_error_reports_already_down(fake_interface
     _shutdown_menu.shutdown_menu(fake_interface)
 
     out = capsys.readouterr().out
-    assert "PRISM is already shut down." in out
-    assert exit_calls == [0]
+    assert "Failed to shut down PRISM." in out
+    assert exit_calls == []
+
+
+def test_shutdown_confirmed_connection_error_is_reported(fake_interface, monkeypatch, capsys):
+    """Regression test for a fixed bug: shutdown_menu used to have a dedicated
+    `except requests.ConnectionError` branch, but self.api() (see
+    prism_interface.py) already catches ConnectionError internally and
+    returns None instead of propagating it -- that branch was dead code and
+    has been removed. A raw ConnectionError raised directly by self.api()
+    (as could happen via a mock, or if self.api()'s own internals ever
+    changed) now falls into the generic error handler like any other
+    exception, rather than being silently reported as a successful-looking
+    "already shut down".
+    """
+    fake_interface.api = MagicMock(side_effect=[{"uptime": "1h"}, requests.ConnectionError("boom")])
+    fake_interface.inputs_queue.put('y')
+    exit_calls = []
+    monkeypatch.setattr('builtins.exit', lambda code=0: exit_calls.append(code))
+
+    _shutdown_menu.shutdown_menu(fake_interface)
+
+    out = capsys.readouterr().out
+    assert "Error: boom" in out
+    assert exit_calls == []
 
 
 def test_shutdown_confirmed_generic_error_is_reported(fake_interface, monkeypatch, capsys):
