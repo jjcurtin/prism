@@ -12,6 +12,17 @@ The participant roster — this is what the `participants` menu reads from and
 writes back to (see `src/user_interface_menus/participants/README.md`). One
 row per participant:
 
+**Path status (2026-07-09):** on Windows this historically lived on the
+`S:` research drive (`S:/optimize/data_raw/participants/study_participants.csv`),
+not in this repo. `config/paths.api`'s `participants_path` currently
+defaults to a local placeholder (`config/study_participants.csv`) purely so
+the server can boot without that drive connected — this is a stand-in, not
+the real data source. Linux has no drive-letter equivalent; `plan/06-research-drive-sync.md`
+already scopes the mount mechanism (`mount -t cifs` against the WiscAD
+share), but the actual local mount point on Linux hasn't been decided yet.
+Don't treat the local placeholder as authoritative until `participants_path`
+is repointed at the real mounted location once phase 6 lands.
+
 | Column | Format |
 |---|---|
 | `unique_id` | any identifier (the interface expects a 9-digit number) |
