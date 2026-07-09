@@ -25,8 +25,7 @@ Qualtrics.SurveyEngine.addOnReady(function () {
 
         xhr.open("GET", url, true);
         console.log("Requesting coordinates from:", url);
-        xhr.setRequestHeader("ngrok-skip-browser-warning", "true");
-        
+
         xhr.timeout = 5000; // Set timeout to 5 seconds for testing
         xhr.ontimeout = function () {
             console.error("Request timed out after 5 seconds.");

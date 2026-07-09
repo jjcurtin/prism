@@ -9,7 +9,7 @@ participants and background tasks.
 ## Navigating this repo
 
 - **api/** *(git-ignored, created at runtime)* — plaintext API credential CSVs
-  (Qualtrics, FollowMee, Twilio, ngrok, the research drive). Not present in a
+  (Qualtrics, FollowMee, Twilio, the research drive). Not present in a
   fresh checkout; see `help ra start` in the interface for what's required.
 - **config/** — configuration CSVs PRISM needs to run (participant roster,
   task schedule, coordinator list). See `config/README.md`.

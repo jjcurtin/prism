@@ -73,7 +73,6 @@ def test_load_api_keys_reads_all_other_api_files(prism_instance):
     assert prism_instance.twilio_auth_token == 'fake_token'
     assert prism_instance.twilio_from_number == '+15555550100'
     assert prism_instance.wisc_netid == 'fake_netid'
-    assert prism_instance.ngrok_auth_token == 'fake_ngrok_token'
 
 
 def test_load_api_keys_falls_back_to_message_defaults_when_columns_missing(prism_instance):

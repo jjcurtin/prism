@@ -2,10 +2,9 @@ Qualtrics.SurveyEngine.addOnReady(function() {
     var participantID = "${e://Field/ParticipantID}";
     var xhr = new XMLHttpRequest();
     var url = "http://localhost:5000/feedback_survey/access_feedback/" + encodeURIComponent(participantID);
-	// put ngrok link in Qualtrics but do not push
+	// put PRISM's public address in Qualtrics but do not push
 
     xhr.open("GET", url, true);
-    xhr.setRequestHeader("ngrok-skip-browser-warning", "true");
 
     xhr.onreadystatechange = function () {
         if (xhr.readyState === 4) {

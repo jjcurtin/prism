@@ -9,7 +9,7 @@ def research_assistant_documentation(self):
             f"It also provides functionality for scheduling code scripts as needed for research studies.",
             f"It is designed to run 24/7 and execute study responsibilities in real time.",
             f"\nTo get started with PRISM, ensure the following folders and files exist.",
-            f"\n{green("api")}\n{green("azure.api")}\n{green("followmee.api")}\n{green("ngrok.api")}\n{green("qualtrics.api")}\n{green("research_drive.api")}\n{green("twilio.api")}",
+            f"\n{green("api")}\n{green("azure.api")}\n{green("followmee.api")}\n{green("qualtrics.api")}\n{green("research_drive.api")}\n{green("twilio.api")}",
             f"\n{green("config")}\n{green("study_participants.csv")}\n{green("study_coordinators.csv")}\n{green("system_task_schedule.csv")}\n{green("script_pipeline.csv")} if using script pipelines (deprecated) \n",
             f"To run R scripts, place them in the {green("scripts")} directory and they will be automatically detected."
         ], title = "help ra getting started")

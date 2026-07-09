@@ -10,8 +10,7 @@ def developer_documentation(self):
                 f'1. {green("qualtrics.api")}: "api_token","datacenter","ema_survey_id","feedback_survey_id"',
                 f'2. {green("followmee.api")}: "username","api_token"',
                 f'3. {green("twilio.api")}: "account_sid","auth_token","from_number"',
-                f'4. {green("research_drive.api")}: "destination_path","drive_letter","network_domain","network_username","wisc_netid","wisc_password"',
-                f'5. {green("ngrok.api")}: "auth_token","domain"'
+                f'4. {green("research_drive.api")}: "destination_path","drive_letter","network_domain","network_username","wisc_netid","wisc_password"'
             ], title = "help dev start api")
 
         def config_setup(self):
@@ -112,7 +111,7 @@ def developer_documentation(self):
     def prism_server_and_api_endpoints_documentation(self):
         def system_endpoints(self):
             infopage(self, content = [
-                f"PRISM runs a Flask server served with Waitress with localhost tunneling through ngrok.",
+                f"PRISM runs a Flask server served with Waitress.",
                 f"The server provides endpoints for system purposes and Qualtrics integration.",
                 f"The following endpoints are available for system management:",
                 f"1. GET /system/get_mode - Returns the current mode of the application.",
@@ -168,7 +167,7 @@ def developer_documentation(self):
         while True:
             if not self.commands_queue:
                 print_menu_header("PRISM Server and API Endpoints")
-            print("PRISM runs a Flask server served with Waitress with localhost tunneling through ngrok.")
+            print("PRISM runs a Flask server served with Waitress.")
             print("PRISM has endpoints for system purposes and Qualtrics integration.")
             print("Below is the documentation for the available endpoints:")
             print()

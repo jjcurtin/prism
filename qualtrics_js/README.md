@@ -32,7 +32,7 @@ survey flow before these scripts will work.
 
 **Important:** every script points at `http://localhost:5000/...` by
 default. Before a survey goes live to real participants, whoever manages
-the Qualtrics setup needs to swap that for the current ngrok URL (PRISM's
-public tunnel address) — and swap it back to `localhost` before committing
-any changes back to this repo, since the ngrok URL is deployment-specific
-and shouldn't be checked in.
+the Qualtrics setup needs to swap that for whatever public address reaches
+the running PRISM server in that deployment — and swap it back to
+`localhost` before committing any changes back to this repo, since that
+address is deployment-specific and shouldn't be checked in.

@@ -9,8 +9,6 @@ import pandas as pd
 from waitress import serve
 from _helper import clear
 import signal
-from pyngrok import ngrok
-import subprocess
 import argparse
 
 from task_managers._system_task_manager import SystemTaskManager
@@ -186,10 +184,6 @@ class PRISM():
             'wisc_netid': 'wisc_netid',
             'wisc_password': 'wisc_password'
         }, "Research Drive")
-        load_keys('ngrok.api', {
-            'ngrok_auth_token': 'auth_token',
-            'ngrok_domain': 'domain'
-        }, "Ngrok")
 
     def add_to_transcript(self, message, message_type = "INFO"):
         transcript_message = f"{message_type} - {message}"
@@ -231,13 +225,6 @@ class PRISM():
 
     def launch_web_app(self):
         self.flask_app = create_flask_app(self)
-        if self.mode == "prod":
-            ngrok.set_auth_token(self.ngrok_auth_token)
-            subprocess.Popen(
-                ["ngrok", "http", f"--url={self.ngrok_domain}", "5000"], 
-                stdout = subprocess.DEVNULL,
-                stderr = subprocess.DEVNULL
-            )
         serve(self.flask_app, host = '127.0.0.1', port = 5000)
 
     def handle_shutdown(self, signum, frame):

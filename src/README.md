@@ -8,9 +8,8 @@ RAs use, and the background task machinery that runs behind them.
 - **`run_prism.py`** — starts the PRISM server (`python run_prism.py -mode
   {test,prod}`). This is the process that does the real work: sending
   surveys, serving the Qualtrics-facing endpoints, running scheduled tasks.
-  Must be launched from inside this `src/` folder. In `prod` mode it also
-  opens an ngrok tunnel so Qualtrics can reach it, and will text study
-  coordinators if a background task fails.
+  Must be launched from inside this `src/` folder. In `prod` mode it will
+  also text study coordinators if a background task fails.
 - **`prism_interface.py`** — the terminal menu program RAs actually
   interact with day to day. It talks to the running server over HTTP; it
   never touches participant data or the schedule directly. If the server
