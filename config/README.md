@@ -1,57 +1,46 @@
 # Config
 
-The CSV files PRISM reads at startup to know what to do — who's in the
-study, when to text them, and what background tasks to run. Nothing in this
-folder is tracked by git (it's all study-specific, hand-maintained data), so
-these files need to exist on disk before PRISM will run correctly.
+**Updated 2026-07-09 — config/api are now sourced from the research drive,
+not this folder.** `run_prism.py`'s `load_paths()`/`load_api_keys()` read
+`S:/optimize/prism/<environment>/` (`<environment>` from the git-ignored
+`environment` marker file at the repo root, `dev` or `prod`) for everything
+study-specific: the `api/` folder (Qualtrics/FollowMee/Twilio/etc. credentials
++ SMS message text), and most of `config/` (`study_coordinators.csv`,
+`system_task_schedule.csv`, `script_pipeline.csv`, `followmee_coords.csv`).
+`study_participants.csv`/`reminders.csv` live under a separate
+`data_raw/participants/` path on the same drive (`dev_`-prefixed for the dev
+environment), per that environment's `paths.csv`. On Linux, the drive mounts
+at `/mnt/research_drive` (WiscVPN + CIFS — see `research-drive-map`/
+`wisc-connect` aliases); on Windows it's the mapped `S:` drive directly.
 
-## Files PRISM expects here
+This folder now only holds two things:
+- `repo_paths.csv` — **tracked**, unlike everything else here. Internal
+  resolution facts for this repo checkout itself (where logs live locally,
+  how the drive mounts per-platform, which drive subpath this project is
+  under) — as opposed to study-specific data, which comes from the drive.
+- Nothing else — no local `.template`/placeholder files anymore. Removed
+  2026-07-09: `PRISM.__init__` now depends on `config_base` (drive-sourced)
+  regardless of dev/prod, so local placeholders no longer serve a
+  boot-without-the-drive purpose the way they briefly did during initial
+  Linux port work — the drive is the single source of truth.
 
-### `study_participants.csv`
-The participant roster — this is what the `participants` menu reads from and
-writes back to (see `src/user_interface_menus/participants/README.md`). One
-row per participant:
+## Current known schema (from the real files on the drive)
 
-**Path status (2026-07-09):** on Windows this historically lived on the
-`S:` research drive (`S:/optimize/data_raw/participants/study_participants.csv`),
-not in this repo. `config/paths.api`'s `participants_path` currently
-defaults to a local placeholder (`config/study_participants.csv`) purely so
-the server can boot without that drive connected — this is a stand-in, not
-the real data source. Linux has no drive-letter equivalent; `plan/06-research-drive-sync.md`
-already scopes the mount mechanism (`mount -t cifs` against the WiscAD
-share), but the actual local mount point on Linux hasn't been decided yet.
-Don't treat the local placeholder as authoritative until `participants_path`
-is repointed at the real mounted location once phase 6 lands.
+`study_participants.csv`: `initials,subid,unique_id,on_study,phone_number,ema_time,ema_reminder_time,feedback_time,feedback_reminder_time`.
+Note `_participant_manager.py` has an unfinished migration to this schema —
+see the code comment near its CSV-parsing logic — flagged, not yet fixed.
 
-| Column | Format |
-|---|---|
-| `unique_id` | any identifier (the interface expects a 9-digit number) |
-| `last_name` / `first_name` | any |
-| `on_study` | `yes` or `no` |
-| `phone_number` | 10-digit phone number |
-| `ema_time` | daily EMA survey send time, `HH:MM:SS` |
-| `ema_reminder_time` | EMA reminder send time, `HH:MM:SS` |
-| `feedback_time` | daily feedback survey send time, `HH:MM:SS` |
-| `feedback_reminder_time` | feedback reminder send time, `HH:MM:SS` |
+`reminders.csv`: `subid,unique_id,on_study,remind_ema,remind_feedback`.
 
-### `study_coordinators.csv`
-Who gets a text if something breaks (a failed background task, a failed
-system check). One row per coordinator: `name`, `phone_number` (10 digits).
+`study_coordinators.csv`: `name,phone_number` (10 digits) — who gets texted
+if a background task or system check fails.
 
-### `system_task_schedule.csv`
-The recurring background task schedule — what the `tasks` menu shows and
-edits (see `src/user_interface_menus/tasks/README.md`).
+`system_task_schedule.csv`: `task_type,task_time,r_script_path,run_today` —
+`task_type` must match a task class in `src/system_tasks/`.
 
-| Column | Format |
-|---|---|
-| `task_type` | must match a task class in `src/system_tasks/` — see that folder's README for the naming rule |
-| `task_time` | `HH:MM:SS` |
-| `run_today` | `yes`/`no` — whether it's still due today |
-
-### `script_pipeline.csv` *(deprecated)*
-An older mechanism for chaining R scripts: `script_path` (relative to
-`scripts/`), `arguments` (space-separated), `enabled` (boolean). Prefer
-dropping scripts in `scripts/` directly, which PRISM auto-detects.
+`script_pipeline.csv` *(deprecated)*: `script_path,arguments,enabled` — an
+older mechanism for chaining R scripts. Prefer dropping scripts where
+`r_scripts_dir` points, which PRISM auto-detects.
 
 ## A note on editing these by hand
 
