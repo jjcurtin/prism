@@ -10,7 +10,7 @@ PIP := $(VENV)/bin/pip
 PY_SYS := python3
 endif
 
-.PHONY: setup run interface
+.PHONY: setup run interface test-server test-client test-all
 
 .DEFAULT_GOAL := run
 
@@ -21,6 +21,7 @@ setup:
 	python -m venv $(VENV)
 	$(PIP) install --upgrade pip
 	$(PIP) install -r requirements.txt
+	$(PIP) install -r requirements-dev.txt
 	python setup_env.py
 else
 # pandas has no prebuilt wheel for this platform (cp313/aarch64); install it
@@ -31,6 +32,7 @@ setup:
 	python3 -m venv --system-site-packages $(VENV)
 	$(PIP) install --upgrade pip
 	grep -v '^pandas' requirements.txt | $(PIP) install -r /dev/stdin
+	$(PIP) install -r requirements-dev.txt
 	python3 setup_env.py
 endif
 
@@ -40,3 +42,15 @@ run:
 
 interface:
 	cd src && $(PYTHON) prism_interface.py
+
+test-server:
+	$(PYTHON) -m pytest tests -v
+
+# interface-side tests (phase 04, not started yet) — placeholder dir with a
+# conftest.py already scaffolded; will fail with "no tests collected" until
+# plan/04-interface-pytest.md's work lands, which is the correct/honest
+# behavior for now rather than silently no-op'ing.
+test-client:
+	$(PYTHON) -m pytest tests_interface -v
+
+test-all: test-server test-client
