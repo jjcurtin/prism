@@ -21,7 +21,13 @@ else:
     # bytes (e.g. the rest of an arrow-key escape sequence) into Python's
     # internal buffer where select() can no longer see them, making the
     # next select() call falsely report "no data ready".
-    _STDIN_FD = sys.stdin.fileno()
+    #
+    # Resolved lazily (not at import time): sys.stdin has no real fd when
+    # this module is merely imported under redirected/non-tty stdin (e.g.
+    # pytest's default capture, or a service with stdin from /dev/null) —
+    # only kbhit()/getwch()/read_arrow_key() actually need a real terminal.
+    def _stdin_fd():
+        return sys.stdin.fileno()
 
 
 @contextlib.contextmanager
@@ -48,7 +54,7 @@ def kbhit():
     """Non-blocking check for whether a key is waiting to be read."""
     if IS_WINDOWS:
         return msvcrt.kbhit()
-    dr, _, _ = select.select([_STDIN_FD], [], [], 0)
+    dr, _, _ = select.select([_stdin_fd()], [], [], 0)
     return bool(dr)
 
 
@@ -57,7 +63,7 @@ def getwch():
     kbhit() returns True (and, on POSIX, within a raw_mode() block)."""
     if IS_WINDOWS:
         return msvcrt.getwch()
-    return os.read(_STDIN_FD, 1).decode(errors='replace')
+    return os.read(_stdin_fd(), 1).decode(errors='replace')
 
 
 # Arrow keys arrive as a different byte sequence per platform: Windows
@@ -82,10 +88,10 @@ def read_arrow_key(first_char):
         return None
     # a short wait distinguishes a real escape sequence from a lone ESC
     # keypress, without blocking indefinitely on the latter.
-    if not select.select([_STDIN_FD], [], [], 0.05)[0]:
+    if not select.select([_stdin_fd()], [], [], 0.05)[0]:
         return None
     if getwch() != '[':
         return None
-    if not select.select([_STDIN_FD], [], [], 0.05)[0]:
+    if not select.select([_stdin_fd()], [], [], 0.05)[0]:
         return None
     return _POSIX_ARROW_MAP.get(getwch())
