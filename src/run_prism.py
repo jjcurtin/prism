@@ -54,8 +54,11 @@ class PRISM():
         return raw_path
 
     def load_paths(self):
-        # repo root is the parent of this file's directory (src/)
-        repo_root = Path(__file__).resolve().parent.parent
+        # repo root is the parent of this file's directory (src/). Tests can
+        # override by setting self.repo_root before calling this method, to
+        # point at a fixture tree instead of the real checkout.
+        repo_root = getattr(self, 'repo_root', None) or Path(__file__).resolve().parent.parent
+        self.repo_root = repo_root
 
         # repo_paths.csv is tracked (not gitignored, unlike everything else
         # in config/) — it holds resolution facts internal to this repo
