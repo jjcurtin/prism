@@ -30,10 +30,10 @@ class ParticipantManager(TaskManager):
                     if line.strip():
                         parts = line.strip().split(',')
                         participant = {
-                            'first_name': parts[0].strip('"'),
-                            'last_name': parts[1].strip('"'),
+                            'initials': parts[0].strip('"'),
+                            'subid': parts[1].strip('"'),
                             'unique_id': parts[2].strip('"'),
-                            'on_study': parts[3].strip('"').lower() == 'true',
+                            'on_study': parts[3].strip('"').lower() == 'yes',
                             'phone_number': parts[4].strip('"'),
                             'ema_time': parts[5].strip('"'),
                             'ema_reminder_time': parts[6].strip('"'),
@@ -71,8 +71,8 @@ class ParticipantManager(TaskManager):
             return [
                 {
                     'unique_id': participant['unique_id'],
-                    'last_name': participant['last_name'],
-                    'first_name': participant['first_name'],
+                    'subid': participant['subid'],
+                    'initials': participant['initials'],
                     'on_study': participant['on_study'],
                 } for participant in self.participants
             ]
@@ -107,10 +107,10 @@ class ParticipantManager(TaskManager):
     def save_participants(self):
         try:
             with open(self.file_path, 'w') as file:
-                # change the thing from first name last name to initials and subid
                 file.write('"initials","subid","unique_id","on_study","phone_number","ema_time","ema_reminder_time","feedback_time","feedback_reminder_time"\n')
                 for participant in self.participants:
-                    file.write(f'"{participant["first_name"]}","{participant["last_name"]}","{participant["unique_id"]}","{str(participant["on_study"]).lower()}","{participant["phone_number"]}","{participant["ema_time"]}","{participant["ema_reminder_time"]}","{participant["feedback_time"]}","{participant["feedback_reminder_time"]}"\n')
+                    on_study_str = 'yes' if participant['on_study'] else 'no'
+                    file.write(f'"{participant["initials"]}","{participant["subid"]}","{participant["unique_id"]}","{on_study_str}","{participant["phone_number"]}","{participant["ema_time"]}","{participant["ema_reminder_time"]}","{participant["feedback_time"]}","{participant["feedback_reminder_time"]}"\n')
         except Exception as e:
             self.app.add_to_transcript(f"Failed to save participants to CSV: {e}", "ERROR")
             return 1
@@ -217,7 +217,6 @@ class ParticipantManager(TaskManager):
                                 return 0  # Already opened
                             break
 
-            participant_name = f"{participant['first_name']} {participant['last_name']}"
             participant_phone_number = participant['phone_number']
             self.app.add_to_transcript(f"Processing SMS task: {task_type} for participant {participant_id}", "INFO")
             task_map = {

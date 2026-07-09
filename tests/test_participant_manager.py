@@ -1,7 +1,5 @@
 import queue
 
-import pytest
-
 from task_managers._participant_manager import ParticipantManager
 
 
@@ -25,9 +23,13 @@ def make_manager(fake_app):
     return pm
 
 
+# Matches the real study_participants.csv schema (verified against the
+# actual file on the research drive, see config/README.md):
+# initials,subid,unique_id,on_study,phone_number,ema_time,ema_reminder_time,
+# feedback_time,feedback_reminder_time
 PARTICIPANT = {
-    'first_name': 'Jane',
-    'last_name': 'Doe',
+    'initials': 'JD',
+    'subid': '3000',
     'unique_id': '000000000',
     'on_study': True,
     'phone_number': '5555550100',
@@ -85,8 +87,8 @@ def test_get_participants_projects_only_summary_fields(fake_app):
 
     assert result == [{
         'unique_id': '000000000',
-        'last_name': 'Doe',
-        'first_name': 'Jane',
+        'subid': '3000',
+        'initials': 'JD',
         'on_study': True,
     }]
 
@@ -175,15 +177,15 @@ def test_update_participant_updates_field_and_reschedules_task(fake_app):
     assert task_types.count('ema') == 1  # old one removed, new one added, no duplicate
 
 
-# --- Known pre-existing bugs, documented via xfail (not fixed here) -------
+# --- Previously-documented bugs, now fixed -------------------------------
 #
-# load_participants() parses each CSV row positionally assuming
-# first_name,last_name,unique_id,... — but the real study_participants.csv
-# schema (verified against the actual file on the research drive, see
-# config/README.md) is initials,subid,unique_id,on_study,phone_number,...
-# The code has a matching unfinished-migration comment in save_participants().
+# load_participants() used to parse each CSV row assuming
+# first_name,last_name,unique_id,... and check on_study == 'true'. Fixed to
+# match the real study_participants.csv schema (verified against the actual
+# file on the research drive, see config/README.md):
+# initials,subid,unique_id,on_study(yes/no),phone_number,...
 
-def test_xfail_load_participants_matches_real_csv_schema(tmp_path, fake_app):
+def test_load_participants_matches_real_csv_schema(tmp_path, fake_app):
     csv_file = tmp_path / 'study_participants.csv'
     csv_file.write_text(
         'initials,subid,unique_id,on_study,phone_number,ema_time,'
@@ -196,29 +198,19 @@ def test_xfail_load_participants_matches_real_csv_schema(tmp_path, fake_app):
 
     pm.load_participants()
 
-    # unique_id (column 3 in both schemas) happens to survive by coincidence
-    # of position — the real symptom is first_name/last_name silently
-    # holding initials/subid instead.
     participant = pm.participants[0]
-    if participant['first_name'] != 'Jane':
-        pytest.xfail(
-            'Known bug: load_participants() parses columns positionally as '
-            'first_name,last_name,unique_id,... but the real schema is '
-            'initials,subid,unique_id,... — see config/README.md. '
-            f'first_name actually holds {participant["first_name"]!r}.'
-        )
-    assert participant['first_name'] == 'Jane'
+    assert participant['initials'] == 'JD'
+    assert participant['subid'] == '3000'
+    assert participant['unique_id'] == '000000000'
 
 
-def test_xfail_on_study_parses_yes_no_not_true_false(tmp_path, fake_app):
-    # load_participants() checks `.lower() == 'true'`, but real data uses
-    # yes/no (see config/README.md's confirmed schema) — so an on-study
-    # participant is always parsed as on_study=False.
+def test_load_participants_on_study_parses_yes_no(tmp_path, fake_app):
     csv_file = tmp_path / 'study_participants.csv'
     csv_file.write_text(
-        'first_name,last_name,unique_id,on_study,phone_number,ema_time,'
+        'initials,subid,unique_id,on_study,phone_number,ema_time,'
         'ema_reminder_time,feedback_time,feedback_reminder_time\n'
-        'Jane,Doe,000000000,yes,5555550100,09:00:00,10:00:00,19:00:00,20:00:00\n'
+        'JD,3000,000000000,yes,5555550100,09:00:00,10:00:00,19:00:00,20:00:00\n'
+        'AB,3001,000000001,no,5555550101,09:00:00,10:00:00,19:00:00,20:00:00\n'
     )
     fake_app.participants_path = str(csv_file)
     pm = make_manager(fake_app)
@@ -226,9 +218,20 @@ def test_xfail_on_study_parses_yes_no_not_true_false(tmp_path, fake_app):
 
     pm.load_participants()
 
-    if pm.participants[0]['on_study'] is not True:
-        pytest.xfail(
-            "Known bug: load_participants() checks on_study == 'true', but "
-            "real data uses yes/no — an on-study participant parses as False."
-        )
+    assert pm.participants[0]['on_study'] is True
+    assert pm.participants[1]['on_study'] is False
+
+
+def test_save_participants_round_trips_through_load(tmp_path, fake_app):
+    csv_file = tmp_path / 'study_participants.csv'
+    fake_app.participants_path = str(csv_file)
+    pm = make_manager(fake_app)
+    pm.file_path = str(csv_file)
+    pm.participants = [dict(PARTICIPANT)]
+
+    pm.save_participants()
+    pm.load_participants()
+
+    assert pm.participants[0]['initials'] == 'JD'
+    assert pm.participants[0]['subid'] == '3000'
     assert pm.participants[0]['on_study'] is True
