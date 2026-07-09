@@ -18,7 +18,7 @@ def developer_documentation(self):
                 f"Ensure that the configuration files are set up correctly in the config/ folder.",
                 f"This includes setting up the correct paths and environment variables for PRISM to function properly.",
                 f'1. {green("system_task_schedule.csv")}: "task_type","task_time","r_script_path","run_today"',
-                f'2. {green("study_participants.csv")}: "unique_id","last_name","first_name","on_study","phone_number","ema_time","ema_reminder_time","feedback_time","feedback_reminder_time"',
+                f'2. {green("study_participants.csv")}: "initials","subid","unique_id","on_study","phone_number","ema_time","ema_reminder_time","feedback_time","feedback_reminder_time"',
                 f'3. {green("study_coordinators.csv")}: "name","phone_number"',
                 f'4. {green("script_pipeline.csv")}: "script_path","arguments","enabled"',
                 f'5. {green("followmee_coords.csv")}: (used for testing for now): DeviceName,DeviceID,Date,Latitude,Longitude,Type,Speed(mph),Speed(km/h),Direction,Altitude(ft),Altitude(m),Accuracy,Battery'

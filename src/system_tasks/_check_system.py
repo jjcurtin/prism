@@ -142,14 +142,14 @@ class CheckSystem(SystemTask):
             unique_id = p.get('unique_id')
             if unique_id:
                 if unique_id in unique_ids:
-                    unique_ids[unique_id].append(p['first_name'] + " " + p['last_name'])
+                    unique_ids[unique_id].append(p['initials'] + " " + p['subid'])
                 else:
-                    unique_ids[unique_id] = [p['first_name'] + " " + p['last_name']]
+                    unique_ids[unique_id] = [p['initials'] + " " + p['subid']]
         duplicates = {uid: names for uid, names in unique_ids.items() if len(names) > 1}
         if duplicates:
-            self.app.add_to_transcript("ERROR: Duplicate unique IDs found among participants:")
+            self.app.add_to_transcript("Duplicate unique IDs found among participants:", "ERROR")
             for uid, names in duplicates.items():
-                self.app.add_to_transcript(f"Unique ID: {uid}, Participants: {', '.join(names)}")
-            self.app.add_to_transcript("Please remedy these issues either through this interface or in the CSV file and refresh from CSV when you are ready.")
+                self.app.add_to_transcript(f"Unique ID: {uid}, Participants: {', '.join(names)}", "ERROR")
+            self.app.add_to_transcript("Please remedy these issues either through this interface or in the CSV file and refresh from CSV when you are ready.", "ERROR")
             return 1
         return 0

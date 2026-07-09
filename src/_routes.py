@@ -207,7 +207,7 @@ def create_flask_app(app_instance):
         data = request.get_json(silent=True)
         if not isinstance(data, dict):
             return jsonify({"error": "Request body must be a JSON object"}), 400
-        required_fields = ['unique_id', 'last_name', 'first_name', 'on_study', 'phone_number', 'ema_time', 'ema_reminder_time', 'feedback_time', 'feedback_reminder_time']
+        required_fields = ['unique_id', 'initials', 'subid', 'on_study', 'phone_number', 'ema_time', 'ema_reminder_time', 'feedback_time', 'feedback_reminder_time']
         if not all(field in data for field in required_fields):
             return jsonify({"error": "Missing required fields"}), 400
         if app_instance.participant_manager.add_participant(data) != 0:

@@ -17,7 +17,7 @@ def individual_participant_menu(self, participant_id):
 
     def update_field_menu(self, choice):
         field_map = {
-            '1': 'first_name', '2': 'last_name', '3': 'unique_id', '4': 'on_study',
+            '1': 'initials', '2': 'subid', '3': 'unique_id', '4': 'on_study',
             '5': 'phone_number', '6': 'ema_time', '7': 'ema_reminder_time',
             '8': 'feedback_time', '9': 'feedback_reminder_time'
         }
@@ -37,6 +37,10 @@ def individual_participant_menu(self, participant_id):
                 time.strptime(new_val, '%H:%M:%S')
             except ValueError:
                 error(f"Invalid time format for {field}. Please use HH:MM:SS format.")
+                return
+        elif field == 'subid':
+            if not new_val.isnumeric():
+                error("Sub ID must be a number.")
                 return
 
         if self.api("PUT", f"participants/update_participant/{participant_id}/{field}/{new_val}"):
@@ -74,8 +78,8 @@ def individual_participant_menu(self, participant_id):
     while True:
         # menu options are redefined on each iteration to reflect current participant data
         menu_options = {
-            '1': {'description': f'first_name: {participant.get('first_name')}', 'menu_caller': lambda self: update_field_menu(self, '1')},
-            '2': {'description': f'last_name: {participant.get('last_name')}', 'menu_caller': lambda self: update_field_menu(self, '2')},
+            '1': {'description': f'initials: {participant.get('initials')}', 'menu_caller': lambda self: update_field_menu(self, '1')},
+            '2': {'description': f'subid: {participant.get('subid')}', 'menu_caller': lambda self: update_field_menu(self, '2')},
             '3': {'description': f'unique_id: {participant.get('unique_id')}', 'menu_caller': lambda self: update_field_menu(self, '3')},
             '4': {'description': f'on_study: {participant.get('on_study')}', 'menu_caller': lambda self: update_field_menu(self, '4')},
             '5': {'description': f'phone_number: {participant.get('phone_number')}', 'menu_caller': lambda self: update_field_menu(self, '5')},

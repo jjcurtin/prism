@@ -257,7 +257,7 @@ def test_participant_management_menu_no_participants_sets_index_and_text_false(f
 def test_participant_management_menu_default_sort_is_unique_id(fake_interface, monkeypatch):
     participants = [
         _participant('300', 'Charlie', 'Zed'),
-        _participant('100', 'Alice', 'Young'),
+        _participant('100', 'Alice', '3000'),
         _participant('200', 'Bob', 'Xavier'),
     ]
     fake_interface.api = MagicMock(return_value={'participants': participants})
@@ -267,7 +267,7 @@ def test_participant_management_menu_default_sort_is_unique_id(fake_interface, m
     pmm.participant_management_menu(fake_interface)
 
     menu_options = mock_pmo.call_args[0][1]
-    assert menu_options['1']['description'] == 'Young (Alice, 100)'
+    assert menu_options['1']['description'] == '3000 (Alice, 100)'
     assert menu_options['2']['description'] == 'Xavier (Bob, 200)'
     assert menu_options['3']['description'] == 'Zed (Charlie, 300)'
     assert fake_interface.participant_display_mode == 'unique_id'
@@ -450,25 +450,34 @@ def test_participant_management_menu_filter_menu_invalid_value(fake_interface, m
 # add_participant_menu
 # ------------------------------------------------------------
 
-def test_add_participant_menu_missing_first_name_errors(fake_interface, capsys):
+def test_add_participant_menu_missing_initials_errors(fake_interface, capsys):
     fake_interface.commands_queue = deque(['x'])  # skip header print
     fake_interface.inputs_queue.put('')
     apm.add_participant_menu(fake_interface)
-    assert 'First name is required.' in capsys.readouterr().out
+    assert 'Initials are required.' in capsys.readouterr().out
 
 
-def test_add_participant_menu_missing_last_name_errors(fake_interface, capsys):
+def test_add_participant_menu_missing_subid_errors(fake_interface, capsys):
     fake_interface.commands_queue = deque(['x'])
-    fake_interface.inputs_queue.put('Alice')
+    fake_interface.inputs_queue.put('JD')
     fake_interface.inputs_queue.put('')
     apm.add_participant_menu(fake_interface)
-    assert 'Last name is required.' in capsys.readouterr().out
+    assert 'Sub ID is required' in capsys.readouterr().out
+
+
+def test_add_participant_menu_non_numeric_subid_errors(fake_interface, capsys):
+    fake_interface.commands_queue = deque(['x'])
+    fake_interface.inputs_queue.put('JD')
+    fake_interface.inputs_queue.put('not-a-number')
+    apm.add_participant_menu(fake_interface)
+    out = capsys.readouterr().out
+    assert 'Sub ID' in out and 'number' in out
 
 
 def test_add_participant_menu_invalid_unique_id_generates_one(fake_interface, monkeypatch, capsys):
     fake_interface.commands_queue = deque(['x'])
     fake_interface.inputs_queue.put('Alice')
-    fake_interface.inputs_queue.put('Young')
+    fake_interface.inputs_queue.put('3000')
     fake_interface.inputs_queue.put('bad-id')
     monkeypatch.setattr(apm.random, 'randint', lambda a, b: 111111111)
     fake_interface.inputs_queue.put('y')  # on_study
@@ -488,7 +497,7 @@ def test_add_participant_menu_invalid_unique_id_generates_one(fake_interface, mo
 def test_add_participant_menu_unique_id_collision_regenerates(fake_interface, monkeypatch, capsys):
     fake_interface.commands_queue = deque(['x'])
     fake_interface.inputs_queue.put('Alice')
-    fake_interface.inputs_queue.put('Young')
+    fake_interface.inputs_queue.put('3000')
     fake_interface.inputs_queue.put('123456789')
     fake_interface.inputs_queue.put('y')
     fake_interface.inputs_queue.put('')
@@ -511,7 +520,7 @@ def test_add_participant_menu_unique_id_collision_regenerates(fake_interface, mo
 def test_add_participant_menu_default_times_used_when_blank(fake_interface):
     fake_interface.commands_queue = deque(['x'])
     fake_interface.inputs_queue.put('Alice')
-    fake_interface.inputs_queue.put('Young')
+    fake_interface.inputs_queue.put('3000')
     fake_interface.inputs_queue.put('123456789')
     fake_interface.inputs_queue.put('y')
     fake_interface.inputs_queue.put('5551234')
@@ -526,8 +535,8 @@ def test_add_participant_menu_default_times_used_when_blank(fake_interface):
     assert payload['ema_reminder_time'] == '19:00:00'
     assert payload['feedback_time'] == '07:00:00'
     assert payload['feedback_reminder_time'] == '12:00:00'
-    assert payload['first_name'] == 'Alice'
-    assert payload['last_name'] == 'Young'
+    assert payload['initials'] == 'Alice'
+    assert payload['subid'] == '3000'
     assert payload['on_study'] is True
     assert payload['phone_number'] == '5551234'
 
@@ -535,7 +544,7 @@ def test_add_participant_menu_default_times_used_when_blank(fake_interface):
 def test_add_participant_menu_invalid_time_format_falls_back_to_default(fake_interface, capsys):
     fake_interface.commands_queue = deque(['x'])
     fake_interface.inputs_queue.put('Alice')
-    fake_interface.inputs_queue.put('Young')
+    fake_interface.inputs_queue.put('3000')
     fake_interface.inputs_queue.put('123456789')
     fake_interface.inputs_queue.put('y')
     fake_interface.inputs_queue.put('')
@@ -555,7 +564,7 @@ def test_add_participant_menu_invalid_time_format_falls_back_to_default(fake_int
 def test_add_participant_menu_success_and_failure(fake_interface, capsys):
     fake_interface.commands_queue = deque(['x'])
     fake_interface.inputs_queue.put('Alice')
-    fake_interface.inputs_queue.put('Young')
+    fake_interface.inputs_queue.put('3000')
     fake_interface.inputs_queue.put('123456789')
     fake_interface.inputs_queue.put('y')
     fake_interface.inputs_queue.put('')
@@ -569,7 +578,7 @@ def test_add_participant_menu_success_and_failure(fake_interface, capsys):
 def test_add_participant_menu_add_api_failure(fake_interface, capsys):
     fake_interface.commands_queue = deque(['x'])
     fake_interface.inputs_queue.put('Alice')
-    fake_interface.inputs_queue.put('Young')
+    fake_interface.inputs_queue.put('3000')
     fake_interface.inputs_queue.put('123456789')
     fake_interface.inputs_queue.put('y')
     fake_interface.inputs_queue.put('')
@@ -606,19 +615,19 @@ def _open_individual_menu(fake_interface, monkeypatch, participant):
 
 def test_individual_participant_menu_builds_field_options(fake_interface, monkeypatch):
     participant = {
-        'unique_id': '123456789', 'first_name': 'Alice', 'last_name': 'Young',
+        'unique_id': '123456789', 'initials': 'Alice', 'subid': '3000',
         'on_study': True, 'phone_number': '555', 'ema_time': '16:00:00',
         'ema_reminder_time': '19:00:00', 'feedback_time': '07:00:00',
         'feedback_reminder_time': '12:00:00',
     }
     menu_options = _open_individual_menu(fake_interface, monkeypatch, participant)
-    assert menu_options['1']['description'] == 'first_name: Alice'
+    assert menu_options['1']['description'] == 'initials: Alice'
     assert menu_options['4']['description'] == 'on_study: True'
     assert set(menu_options.keys()) >= {'1', '2', '3', '4', '5', '6', '7', '8', '9', 'remove', 'survey', 'message'}
 
 
 def test_individual_participant_menu_update_field_text_success(fake_interface, monkeypatch, capsys):
-    participant = {'unique_id': '1', 'first_name': 'Alice', 'last_name': 'Young', 'on_study': True,
+    participant = {'unique_id': '1', 'initials': 'Alice', 'subid': '3000', 'on_study': True,
                     'phone_number': '555', 'ema_time': '16:00:00', 'ema_reminder_time': '19:00:00',
                     'feedback_time': '07:00:00', 'feedback_reminder_time': '12:00:00'}
     menu_options = _open_individual_menu(fake_interface, monkeypatch, participant)
@@ -627,12 +636,12 @@ def test_individual_participant_menu_update_field_text_success(fake_interface, m
     fake_interface.api = MagicMock(return_value=True)
     menu_options['1']['menu_caller'](fake_interface)
 
-    fake_interface.api.assert_called_once_with('PUT', 'participants/update_participant/1/first_name/Alicia')
+    fake_interface.api.assert_called_once_with('PUT', 'participants/update_participant/1/initials/Alicia')
     assert 'Participant updated.' in capsys.readouterr().out
 
 
 def test_individual_participant_menu_update_field_failure(fake_interface, monkeypatch, capsys):
-    participant = {'unique_id': '1', 'first_name': 'Alice', 'last_name': 'Young', 'on_study': True,
+    participant = {'unique_id': '1', 'initials': 'Alice', 'subid': '3000', 'on_study': True,
                     'phone_number': '555', 'ema_time': '16:00:00', 'ema_reminder_time': '19:00:00',
                     'feedback_time': '07:00:00', 'feedback_reminder_time': '12:00:00'}
     menu_options = _open_individual_menu(fake_interface, monkeypatch, participant)
@@ -644,8 +653,39 @@ def test_individual_participant_menu_update_field_failure(fake_interface, monkey
     assert 'Failed to update participant.' in capsys.readouterr().out
 
 
+def test_individual_participant_menu_update_subid_valid(fake_interface, monkeypatch, capsys):
+    participant = {'unique_id': '1', 'initials': 'Alice', 'subid': '3000', 'on_study': True,
+                    'phone_number': '555', 'ema_time': '16:00:00', 'ema_reminder_time': '19:00:00',
+                    'feedback_time': '07:00:00', 'feedback_reminder_time': '12:00:00'}
+    menu_options = _open_individual_menu(fake_interface, monkeypatch, participant)
+
+    fake_interface.inputs_queue.put('4000')
+    fake_interface.api = MagicMock(return_value=True)
+    menu_options['2']['menu_caller'](fake_interface)
+
+    fake_interface.api.assert_called_once_with('PUT', 'participants/update_participant/1/subid/4000')
+    assert 'Participant updated.' in capsys.readouterr().out
+
+
+def test_individual_participant_menu_update_subid_non_numeric_rejected(fake_interface, monkeypatch, capsys):
+    """Regression test: subid must be numeric (per explicit request), same
+    validation applied on update as on add.
+    """
+    participant = {'unique_id': '1', 'initials': 'Alice', 'subid': '3000', 'on_study': True,
+                    'phone_number': '555', 'ema_time': '16:00:00', 'ema_reminder_time': '19:00:00',
+                    'feedback_time': '07:00:00', 'feedback_reminder_time': '12:00:00'}
+    menu_options = _open_individual_menu(fake_interface, monkeypatch, participant)
+
+    fake_interface.inputs_queue.put('not-a-number')
+    fake_interface.api = MagicMock()
+    menu_options['2']['menu_caller'](fake_interface)
+
+    fake_interface.api.assert_not_called()
+    assert 'Sub ID must be a number' in capsys.readouterr().out
+
+
 def test_individual_participant_menu_update_on_study_true(fake_interface, monkeypatch):
-    participant = {'unique_id': '1', 'first_name': 'Alice', 'last_name': 'Young', 'on_study': False,
+    participant = {'unique_id': '1', 'initials': 'Alice', 'subid': '3000', 'on_study': False,
                     'phone_number': '555', 'ema_time': '16:00:00', 'ema_reminder_time': '19:00:00',
                     'feedback_time': '07:00:00', 'feedback_reminder_time': '12:00:00'}
     menu_options = _open_individual_menu(fake_interface, monkeypatch, participant)
@@ -659,7 +699,7 @@ def test_individual_participant_menu_update_on_study_true(fake_interface, monkey
 
 
 def test_individual_participant_menu_update_on_study_invalid(fake_interface, monkeypatch, capsys):
-    participant = {'unique_id': '1', 'first_name': 'Alice', 'last_name': 'Young', 'on_study': False,
+    participant = {'unique_id': '1', 'initials': 'Alice', 'subid': '3000', 'on_study': False,
                     'phone_number': '555', 'ema_time': '16:00:00', 'ema_reminder_time': '19:00:00',
                     'feedback_time': '07:00:00', 'feedback_reminder_time': '12:00:00'}
     menu_options = _open_individual_menu(fake_interface, monkeypatch, participant)
@@ -673,7 +713,7 @@ def test_individual_participant_menu_update_on_study_invalid(fake_interface, mon
 
 
 def test_individual_participant_menu_update_time_field_invalid_format(fake_interface, monkeypatch, capsys):
-    participant = {'unique_id': '1', 'first_name': 'Alice', 'last_name': 'Young', 'on_study': False,
+    participant = {'unique_id': '1', 'initials': 'Alice', 'subid': '3000', 'on_study': False,
                     'phone_number': '555', 'ema_time': '16:00:00', 'ema_reminder_time': '19:00:00',
                     'feedback_time': '07:00:00', 'feedback_reminder_time': '12:00:00'}
     menu_options = _open_individual_menu(fake_interface, monkeypatch, participant)
@@ -687,7 +727,7 @@ def test_individual_participant_menu_update_time_field_invalid_format(fake_inter
 
 
 def test_individual_participant_menu_send_survey_valid(fake_interface, monkeypatch, capsys):
-    participant = {'unique_id': '1', 'first_name': 'Alice', 'last_name': 'Young', 'on_study': False,
+    participant = {'unique_id': '1', 'initials': 'Alice', 'subid': '3000', 'on_study': False,
                     'phone_number': '555', 'ema_time': '16:00:00', 'ema_reminder_time': '19:00:00',
                     'feedback_time': '07:00:00', 'feedback_reminder_time': '12:00:00'}
     menu_options = _open_individual_menu(fake_interface, monkeypatch, participant)
@@ -701,7 +741,7 @@ def test_individual_participant_menu_send_survey_valid(fake_interface, monkeypat
 
 
 def test_individual_participant_menu_send_survey_invalid_type(fake_interface, monkeypatch, capsys):
-    participant = {'unique_id': '1', 'first_name': 'Alice', 'last_name': 'Young', 'on_study': False,
+    participant = {'unique_id': '1', 'initials': 'Alice', 'subid': '3000', 'on_study': False,
                     'phone_number': '555', 'ema_time': '16:00:00', 'ema_reminder_time': '19:00:00',
                     'feedback_time': '07:00:00', 'feedback_reminder_time': '12:00:00'}
     menu_options = _open_individual_menu(fake_interface, monkeypatch, participant)
@@ -715,7 +755,7 @@ def test_individual_participant_menu_send_survey_invalid_type(fake_interface, mo
 
 
 def test_individual_participant_menu_send_message_success(fake_interface, monkeypatch, capsys):
-    participant = {'unique_id': '1', 'first_name': 'Alice', 'last_name': 'Young', 'on_study': False,
+    participant = {'unique_id': '1', 'initials': 'Alice', 'subid': '3000', 'on_study': False,
                     'phone_number': '555', 'ema_time': '16:00:00', 'ema_reminder_time': '19:00:00',
                     'feedback_time': '07:00:00', 'feedback_reminder_time': '12:00:00'}
     menu_options = _open_individual_menu(fake_interface, monkeypatch, participant)
@@ -729,7 +769,7 @@ def test_individual_participant_menu_send_message_success(fake_interface, monkey
 
 
 def test_individual_participant_menu_send_message_empty_errors(fake_interface, monkeypatch, capsys):
-    participant = {'unique_id': '1', 'first_name': 'Alice', 'last_name': 'Young', 'on_study': False,
+    participant = {'unique_id': '1', 'initials': 'Alice', 'subid': '3000', 'on_study': False,
                     'phone_number': '555', 'ema_time': '16:00:00', 'ema_reminder_time': '19:00:00',
                     'feedback_time': '07:00:00', 'feedback_reminder_time': '12:00:00'}
     menu_options = _open_individual_menu(fake_interface, monkeypatch, participant)
@@ -743,7 +783,7 @@ def test_individual_participant_menu_send_message_empty_errors(fake_interface, m
 
 
 def test_individual_participant_menu_remove_confirmed_success(fake_interface, monkeypatch, capsys):
-    participant = {'unique_id': '1', 'first_name': 'Alice', 'last_name': 'Young', 'on_study': False,
+    participant = {'unique_id': '1', 'initials': 'Alice', 'subid': '3000', 'on_study': False,
                     'phone_number': '555', 'ema_time': '16:00:00', 'ema_reminder_time': '19:00:00',
                     'feedback_time': '07:00:00', 'feedback_reminder_time': '12:00:00'}
     menu_options = _open_individual_menu(fake_interface, monkeypatch, participant)
@@ -758,7 +798,7 @@ def test_individual_participant_menu_remove_confirmed_success(fake_interface, mo
 
 
 def test_individual_participant_menu_remove_confirmed_failure(fake_interface, monkeypatch, capsys):
-    participant = {'unique_id': '1', 'first_name': 'Alice', 'last_name': 'Young', 'on_study': False,
+    participant = {'unique_id': '1', 'initials': 'Alice', 'subid': '3000', 'on_study': False,
                     'phone_number': '555', 'ema_time': '16:00:00', 'ema_reminder_time': '19:00:00',
                     'feedback_time': '07:00:00', 'feedback_reminder_time': '12:00:00'}
     menu_options = _open_individual_menu(fake_interface, monkeypatch, participant)

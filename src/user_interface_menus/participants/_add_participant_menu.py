@@ -9,13 +9,13 @@ from user_interface_menus._menu_helper import *
 def add_participant_menu(self):
     if not self.commands_queue:
         print_menu_header("participants add")
-    first_name = get_input(self, prompt = "First name: ")
-    if not first_name:
-        error("First name is required.", self)
+    initials = get_input(self, prompt = "Initials: ")
+    if not initials:
+        error("Initials are required.", self)
         return
-    last_name = get_input(self, prompt = "Last name: ")
-    if not last_name:
-        error("Last name is required.", self)
+    subid = get_input(self, prompt = "Sub ID: ")
+    if not subid or not subid.isnumeric():
+        error("Sub ID is required and must be a number.", self)
         return
     unique_id = get_input(self, prompt = "Unique ID: ")
     if not unique_id or not unique_id.isnumeric() or len(unique_id) != 9:
@@ -45,11 +45,11 @@ def add_participant_menu(self):
         except ValueError:
             print(f"Invalid time format for {val}. Using default: {default_times[t]}.\nYou can change this later.")
             times[t] = default_times[t]
-    payload = dict(first_name = first_name, 
-                    last_name = last_name, 
-                    unique_id = unique_id, 
-                    on_study = on_study, 
-                    phone_number = phone_number, 
+    payload = dict(initials = initials,
+                    subid = subid,
+                    unique_id = unique_id,
+                    on_study = on_study,
+                    phone_number = phone_number,
                     **times)
     if self.api("POST", "participants/add_participant", json = payload):
         success("Participant added.", self)

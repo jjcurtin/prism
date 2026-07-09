@@ -258,7 +258,7 @@ def test_get_participant_not_found(routes_client, routes_app_instance):
 
 
 ADD_PARTICIPANT_PAYLOAD = {
-    'unique_id': '000000000', 'last_name': 'Doe', 'first_name': 'Jane',
+    'unique_id': '000000000', 'initials': 'JD', 'subid': '3000',
     'on_study': True, 'phone_number': '5555550100', 'ema_time': '09:00:00',
     'ema_reminder_time': '10:00:00', 'feedback_time': '19:00:00',
     'feedback_reminder_time': '20:00:00',
