@@ -1,6 +1,7 @@
 # Main runner for the PRISM application
 
 import os
+import platform
 from datetime import datetime
 from pathlib import Path
 from _routes import create_flask_app
@@ -45,9 +46,17 @@ class PRISM():
         # sane defaults in case config/paths.api is missing or unreadable, so
         # add_to_transcript (called immediately after this) always has a
         # logs_dir to write to.
+        # participants_path historically lived on the S: research drive on
+        # Windows (a real, working mapped drive, not repo-relative) — keep
+        # using it there instead of the local placeholder Linux falls back to.
+        participants_default = (
+            'S:/optimize/data_raw/participants/study_participants.csv'
+            if platform.system() == 'Windows'
+            else 'config/study_participants.csv'
+        )
         defaults = {
             'logs_dir': 'logs',
-            'participants_path': 'config/study_participants.csv',
+            'participants_path': participants_default,
             'reminders_path': 'config/reminders.csv',
             'followmee_coords_path': 'config/followmee_coords.csv',
             'system_task_schedule_path': 'config/system_task_schedule.csv',
