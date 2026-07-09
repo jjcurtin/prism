@@ -1,6 +1,7 @@
 # display api
 
-import os, sys, msvcrt, time
+import os, sys, time
+from user_interface_menus.utils._keyboard import kbhit, getwch, read_arrow_key, raw_mode
 
 
 # ------------------------------------------------------------
@@ -437,37 +438,37 @@ def print_fixed_terminal_prompt(self = None, submenu = True):
         prompt = cyan('prism> ')
         print(prompt, end='', flush=True)
         recent_pointer = -1
-        while True:
-            if msvcrt.kbhit():
-                key = msvcrt.getwch()
+        with raw_mode():
+            while True:
+                if not kbhit():
+                    time.sleep(0.01)  # avoid busy-waiting the CPU while idle
+                    continue
+                key = getwch()
 
-                if key in ('\x00', '\xe0'):  # Handle special keys like arrows
-                    key = msvcrt.getwch()
-                    if key == 'H':  # Arrow Up
-                        from user_interface_menus._menu_helper import RECENT_COMMANDS
-                        if RECENT_COMMANDS:
-                            recovered_string = RECENT_COMMANDS[recent_pointer] if recent_pointer >= -len(RECENT_COMMANDS) else ""
-                            recent_pointer -= 1
-                            if recent_pointer < -len(RECENT_COMMANDS):
-                                recent_pointer = -1
-                        pass
-                    elif key == 'P':  # Arrow Down
-                        from user_interface_menus._menu_helper import RECENT_COMMANDS
-                        if RECENT_COMMANDS:
-                            if recent_pointer < -1:
-                                recent_pointer += 1
-                            recovered_string = RECENT_COMMANDS[recent_pointer] if recent_pointer >= -len(RECENT_COMMANDS) else ""
-                        else:
+                arrow = read_arrow_key(key)
+                if arrow == 'UP':
+                    from user_interface_menus._menu_helper import RECENT_COMMANDS
+                    if RECENT_COMMANDS:
+                        recovered_string = RECENT_COMMANDS[recent_pointer] if recent_pointer >= -len(RECENT_COMMANDS) else ""
+                        recent_pointer -= 1
+                        if recent_pointer < -len(RECENT_COMMANDS):
                             recent_pointer = -1
-                        pass
-                    elif key == 'K':  # Arrow Left
-                        # print("Left Arrow Pressed")
-                        pass
-                    elif key == 'M':  # Arrow Right
-                        # print("Right Arrow Pressed")
-                        pass
+                elif arrow == 'DOWN':
+                    from user_interface_menus._menu_helper import RECENT_COMMANDS
+                    if RECENT_COMMANDS:
+                        if recent_pointer < -1:
+                            recent_pointer += 1
+                        recovered_string = RECENT_COMMANDS[recent_pointer] if recent_pointer >= -len(RECENT_COMMANDS) else ""
                     else:
-                        continue
+                        recent_pointer = -1
+                elif arrow == 'LEFT':
+                    # print("Left Arrow Pressed")
+                    pass
+                elif arrow == 'RIGHT':
+                    # print("Right Arrow Pressed")
+                    pass
+                elif arrow is not None:
+                    continue
                 elif key == '\r' or key == '\n':
                     if len(recovered_string) == 0 and not submenu:
                         continue
@@ -503,24 +504,27 @@ def print_twilio_terminal_prompt():
     return input(f"\n{green('twilio> ')}").strip()
 
 # ------------------------------------------------------------
-import sys, msvcrt, time
 
 def get_cursor_position():
     sys.stdout.write("\033[6n")
     sys.stdout.flush()
 
     buf = ""
-    while True:
-        ch = ""
-        try:
-            if msvcrt.kbhit():
-                ch = msvcrt.getwch()
-        except Exception as e:
-            error(f"Failed to read cursor position: {e}")
-            return None, None
-        buf += ch
-        if ch == "R":
-            break
+    with raw_mode():
+        while True:
+            ch = ""
+            try:
+                if kbhit():
+                    ch = getwch()
+                else:
+                    time.sleep(0.01)  # avoid busy-waiting the CPU while idle
+                    continue
+            except Exception as e:
+                error(f"Failed to read cursor position: {e}")
+                return None, None
+            buf += ch
+            if ch == "R":
+                break
 
     if not buf.startswith("\x1b["):
         return None, None  # not an ANSI response
@@ -634,47 +638,48 @@ def assistant_header_write(self, lines):
     i = 0
     length = len(full_text)
 
-    while i < length:
-        if next_escape and i == next_escape.start():
-            ansi_write_str(next_escape.group())
-            i = next_escape.end()
-            next_escape_idx += 1
-            next_escape = matches[next_escape_idx] if next_escape_idx < len(matches) else None
-            continue
-
-        ch = full_text[i]
-
-        if msvcrt.kbhit():
-            key = msvcrt.getwch()
-            if key == '\r':  # enter key
-                ansi_restore_cursor()
-                ansi_show_cursor()
-                return
-
-        if ch == "\n" or col >= WINDOW_WIDTH:
-            row += 1
-            if row >= window_height:
-                if col < 20:
-                    char_time = time_to_read_char_slow
-                elif col < 50:
-                    char_time = time_to_read_char_medium
-                else:
-                    char_time = time_to_read_char_fast
-                text_reading_time = max(min_time_to_read, min(max_time_to_read, col * char_time))
-                time.sleep(text_reading_time)
-                if i < length - 1:
-                    clear_column(self, initial_x, initial_y, WINDOW_WIDTH, 1)
-                row = 0
-            col = 0
-            if ch == "\n":
-                i += 1
+    with raw_mode():
+        while i < length:
+            if next_escape and i == next_escape.start():
+                ansi_write_str(next_escape.group())
+                i = next_escape.end()
+                next_escape_idx += 1
+                next_escape = matches[next_escape_idx] if next_escape_idx < len(matches) else None
                 continue
 
-        move_cursor(self, initial_x + col, initial_y + row)
-        ansi_write_char(ch)
-        time.sleep(print_speed)
-        col += 1
-        i += 1
+            ch = full_text[i]
+
+            if kbhit():
+                key = getwch()
+                if key == '\r':  # enter key
+                    ansi_restore_cursor()
+                    ansi_show_cursor()
+                    return
+
+            if ch == "\n" or col >= WINDOW_WIDTH:
+                row += 1
+                if row >= window_height:
+                    if col < 20:
+                        char_time = time_to_read_char_slow
+                    elif col < 50:
+                        char_time = time_to_read_char_medium
+                    else:
+                        char_time = time_to_read_char_fast
+                    text_reading_time = max(min_time_to_read, min(max_time_to_read, col * char_time))
+                    time.sleep(text_reading_time)
+                    if i < length - 1:
+                        clear_column(self, initial_x, initial_y, WINDOW_WIDTH, 1)
+                    row = 0
+                col = 0
+                if ch == "\n":
+                    i += 1
+                    continue
+
+            move_cursor(self, initial_x + col, initial_y + row)
+            ansi_write_char(ch)
+            time.sleep(print_speed)
+            col += 1
+            i += 1
 
     ansi_show_cursor()
     ansi_restore_cursor()
@@ -692,17 +697,18 @@ def assistant_header_shift_write(self, lines):
     ansi_save_cursor()
     ansi_hide_cursor()
 
-    for start in range(length - WINDOW_WIDTH + 1):
-        if msvcrt.kbhit():
-            key = msvcrt.getwch()
-            if key == '\r':
-                clear_column(self, initial_x, initial_y, WINDOW_WIDTH, window_height)
-                break
+    with raw_mode():
+        for start in range(length - WINDOW_WIDTH + 1):
+            if kbhit():
+                key = getwch()
+                if key == '\r':
+                    clear_column(self, initial_x, initial_y, WINDOW_WIDTH, window_height)
+                    break
 
-        sys.stdout.write(f"\033[u\033[{initial_y + 1};{initial_x + 1}H{scroll_text[start:start + WINDOW_WIDTH]}")
-        sys.stdout.flush()
+            sys.stdout.write(f"\033[u\033[{initial_y + 1};{initial_x + 1}H{scroll_text[start:start + WINDOW_WIDTH]}")
+            sys.stdout.flush()
 
-        time.sleep(0.05)
+            time.sleep(0.05)
 
     ansi_show_cursor()
     ansi_restore_cursor()
@@ -716,26 +722,27 @@ def assistant_write(self, lines, initial_x, initial_y, column_width, window_heig
 
     row = 0
     col = 0
-    for ch in full_text:
-        if msvcrt.kbhit():
-            key = msvcrt.getwch()
-            if key == '\r':
-                ansi_restore_cursor()
-                break
-        if ch == "\n" or col >= column_width:
-            # move to next row
-            row += 1
-            if row >= window_height:
-                time.sleep(0.5) # page delay
-                clear_assistant_area(self)
-                row = 0
-            col = 0
-            if ch == "\n":
-                continue
+    with raw_mode():
+        for ch in full_text:
+            if kbhit():
+                key = getwch()
+                if key == '\r':
+                    ansi_restore_cursor()
+                    break
+            if ch == "\n" or col >= column_width:
+                # move to next row
+                row += 1
+                if row >= window_height:
+                    time.sleep(0.5) # page delay
+                    clear_assistant_area(self)
+                    row = 0
+                col = 0
+                if ch == "\n":
+                    continue
 
-        move_cursor(self, initial_x + col, initial_y + row)
-        ansi_write_char(ch)
-        time.sleep(0.015)  # typing delay
+            move_cursor(self, initial_x + col, initial_y + row)
+            ansi_write_char(ch)
+            time.sleep(0.015)  # typing delay
         col += 1
 
     ansi_restore_cursor()
