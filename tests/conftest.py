@@ -98,3 +98,24 @@ def prism_instance(fake_prism_env):
     p.mode = 'test'
     p.repo_root = fake_prism_env
     return p
+
+
+class FakeApp:
+    """A lightweight stand-in for the PRISM app instance, for testing
+    task_managers/ and system_tasks/ without going through the real
+    config-loading machinery. Records every add_to_transcript call (message,
+    message_type) in .transcript for assertions, and every attribute a real
+    PRISM instance would set is a plain settable attribute here — tests set
+    only what the code path under test actually reads.
+    """
+    def __init__(self, mode='test'):
+        self.mode = mode
+        self.transcript = []
+
+    def add_to_transcript(self, message, message_type='INFO'):
+        self.transcript.append((message_type, message))
+
+
+@pytest.fixture
+def fake_app():
+    return FakeApp()
