@@ -46,10 +46,7 @@ interface:
 test-server:
 	$(PYTHON) -m pytest tests -v
 
-# interface-side tests (phase 04, not started yet) — placeholder dir with a
-# conftest.py already scaffolded; will fail with "no tests collected" until
-# plan/04-interface-pytest.md's work lands, which is the correct/honest
-# behavior for now rather than silently no-op'ing.
+# interface-side tests: full user_interface_menus/ coverage (phase 04).
 test-client:
 	$(PYTHON) -m pytest tests_interface -v
 

@@ -171,3 +171,138 @@ jobs:
           path: test-results.xml
           reporter: java-junit
           fail-on-error: false
+
+  interface-menu-core:
+    name: interface-menu-core
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      pull-requests: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Run tests
+        run: python -m pytest tests_interface/test_menu_navigation.py tests_interface/test_menu_display.py tests_interface/test_commands.py tests_interface/test_menu_helper.py -v --junitxml=test-results.xml
+      - name: Publish test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: interface-menu-core tests
+          path: test-results.xml
+          reporter: java-junit
+          fail-on-error: false
+
+  interface-display:
+    name: interface-display
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      pull-requests: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Run tests
+        run: python -m pytest tests_interface/test_display.py -v --junitxml=test-results.xml
+      - name: Publish test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: interface-display tests
+          path: test-results.xml
+          reporter: java-junit
+          fail-on-error: false
+
+  interface-participants-tasks:
+    name: interface-participants-tasks
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      pull-requests: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Run tests
+        run: python -m pytest tests_interface/test_participant_menus.py tests_interface/test_task_menus.py -v --junitxml=test-results.xml
+      - name: Publish test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: interface-participants-tasks tests
+          path: test-results.xml
+          reporter: java-junit
+          fail-on-error: false
+
+  interface-settings-system:
+    name: interface-settings-system
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      pull-requests: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Run tests
+        run: python -m pytest tests_interface/test_settings_menu.py tests_interface/test_log_menu.py tests_interface/test_system_check_menu.py tests_interface/test_main_menu.py tests_interface/test_shutdown_menu.py -v --junitxml=test-results.xml
+      - name: Publish test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: interface-settings-system tests
+          path: test-results.xml
+          reporter: java-junit
+          fail-on-error: false
+
+  interface-assistant-help:
+    name: interface-assistant-help
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      pull-requests: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Run tests
+        run: python -m pytest tests_interface/test_assistant.py tests_interface/test_help.py -v --junitxml=test-results.xml
+      - name: Publish test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: interface-assistant-help tests
+          path: test-results.xml
+          reporter: java-junit
+          fail-on-error: false
