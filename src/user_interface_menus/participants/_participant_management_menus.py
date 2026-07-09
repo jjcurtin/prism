@@ -23,7 +23,8 @@ def send_announcement_menu(self):
         error("Message cannot be empty. Please try again.", self)
         return
     
-    if self.api("POST", f"participants/study_announcement/{require_on_study}", json = {"message": message}):
+    require_on_study_param = "yes" if require_on_study else "no"
+    if self.api("POST", f"participants/study_announcement/{require_on_study_param}", json = {"message": message}):
         success("Study announcement sent.", self)
     else:
         error("No participants found or failed to retrieve.", self)
