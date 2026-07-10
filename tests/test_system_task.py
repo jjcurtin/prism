@@ -98,6 +98,38 @@ def test_notify_via_sms_missing_file_returns_1_and_warns(fake_app):
     assert any('No study coordinators found' in msg for _, msg in fake_app.transcript)
 
 
+def test_notify_via_sms_uses_default_template_when_app_has_no_override(tmp_path, fake_app, mocker):
+    coordinators_file = tmp_path / 'study_coordinators.csv'
+    coordinators_file.write_text('"name","phone_number"\n"Alice","5555550100"\n')
+    fake_app.study_coordinators_path = str(coordinators_file)
+    send_sms = mocker.patch('system_tasks._system_task.send_sms', return_value=0)
+
+    task = SucceedingTask(fake_app)
+    task.task_type = 'CHECK_SYSTEM'
+    task.task_number = '123456'
+    task.outcome = 'FAILURE'
+    task.notify_via_sms()
+
+    body = send_sms.call_args[0][2][0]
+    assert body.startswith('Alice: CHECK_SYSTEM #123456 FAILURE. Script was executed at ')
+
+
+def test_notify_via_sms_uses_app_coordinator_alert_message_template(tmp_path, fake_app, mocker):
+    coordinators_file = tmp_path / 'study_coordinators.csv'
+    coordinators_file.write_text('"name","phone_number"\n"Alice","5555550100"\n')
+    fake_app.study_coordinators_path = str(coordinators_file)
+    fake_app.coordinator_alert_message = '{name} was alerted about {task_type} ({outcome})'
+    send_sms = mocker.patch('system_tasks._system_task.send_sms', return_value=0)
+
+    task = SucceedingTask(fake_app)
+    task.task_type = 'CHECK_SYSTEM'
+    task.outcome = 'FAILURE'
+    task.notify_via_sms()
+
+    body = send_sms.call_args[0][2][0]
+    assert body == 'Alice was alerted about CHECK_SYSTEM (FAILURE)'
+
+
 def test_notify_via_sms_skips_coordinators_with_blank_phone(tmp_path, fake_app, mocker):
     coordinators_file = tmp_path / 'study_coordinators.csv'
     coordinators_file.write_text('"name","phone_number"\n"Alice",""\n"Bob","5555550101"\n')

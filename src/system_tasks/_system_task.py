@@ -4,6 +4,11 @@ import random
 from datetime import datetime
 from _helper import send_sms
 
+# kept in sync with run_prism.py's API_FIELD_DEFAULTS default for
+# coordinator_alert_message -- used here too so a FakeApp/test app that
+# hasn't loaded twilio.api still produces a sensible message.
+DEFAULT_COORDINATOR_ALERT_MESSAGE = "{name}: {task_type} #{task_number} {outcome}. Script was executed at {task_start}."
+
 class SystemTask:
     def __init__(self, app):
         self.app = app
@@ -41,6 +46,9 @@ class SystemTask:
             self.app.add_to_transcript(f"Failed to read study coordinators. Error message: {e}", "ERROR")
             return 1
 
+        alert_template = getattr(self.app, 'coordinator_alert_message', DEFAULT_COORDINATOR_ALERT_MESSAGE)
+        task_start_str = self.task_start.strftime('%m/%d/%Y at %I:%M:%S %p')
+
         phone_numbers = []
         bodies = []
         for line in lines:
@@ -52,7 +60,13 @@ class SystemTask:
                 name = name.strip('"')
                 phone_number = phone_number.strip('"')
                 if phone_number and phone_number != "":
-                    body = f"{name}: {self.task_type} #{self.task_number} {self.outcome}. Script was executed at {self.task_start.strftime('%m/%d/%Y at %I:%M:%S %p')}."
+                    body = alert_template.format(
+                        name=name,
+                        task_type=self.task_type,
+                        task_number=self.task_number,
+                        outcome=self.outcome,
+                        task_start=task_start_str,
+                    )
                     phone_numbers.append(phone_number)
                     bodies.append(body)
             except Exception as e:

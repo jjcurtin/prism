@@ -9,7 +9,7 @@ def developer_documentation(self):
                 f"The following API keys are required to be in the api/ folder and have the described format for PRISM to function correctly:",
                 f'1. {green("qualtrics.api")}: "api_token","datacenter","ema_survey_id","feedback_survey_id"',
                 f'2. {green("followmee.api")}: "username","api_token"',
-                f'3. {green("twilio.api")}: "account_sid","auth_token","from_number"',
+                f'3. {green("twilio.api")}: "account_sid","auth_token","from_number","coordinator_alert_message"',
                 f'4. {green("research_drive.api")}: "destination_path","drive_letter","network_domain","network_username","wisc_netid","wisc_password"'
             ], title = "help dev start api")
 

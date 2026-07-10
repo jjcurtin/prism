@@ -139,6 +139,7 @@ class PRISM():
         'ema_reminder_message': "Hello, you have not yet completed your daily survey for today.",
         'feedback_message': "Hello, it's time to see your daily recovery message.",
         'feedback_reminder_message': "Hello, you have not yet viewed your daily recovery message for today.",
+        'coordinator_alert_message': "{name}: {task_type} #{task_number} {outcome}. Script was executed at {task_start}.",
     }
 
     def load_api_keys(self):
@@ -174,7 +175,8 @@ class PRISM():
         load_keys('twilio.api', {
             'twilio_account_sid': 'account_sid',
             'twilio_auth_token': 'auth_token',
-            'twilio_from_number': 'from_number'
+            'twilio_from_number': 'from_number',
+            'coordinator_alert_message': 'coordinator_alert_message'
         }, "Twilio")
         load_keys('research_drive.api', {
             'destination_path': 'destination_path',

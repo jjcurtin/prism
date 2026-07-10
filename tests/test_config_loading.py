@@ -72,6 +72,7 @@ def test_load_api_keys_reads_all_other_api_files(prism_instance):
     assert prism_instance.twilio_account_sid == 'fake_sid'
     assert prism_instance.twilio_auth_token == 'fake_token'
     assert prism_instance.twilio_from_number == '+15555550100'
+    assert prism_instance.coordinator_alert_message == 'fake coordinator alert msg'
     assert prism_instance.wisc_netid == 'fake_netid'
 
 
@@ -82,6 +83,11 @@ def test_load_api_keys_falls_back_to_message_defaults_when_columns_missing(prism
         '"fake_qualtrics_token","fake_dc","fake_ema_survey","fake_feedback_survey"\n'
     )
     Path(prism_instance.config_base, 'api', 'qualtrics.api').write_text(old_style_qualtrics)
+    old_style_twilio = (
+        '"account_sid","auth_token","from_number"\n'
+        '"fake_sid","fake_token","+15555550100"\n'
+    )
+    Path(prism_instance.config_base, 'api', 'twilio.api').write_text(old_style_twilio)
 
     prism_instance.load_api_keys()
 
@@ -89,6 +95,9 @@ def test_load_api_keys_falls_back_to_message_defaults_when_columns_missing(prism
     assert prism_instance.ema_message == "Hello, it's time to take your daily survey."
     assert prism_instance.feedback_reminder_message == (
         "Hello, you have not yet viewed your daily recovery message for today."
+    )
+    assert prism_instance.coordinator_alert_message == (
+        "{name}: {task_type} #{task_number} {outcome}. Script was executed at {task_start}."
     )
 
 
