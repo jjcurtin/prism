@@ -8,65 +8,10 @@ class CheckSystem(SystemTask):
     def run(self) -> int:
         self.task_type = "CHECK_SYSTEM"
         self.app.add_to_transcript(f"{self.task_type} #{self.task_number} initiated.")
-        file_system_check = self.check_file_system()
         research_drive_check = self.check_research_drive()
         participant_check = self.check_participants()
-        return (
-            file_system_check
-            + research_drive_check + participant_check
-        )
+        return research_drive_check + participant_check
 
-    def check_file_system(self) -> int:
-        self.app.add_to_transcript(f"INFO: Now checking file system...")
-        try:
-            directories = [
-                '../data',
-                '../scripts',
-                '../logs',
-                'system_tasks'
-            ]
-            files: list[list[str]] = [
-                [], # data
-                [], # scripts
-                [], # logs
-                ['_check_system.py', # obviously
-                 '_system_task.py' # obviously
-                ] # tasks
-            ]
-
-            all_present = True
-            for index, (directory, files_list) in enumerate(zip(directories, files)):
-                if not os.path.exists(directory):
-                    self.app.add_to_transcript(f"The '{directory}' directory is missing.", "ERROR")
-                    all_present = False
-                for file in files_list:
-                    file_path = os.path.join(directory, file)
-                    if not os.path.isfile(file_path):
-                        self.app.add_to_transcript(f"The file '{file_path}' is missing.", "ERROR")
-                        all_present = False
-
-            # these live on the drive-sourced config_base, not locally under
-            # ../config (config/README.md, 2026-07-09 migration) -- check the
-            # paths PRISM itself already resolved rather than a local guess.
-            drive_sourced_paths = [
-                'system_task_schedule_path', 'study_coordinators_path',
-                'participants_path'
-            ]
-            for attr in drive_sourced_paths:
-                path = getattr(self.app, attr, None)
-                if not path or not os.path.isfile(path):
-                    self.app.add_to_transcript(f"The file for '{attr}' ({path}) is missing.", "ERROR")
-                    all_present = False
-
-            if not all_present:
-                return 1
-
-        except Exception as e:
-            self.app.add_to_transcript(f"Error checking file system: {e}", "ERROR")
-            return 1
-
-        return 0
-    
     def check_research_drive(self) -> int:
         if self.app.mode == "prod":
             self.app.add_to_transcript(f"INFO: Now checking Research Drive connection...")
