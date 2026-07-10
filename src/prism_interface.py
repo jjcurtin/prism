@@ -4,7 +4,7 @@ import requests, queue
 from collections import deque
 
 from user_interface_menus._main_menu import main_menu
-from user_interface_menus._menu_helper import README, load_menus, exit_menu, load_params
+from user_interface_menus._menu_helper import README, load_menus, exit_menu, load_params, ui_state
 
 class PRISMInterface:
     def __init__(self):
@@ -18,8 +18,7 @@ class PRISMInterface:
         self.commands_queue = deque()
         self.debug = False
 
-        from user_interface_menus._menu_helper import SHOW_README
-        if SHOW_README == True:
+        if ui_state.show_readme == True:
             README(self)
         main_menu(self)
 
@@ -36,17 +35,16 @@ class PRISMInterface:
         each user_interface_menus/ menu function for the pattern
         (`ok, data = self.api(...)`).
         """
-        from user_interface_menus._menu_helper import TIMEOUT
         try:
             url = f'{self.base_url}/{endpoint}'
             if method == "GET":
-                r = requests.get(url, timeout = TIMEOUT)
+                r = requests.get(url, timeout = ui_state.timeout)
             elif method == "POST":
-                r = requests.post(url, json = json, timeout = TIMEOUT)
+                r = requests.post(url, json = json, timeout = ui_state.timeout)
             elif method == "PUT":
-                r = requests.put(url, timeout = TIMEOUT)
+                r = requests.put(url, timeout = ui_state.timeout)
             elif method == "DELETE":
-                r = requests.delete(url, timeout = TIMEOUT)
+                r = requests.delete(url, timeout = ui_state.timeout)
             else:
                 raise ValueError("Invalid HTTP method")
 
@@ -79,8 +77,7 @@ if __name__ == "__main__":
         load_menus()
         PRISMInterface()
     except KeyboardInterrupt:
-        from user_interface_menus._menu_helper import COLOR_ON
-        if COLOR_ON:
+        if ui_state.color_on:
             print("\033[32m\nExiting PRISM Interface.\033[0m")
         else:
             print("\nExiting PRISM Interface.")

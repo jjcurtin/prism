@@ -2,6 +2,20 @@
 
 import os, sys, time
 from user_interface_menus.utils._keyboard import kbhit, getwch, read_arrow_key, raw_mode
+# `ui_state` is imported here (before any of this module's functions are
+# defined) rather than inside each function body, unlike WINDOW_WIDTH/
+# COLOR_ON/etc. previously -- those were re-imported fresh on every call
+# because the bare names went stale the moment a setter in _menu_helper.py
+# reassigned them. `ui_state` itself is never reassigned (only its
+# attributes are mutated in place), so this single reference stays live.
+# Imported from _ui_state.py (a leaf module with no further internal
+# imports), not from _menu_helper.py itself -- _menu_helper.py imports this
+# module (_display) via `from user_interface_menus.utils._display import *`
+# at its own top, so importing `ui_state` back from _menu_helper here would
+# be a real circular import whenever _display.py (or _menu_navigation.py/
+# _menu_display.py, which import it too) happens to be the first module
+# Python loads. See _ui_state.py's docstring for the full explanation.
+from user_interface_menus._ui_state import ui_state
 
 def clear():
     os.system('cls' if os.name == 'nt' else 'clear')
@@ -10,33 +24,27 @@ def toggle_debug_mode(self):
     self.debug = not self.debug
 
 def green(message = None):
-    from user_interface_menus._menu_helper import COLOR_ON
-    green, color_end = ("\033[32m", "\033[0m") if COLOR_ON else ("\033[1m", "\033[0m")
+    green, color_end = ("\033[32m", "\033[0m") if ui_state.color_on else ("\033[1m", "\033[0m")
     return f"{green}{message}{color_end}"
 
 def red(message = None):
-    from user_interface_menus._menu_helper import COLOR_ON
-    red, color_end = ("\033[31m", "\033[0m") if COLOR_ON else ("\033[1m", "\033[0m")
+    red, color_end = ("\033[31m", "\033[0m") if ui_state.color_on else ("\033[1m", "\033[0m")
     return f"{red}{message}{color_end}"
 
 def yellow(message = None):
-    from user_interface_menus._menu_helper import COLOR_ON
-    yellow, color_end = ("\033[33m", "\033[0m") if COLOR_ON else ("\033[4m", "\033[0m")
+    yellow, color_end = ("\033[33m", "\033[0m") if ui_state.color_on else ("\033[4m", "\033[0m")
     return f"{yellow}{message}{color_end}"
 
 def cyan(message = None):
-    from user_interface_menus._menu_helper import COLOR_ON
-    cyan, color_end = ("\033[36m", "\033[0m") if COLOR_ON else ("", "")
+    cyan, color_end = ("\033[36m", "\033[0m") if ui_state.color_on else ("", "")
     return f"{cyan}{message}{color_end}"
 
 def white(message = None):
-    from user_interface_menus._menu_helper import COLOR_ON
-    white, color_end = ("\033[37m", "\033[0m") if COLOR_ON else ("", "")
+    white, color_end = ("\033[37m", "\033[0m") if ui_state.color_on else ("", "")
     return f"{white}{message}{color_end}"
 
 def syntax_highlight(self, prompt = "", items = None):
-    from user_interface_menus._menu_helper import COLOR_ON
-    if not COLOR_ON:
+    if not ui_state.color_on:
         return
     curr_pos = get_cursor_position()
     move_cursor(self, 0, curr_pos[1] - 1)
@@ -47,8 +55,7 @@ def syntax_highlight(self, prompt = "", items = None):
 
 def syntax_highlight_string(self, input_string, prompt = "", items = None, in_place = False):
     try:
-        from user_interface_menus._menu_helper import COLOR_ON
-        if not COLOR_ON or items is None:
+        if not ui_state.color_on or items is None:
             return
         curr_pos = get_cursor_position()
         if not in_place:
@@ -77,15 +84,14 @@ def syntax_highlight_string(self, input_string, prompt = "", items = None, in_pl
         return
 
 def align(self, text, column_number, num_columns, formatless = None, window_width = None, align_right = None, locked = False, border_left = False, border_right = False):
-    from user_interface_menus._menu_helper import RIGHT_ALIGN, WINDOW_WIDTH
     import re
 
     if window_width is None:
-        window_width = int(WINDOW_WIDTH)
+        window_width = int(ui_state.window_width)
     if formatless is None:
         formatless = text
     if align_right is None:
-        align_right = RIGHT_ALIGN
+        align_right = ui_state.right_align
 
     num_invisible_escape_chars = len(re.findall(r'\x1B\[[0-?]*[ -/]*[@-~]', text))
     compensation = (len(text) - len(formatless))
@@ -94,7 +100,7 @@ def align(self, text, column_number, num_columns, formatless = None, window_widt
     if self.debug:
         print(f"size of window: {window_width}, text size = {len(text)}, formatless size = {len(formatless)}, escape chars = {compensation}")
 
-    middle_screen_adjustment = (WINDOW_WIDTH % num_columns)
+    middle_screen_adjustment = (ui_state.window_width % num_columns)
     middle_screen_adjustment1 = middle_screen_adjustment // 2 + (middle_screen_adjustment % 2)
     middle_screen_adjustment2 = middle_screen_adjustment // 2
 
@@ -113,9 +119,9 @@ def align(self, text, column_number, num_columns, formatless = None, window_widt
     if locked:
         alignment = "<" if not align_right else ">"
     else:
-        if align_right and not RIGHT_ALIGN:
+        if align_right and not ui_state.right_align:
             alignment = "<"
-        elif not align_right and RIGHT_ALIGN:
+        elif not align_right and ui_state.right_align:
             alignment = ">"
         else:
             alignment = ">" if align_right else "<"
@@ -170,7 +176,6 @@ def align(self, text, column_number, num_columns, formatless = None, window_widt
 
 def display_in_columns(self, items = None):
     try:
-        from user_interface_menus._menu_helper import WINDOW_WIDTH
         import re
 
         if self.debug:
@@ -183,7 +188,7 @@ def display_in_columns(self, items = None):
         window_positions = []
 
         def assemble_content():
-            column_width = int(WINDOW_WIDTH / num_segments)
+            column_width = int(ui_state.window_width / num_segments)
             frame_width = column_width
             output = ""
             initial_pos = get_cursor_position()
@@ -277,8 +282,7 @@ def exit_interface(self):
 
 def print_menu_header(title):
     clear()
-    from user_interface_menus._menu_helper import WINDOW_WIDTH
-    padding = (WINDOW_WIDTH - len(title)) // 2
+    padding = (ui_state.window_width - len(title)) // 2
     print_equals()
     print(" " * padding + f"{red(title)}")
     print_equals()
@@ -288,26 +292,24 @@ def print_menu_header(title):
     print()
 
 def print_dashes(delay = None):
-    from user_interface_menus._menu_helper import WINDOW_WIDTH
     if delay is not None:
-        for i in range(WINDOW_WIDTH):
+        for i in range(ui_state.window_width):
             print("-", end="", flush = True)
             time.sleep(delay)
     else:
-        print("-" * WINDOW_WIDTH)
+        print("-" * ui_state.window_width)
 
 def print_guide_lines(divisions, line_type, num_segments):
-    from user_interface_menus._menu_helper import WINDOW_WIDTH, COLOR_ON
     max_divisions = 3
     if divisions > max_divisions:
         error(f"Maximum divisions is {max_divisions}. You requested {divisions}.")
-    
+
     elif line_type == "dashes":
         chars = ['-', '-', '-', '-']
-        if COLOR_ON:
+        if ui_state.color_on:
             chars = [f"\033[1;3{(i % 6) + 1}m{'-'}\033[0m" for i, char in enumerate(chars)]
-        segment_length = WINDOW_WIDTH // num_segments
-        middle_screen_adjustment = (WINDOW_WIDTH % num_segments)
+        segment_length = ui_state.window_width // num_segments
+        middle_screen_adjustment = (ui_state.window_width % num_segments)
         middle_screen_adjustment1 = middle_screen_adjustment // 2 + (middle_screen_adjustment % 2)
         middle_screen_adjustment2 = middle_screen_adjustment // 2
         s = "".join(
@@ -329,10 +331,10 @@ def print_guide_lines(divisions, line_type, num_segments):
     
     elif line_type == "dots":
         chars = ['|', '|', '|', '|']
-        if COLOR_ON:
+        if ui_state.color_on:
             chars = [f"\033[1;3{(i % 6) + 1}m{'|'}\033[0m" for i, char in enumerate(chars)]
-        segment_length = WINDOW_WIDTH // num_segments
-        middle_screen_adjustment = (WINDOW_WIDTH % num_segments)
+        segment_length = ui_state.window_width // num_segments
+        middle_screen_adjustment = (ui_state.window_width % num_segments)
         middle_screen_adjustment1 = middle_screen_adjustment // 2 + (middle_screen_adjustment % 2)
         middle_screen_adjustment2 = middle_screen_adjustment // 2
         s = "".join(
@@ -352,11 +354,9 @@ def print_guide_lines(divisions, line_type, num_segments):
         print(s.strip())
 
 def print_equals():
-    from user_interface_menus._menu_helper import WINDOW_WIDTH
-    print("=" * WINDOW_WIDTH)
+    print("=" * ui_state.window_width)
 
 def print_fixed_terminal_prompt(self = None, submenu = True):
-    from user_interface_menus._menu_helper import WINDOW_WIDTH
     def scan_recovered_string(recovered_string):
         from user_interface_menus.utils._menu_navigation import get_relevant_menu_options
         from user_interface_menus._menu_helper import get_local_menu_options
@@ -430,18 +430,16 @@ def print_fixed_terminal_prompt(self = None, submenu = True):
 
                 arrow = read_arrow_key(key)
                 if arrow == 'UP':
-                    from user_interface_menus._menu_helper import RECENT_COMMANDS
-                    if RECENT_COMMANDS:
-                        recovered_string = RECENT_COMMANDS[recent_pointer] if recent_pointer >= -len(RECENT_COMMANDS) else ""
+                    if ui_state.recent_commands:
+                        recovered_string = ui_state.recent_commands[recent_pointer] if recent_pointer >= -len(ui_state.recent_commands) else ""
                         recent_pointer -= 1
-                        if recent_pointer < -len(RECENT_COMMANDS):
+                        if recent_pointer < -len(ui_state.recent_commands):
                             recent_pointer = -1
                 elif arrow == 'DOWN':
-                    from user_interface_menus._menu_helper import RECENT_COMMANDS
-                    if RECENT_COMMANDS:
+                    if ui_state.recent_commands:
                         if recent_pointer < -1:
                             recent_pointer += 1
-                        recovered_string = RECENT_COMMANDS[recent_pointer] if recent_pointer >= -len(RECENT_COMMANDS) else ""
+                        recovered_string = ui_state.recent_commands[recent_pointer] if recent_pointer >= -len(ui_state.recent_commands) else ""
                     else:
                         recent_pointer = -1
                 elif arrow == 'LEFT':
@@ -458,7 +456,7 @@ def print_fixed_terminal_prompt(self = None, submenu = True):
                     break
                 elif key in ('\b', '\x7f') and len(recovered_string) > 0:
                     recovered_string = recovered_string[:-1]
-                elif len(recovered_string) < WINDOW_WIDTH - len(prompt) - 1:
+                elif len(recovered_string) < ui_state.window_width - len(prompt) - 1:
                     if key is not None and key.isprintable() and key < '\u0080':
                         recovered_string += key
                     elif key == ' ':
@@ -582,7 +580,6 @@ def ansi_write_str(s):
 # def screen_write(self, content, initial_x, initial_y, column_width, window_height):
 
 def assistant_header_write(self, lines):
-    from user_interface_menus._menu_helper import WINDOW_WIDTH, ASSISTANT_TYPE_SPEED
     import re
 
     lines = [line.encode().decode('unicode_escape') for line in lines]
@@ -593,7 +590,7 @@ def assistant_header_write(self, lines):
     ansi_save_cursor()
     ansi_hide_cursor()
 
-    clear_column(self, initial_x, initial_y, WINDOW_WIDTH, 1)
+    clear_column(self, initial_x, initial_y, ui_state.window_width, 1)
 
     full_text = "\n".join(lines)
     ansi_escape = re.compile(r'\033\[[0-?]*[ -/]*[@-~]')
@@ -610,7 +607,7 @@ def assistant_header_write(self, lines):
     time_to_read_char_slow = 0.05
     min_time_to_read = 1
     max_time_to_read = 10
-    print_speed = ASSISTANT_TYPE_SPEED
+    print_speed = ui_state.assistant_type_speed
 
     i = 0
     length = len(full_text)
@@ -633,7 +630,7 @@ def assistant_header_write(self, lines):
                     ansi_show_cursor()
                     return
 
-            if ch == "\n" or col >= WINDOW_WIDTH:
+            if ch == "\n" or col >= ui_state.window_width:
                 row += 1
                 if row >= window_height:
                     if col < 20:
@@ -645,7 +642,7 @@ def assistant_header_write(self, lines):
                     text_reading_time = max(min_time_to_read, min(max_time_to_read, col * char_time))
                     time.sleep(text_reading_time)
                     if i < length - 1:
-                        clear_column(self, initial_x, initial_y, WINDOW_WIDTH, 1)
+                        clear_column(self, initial_x, initial_y, ui_state.window_width, 1)
                     row = 0
                 col = 0
                 if ch == "\n":

@@ -48,5 +48,4 @@ def print_interface_log(self):
         except Exception as e:
             error(f"An unexpected error occurred while reading the interface log: {e}")
 
-global PRINT_TRANSCRIPT
 PRINT_TRANSCRIPT = print_transcript

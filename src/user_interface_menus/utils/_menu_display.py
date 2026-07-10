@@ -4,6 +4,10 @@ from difflib import get_close_matches
 
 from user_interface_menus.utils._display import *
 from user_interface_menus.utils._menu_navigation import *
+# See _display.py's top-of-file comment for why this is safe to import once
+# here instead of per-function-body, and why it comes from _ui_state.py
+# rather than _menu_helper.py (avoids a real circular import).
+from user_interface_menus._ui_state import ui_state
 
 def print_menu_options(self, menu_options, submenu = False, index_and_text = False, choice = None, recommended_actions = None):
     from user_interface_menus._menu_helper import add_recent_command, set_local_menu_options
@@ -60,7 +64,6 @@ def print_menu_options(self, menu_options, submenu = False, index_and_text = Fal
 
     def display_local_menu_options(self, start_index = 1, num_to_print = None, indexed = False):
         try:
-            from user_interface_menus._menu_helper import WINDOW_HEIGHT
             if num_to_print is None:
                 num_to_print = len(menu_options)
             num_printed = 0
@@ -79,15 +82,15 @@ def print_menu_options(self, menu_options, submenu = False, index_and_text = Fal
 
                 elif indexed and key.isdigit() and num_printed < num_to_print:
                     num_printed += 1
-                    if index + WINDOW_HEIGHT < total_items:
-                        key2, item2 = menu_items[index + WINDOW_HEIGHT]
+                    if index + ui_state.window_height < total_items:
+                        key2, item2 = menu_items[index + ui_state.window_height]
                         if not key2.isdigit():
                             key2, item2 = None, None
                     else:
                         key2, item2 = None, None
 
-                    if index + (WINDOW_HEIGHT * 2) < total_items:
-                        key3, item3 = menu_items[index + (WINDOW_HEIGHT * 2)]
+                    if index + (ui_state.window_height * 2) < total_items:
+                        key3, item3 = menu_items[index + (ui_state.window_height * 2)]
                         if not key3.isdigit():
                             key3, item3 = None, None
                     else:
@@ -104,9 +107,8 @@ def print_menu_options(self, menu_options, submenu = False, index_and_text = Fal
 
     def print_keys(self):
         try:
-            from user_interface_menus._menu_helper import WINDOW_HEIGHT
             if index_and_text:
-                display_local_menu_options(self, start_index = 1, num_to_print = WINDOW_HEIGHT, indexed = True)
+                display_local_menu_options(self, start_index = 1, num_to_print = ui_state.window_height, indexed = True)
             display_local_menu_options(self, start_index = 1)
             if submenu:
                 print(f"\n{yellow("ENTER")}: Back to Previous Menu   {yellow("home")}: Jump to Main Menu")
@@ -220,14 +222,13 @@ def print_global_command_menu(self, query = None):
         return
 
 def print_recent_commands(self):
-    from user_interface_menus._menu_helper import RECENT_COMMANDS
-    if not RECENT_COMMANDS:
+    if not ui_state.recent_commands:
         if not self.commands_queue:
             print("No recent commands found.")
             exit_menu()
         return
     menu_options = {}
-    for command in RECENT_COMMANDS:
+    for command in ui_state.recent_commands:
         menu_options[command] = {
             'description': f"",
             'menu_caller': lambda self, cmd = command: goto_menu(cmd, self)
@@ -238,19 +239,17 @@ def print_recent_commands(self):
         return
 
 def invalid_choice_menu(self, menu_options, choice = None, submenu = False):
-    from user_interface_menus._menu_helper import RELATED_OPTIONS_THRESHOLD, \
-                                                  BEST_OPTIONS_THRESHOLD, _menu_options, \
-                                                  add_recent_command
-    
+    from user_interface_menus._menu_helper import add_recent_command
+
     def sort(iterable):
-        overall_matches = get_close_matches(choice, iterable, n = 5, cutoff = max(RELATED_OPTIONS_THRESHOLD, 0.1))
-        best_matches = get_close_matches(choice, iterable, n = 5, cutoff = BEST_OPTIONS_THRESHOLD)
-        if best_matches and RELATED_OPTIONS_THRESHOLD < BEST_OPTIONS_THRESHOLD:
+        overall_matches = get_close_matches(choice, iterable, n = 5, cutoff = max(ui_state.related_options_threshold, 0.1))
+        best_matches = get_close_matches(choice, iterable, n = 5, cutoff = ui_state.best_options_threshold)
+        if best_matches and ui_state.related_options_threshold < ui_state.best_options_threshold:
             return best_matches
         return overall_matches
 
     potential_local_choices = ', '.join(menu_options.keys())
-    potential_glocal_choices = ', '.join(_menu_options.keys())
+    potential_glocal_choices = ', '.join(ui_state.menu_options.keys())
     combined_choices = potential_local_choices + ', ' + potential_glocal_choices
     combined_choices = ', '.join(sort(set(combined_choices.split(', '))))
 
@@ -279,8 +278,8 @@ def invalid_choice_menu(self, menu_options, choice = None, submenu = False):
         if first_choice in menu_options:
             menu_caller = menu_options[first_choice]['menu_caller']
             goto_menu(menu_caller, self)
-        elif first_choice in _menu_options:
-            menu_caller = _menu_options[first_choice]['menu_caller']
+        elif first_choice in ui_state.menu_options:
+            menu_caller = ui_state.menu_options[first_choice]['menu_caller']
             goto_menu(menu_caller, self)
     else:
         print_menu_options(self, menu_options, submenu = True, index_and_text = False, choice = choice)

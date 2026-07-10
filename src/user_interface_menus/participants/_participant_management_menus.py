@@ -175,11 +175,8 @@ def participant_management_menu(self):
     except Exception as e:
         error(f"An error occurred in the participant management menu: {e}", self)
 
-global ADD_PARTICIPANT
 ADD_PARTICIPANT = add_participant_menu
 
-global PARTICIPANT_REFRESH
 PARTICIPANT_REFRESH = refresh_participants_menu
 
-global PARTICIPANT_ANNOUNCEMENT
 PARTICIPANT_ANNOUNCEMENT = send_announcement_menu

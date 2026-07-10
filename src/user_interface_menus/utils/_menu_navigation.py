@@ -1,6 +1,13 @@
 """menu navigation logic"""
 
 from user_interface_menus.utils._display import *
+# See _display.py's top-of-file comment for why `ui_state` is safe to import
+# once here instead of re-importing inside every function body (it's a
+# single mutable object whose attributes are updated in place, never
+# rebound, so a reference taken here never goes stale) and why it's
+# imported from _ui_state.py rather than _menu_helper.py (avoids a real
+# circular import).
+from user_interface_menus._ui_state import ui_state
 
 class ReturnToMainMenu(Exception):
     """Raised by the global "home" command (see _menu_display.py's
@@ -43,15 +50,13 @@ def menu_loop(self, menu_options, header = "main", name = "Main Menu", submenu =
             break
 
 def get_menu_options():
-    from user_interface_menus._menu_helper import _menu_options
-    return _menu_options
+    return ui_state.menu_options
 
 def get_relevant_menu_options(query = None, exact_match = False):
-    from user_interface_menus._menu_helper import RELATED_OPTIONS_THRESHOLD
     from difflib import get_close_matches
 
     def sort(iterable):
-        threshold = max(RELATED_OPTIONS_THRESHOLD, 0.1)
+        threshold = max(ui_state.related_options_threshold, 0.1)
         return get_close_matches(query, iterable, n = 15, cutoff = threshold)
     
     def find_subset_matches(iterable):
@@ -93,9 +98,8 @@ def check_global_menu_options(query = None):
 
 def goto_menu(menu_caller, self):
     import time
-    from user_interface_menus._menu_helper import MENU_DELAY
     from user_interface_menus._menu_helper import get_local_menu_options, print_local_menu_options
-    time.sleep(MENU_DELAY)
+    time.sleep(ui_state.menu_delay)
     try:
         if callable(menu_caller):
             return menu_caller(self)
@@ -223,8 +227,7 @@ def process_chained_command(self):
     command = None
     try:
         command = commands.popleft()
-        from user_interface_menus._menu_helper import MENU_DELAY
-        time.sleep(MENU_DELAY)
+        time.sleep(ui_state.menu_delay)
         if not command:
             raise ValueError("Command cannot be empty.")
         if '?' in command:

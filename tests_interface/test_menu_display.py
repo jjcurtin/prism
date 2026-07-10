@@ -34,7 +34,7 @@ from user_interface_menus.utils._menu_navigation import ReturnToMainMenu
 
 
 def _set_menu_options(options):
-    _menu_helper._menu_options = options
+    _menu_helper.ui_state.menu_options = options
 
 
 # ------------------------------------------------------------
@@ -145,7 +145,7 @@ def test_choice_matching_local_menu_option_invokes_its_caller(fake_interface):
     result = print_menu_options(fake_interface, menu_options, choice='local-opt')
     assert result == 1
     assert calls == [fake_interface]
-    assert 'local-opt' in _menu_helper.RECENT_COMMANDS
+    assert 'local-opt' in _menu_helper.ui_state.recent_commands
 
 
 def test_choice_matching_global_menu_option_invokes_its_caller(fake_interface):
@@ -156,7 +156,7 @@ def test_choice_matching_global_menu_option_invokes_its_caller(fake_interface):
     result = print_menu_options(fake_interface, {}, choice='global-opt')
     assert result == 1
     assert calls == [fake_interface]
-    assert 'global-opt' in _menu_helper.RECENT_COMMANDS
+    assert 'global-opt' in _menu_helper.ui_state.recent_commands
 
 
 def test_local_menu_option_takes_precedence_over_global(fake_interface):
@@ -216,7 +216,7 @@ def test_print_global_command_menu_reports_no_matches(fake_interface, monkeypatc
 # ------------------------------------------------------------
 
 def test_print_recent_commands_empty_prints_message_and_exits(fake_interface, capsys):
-    assert _menu_helper.RECENT_COMMANDS == []
+    assert _menu_helper.ui_state.recent_commands == []
     print_recent_commands(fake_interface)
     assert 'No recent commands found.' in capsys.readouterr().out
 
@@ -228,7 +228,7 @@ def test_print_recent_commands_empty_with_pending_chain_is_silent(fake_interface
 
 
 def test_print_recent_commands_builds_menu_and_delegates(fake_interface, monkeypatch):
-    _menu_helper.RECENT_COMMANDS.append('help')
+    _menu_helper.ui_state.recent_commands.append('help')
     captured = {}
 
     def fake_print_menu_options(self, menu_options, submenu=False, **kwargs):
@@ -264,7 +264,7 @@ def test_invalid_choice_menu_yes_selects_first_suggestion(fake_interface, monkey
     monkeypatch.setattr(_menu_display, 'print_fixed_terminal_prompt', lambda self, submenu: 'yes')
     invalid_choice_menu(fake_interface, {}, choice='hlep', submenu=True)
     assert calls == [fake_interface]
-    assert 'help' in _menu_helper.RECENT_COMMANDS
+    assert 'help' in _menu_helper.ui_state.recent_commands
 
 
 # ------------------------------------------------------------

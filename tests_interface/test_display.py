@@ -8,11 +8,11 @@ terminal-facing primitives (kbhit/getwch/raw_mode from _keyboard, or
 get_cursor_position/move_cursor directly) rather than driving a real PTY --
 see the module docstring notes inline below for why.
 
-Module globals consumed by _display.py (WINDOW_WIDTH, COLOR_ON, RIGHT_ALIGN,
-RECENT_COMMANDS, ASSISTANT_TYPE_SPEED) live in user_interface_menus._menu_helper
-and are re-imported fresh (`from ... import X`) inside each function body, so
-mutating the module's attributes directly (not the `from` import) takes
-effect immediately -- no reload needed.
+Settings consumed by _display.py (window_width, color_on, right_align,
+recent_commands, assistant_type_speed) live on `ui_state`, a single `UIState`
+instance (user_interface_menus/_ui_state.py) imported once at the top of
+_display.py -- mutating its attributes directly is immediately visible to
+every module holding that same reference, no re-import needed.
 """
 import builtins
 import contextlib
@@ -34,15 +34,15 @@ def strip_ansi(text):
 
 @pytest.fixture(autouse=True)
 def default_menu_globals(monkeypatch):
-    """Sane, explicit defaults for the _menu_helper globals _display.py
+    """Sane, explicit defaults for the `ui_state` settings _display.py
     reads. Using monkeypatch (not direct attribute assignment) means every
     test gets these reset automatically, even ones that mutate them
     mid-test or that fail partway through."""
-    monkeypatch.setattr(menu_helper, 'WINDOW_WIDTH', 80)
-    monkeypatch.setattr(menu_helper, 'COLOR_ON', True)
-    monkeypatch.setattr(menu_helper, 'RIGHT_ALIGN', False)
-    monkeypatch.setattr(menu_helper, 'RECENT_COMMANDS', [])
-    monkeypatch.setattr(menu_helper, 'ASSISTANT_TYPE_SPEED', 0.001)
+    monkeypatch.setattr(menu_helper.ui_state, 'window_width', 80)
+    monkeypatch.setattr(menu_helper.ui_state, 'color_on', True)
+    monkeypatch.setattr(menu_helper.ui_state, 'right_align', False)
+    monkeypatch.setattr(menu_helper.ui_state, 'recent_commands', [])
+    monkeypatch.setattr(menu_helper.ui_state, 'assistant_type_speed', 0.001)
     yield
 
 
@@ -68,7 +68,7 @@ def _noop_raw_mode():
     (display.white, "\033[37m", ""),
 ])
 def test_color_helpers_color_on(fn, color_on_code, color_off_code):
-    menu_helper.COLOR_ON = True
+    menu_helper.ui_state.color_on = True
     result = fn("hi")
     assert result.startswith(color_on_code)
     assert result.endswith("\033[0m" if color_on_code != color_off_code else "")
@@ -83,7 +83,7 @@ def test_color_helpers_color_on(fn, color_on_code, color_off_code):
     (display.white, "\033[37m", ""),
 ])
 def test_color_helpers_color_off(fn, color_on_code, color_off_code):
-    menu_helper.COLOR_ON = False
+    menu_helper.ui_state.color_on = False
     result = fn("hi")
     assert color_on_code not in result
     assert "hi" in result
@@ -92,7 +92,7 @@ def test_color_helpers_color_off(fn, color_on_code, color_off_code):
 
 
 def test_color_helpers_default_message_is_none():
-    menu_helper.COLOR_ON = True
+    menu_helper.ui_state.color_on = True
     assert display.green() == "\033[32mNone\033[0m"
 
 
@@ -101,24 +101,24 @@ def test_color_helpers_default_message_is_none():
 # ------------------------------------------------------------
 
 def test_align_left_pads_to_width(fake_self):
-    menu_helper.WINDOW_WIDTH = 20
-    menu_helper.RIGHT_ALIGN = False
+    menu_helper.ui_state.window_width = 20
+    menu_helper.ui_state.right_align = False
     out = display.align(fake_self, "hello", 0, 1)
     assert out == "hello" + " " * 15
     assert len(out) == 20
 
 
 def test_align_right_pads_to_width(fake_self):
-    menu_helper.WINDOW_WIDTH = 20
-    menu_helper.RIGHT_ALIGN = True
+    menu_helper.ui_state.window_width = 20
+    menu_helper.ui_state.right_align = True
     out = display.align(fake_self, "hello", 0, 1)
     assert out == " " * 15 + "hello"
     assert len(out) == 20
 
 
 def test_align_border_left_and_right(fake_self):
-    menu_helper.WINDOW_WIDTH = 20
-    menu_helper.RIGHT_ALIGN = False
+    menu_helper.ui_state.window_width = 20
+    menu_helper.ui_state.right_align = False
     out = display.align(fake_self, "hi", 0, 1, border_left=True, border_right=True)
     assert out.startswith("| ")
     assert out.endswith(" |")
@@ -126,32 +126,32 @@ def test_align_border_left_and_right(fake_self):
 
 
 def test_align_truncates_when_text_exceeds_width(fake_self):
-    menu_helper.WINDOW_WIDTH = 10
-    menu_helper.RIGHT_ALIGN = False
+    menu_helper.ui_state.window_width = 10
+    menu_helper.ui_state.right_align = False
     out = display.align(fake_self, "hello world this is long", 0, 1)
     assert out == "hello worl"
     assert len(out) == 10
 
 
 def test_align_locked_overrides_right_align(fake_self):
-    menu_helper.WINDOW_WIDTH = 20
+    menu_helper.ui_state.window_width = 20
     # RIGHT_ALIGN is True globally, but locked + explicit align_right=False
     # should force left alignment regardless.
-    menu_helper.RIGHT_ALIGN = True
+    menu_helper.ui_state.right_align = True
     out = display.align(fake_self, "hello", 0, 1, locked=True, align_right=False)
     assert out == "hello" + " " * 15
 
 
 def test_align_locked_right(fake_self):
-    menu_helper.WINDOW_WIDTH = 20
-    menu_helper.RIGHT_ALIGN = False
+    menu_helper.ui_state.window_width = 20
+    menu_helper.ui_state.right_align = False
     out = display.align(fake_self, "hello", 0, 1, locked=True, align_right=True)
     assert out == " " * 15 + "hello"
 
 
 def test_align_handles_ansi_escaped_text_via_formatless(fake_self):
-    menu_helper.WINDOW_WIDTH = 20
-    menu_helper.RIGHT_ALIGN = False
+    menu_helper.ui_state.window_width = 20
+    menu_helper.ui_state.right_align = False
     colored = display.green("hi")
     formatless = strip_ansi(colored)
     out = display.align(fake_self, colored, 0, 1, formatless=formatless)
@@ -165,8 +165,8 @@ def test_align_handles_ansi_escaped_text_via_formatless(fake_self):
 def test_align_middle_screen_adjustment_two_columns(fake_self):
     # WINDOW_WIDTH=21 is not evenly divisible by 2 columns; the leftover
     # width (1) should be folded into column 0's format width.
-    menu_helper.WINDOW_WIDTH = 21
-    menu_helper.RIGHT_ALIGN = False
+    menu_helper.ui_state.window_width = 21
+    menu_helper.ui_state.right_align = False
     out0 = display.align(fake_self, "a", 0, 2, window_width=10)
     out1 = display.align(fake_self, "b", 1, 2, window_width=10)
     assert len(out0) == 11
@@ -175,8 +175,8 @@ def test_align_middle_screen_adjustment_two_columns(fake_self):
 
 def test_align_debug_true_prints_without_raising(capsys):
     debug_self = types.SimpleNamespace(debug=True)
-    menu_helper.WINDOW_WIDTH = 20
-    menu_helper.RIGHT_ALIGN = False
+    menu_helper.ui_state.window_width = 20
+    menu_helper.ui_state.right_align = False
     display.align(debug_self, "hello", 0, 1)
     captured = capsys.readouterr()
     assert "size of window" in captured.out
@@ -187,8 +187,8 @@ def test_align_debug_true_prints_without_raising(capsys):
 # ------------------------------------------------------------
 
 def test_display_in_columns_prints_joined_row_and_returns_positions(monkeypatch, fake_self, capsys):
-    menu_helper.WINDOW_WIDTH = 20
-    menu_helper.RIGHT_ALIGN = False
+    menu_helper.ui_state.window_width = 20
+    menu_helper.ui_state.right_align = False
     monkeypatch.setattr(display, 'get_cursor_position', lambda: (0, 5))
 
     items = [{'text': 'a'}, {'text': 'b'}]
@@ -318,19 +318,19 @@ def test_exit_interface_calls_exit_with_zero(monkeypatch, capsys):
 # ------------------------------------------------------------
 
 def test_print_equals_uses_window_width(capsys):
-    menu_helper.WINDOW_WIDTH = 15
+    menu_helper.ui_state.window_width = 15
     display.print_equals()
     assert capsys.readouterr().out == "=" * 15 + "\n"
 
 
 def test_print_dashes_no_delay(capsys):
-    menu_helper.WINDOW_WIDTH = 15
+    menu_helper.ui_state.window_width = 15
     display.print_dashes()
     assert capsys.readouterr().out == "-" * 15 + "\n"
 
 
 def test_print_menu_header(monkeypatch, capsys):
-    menu_helper.WINDOW_WIDTH = 20
+    menu_helper.ui_state.window_width = 20
     monkeypatch.setattr(display, 'clear', lambda: None)
     display.print_menu_header("Title")
     out = capsys.readouterr().out
@@ -340,24 +340,24 @@ def test_print_menu_header(monkeypatch, capsys):
 
 
 def test_print_guide_lines_dashes(capsys):
-    menu_helper.WINDOW_WIDTH = 20
-    menu_helper.COLOR_ON = False
+    menu_helper.ui_state.window_width = 20
+    menu_helper.ui_state.color_on = False
     display.print_guide_lines(2, "dashes", 2)
     out = capsys.readouterr().out
     assert out.strip('\n') == "|--------||--------|"
 
 
 def test_print_guide_lines_dots(capsys):
-    menu_helper.WINDOW_WIDTH = 20
-    menu_helper.COLOR_ON = False
+    menu_helper.ui_state.window_width = 20
+    menu_helper.ui_state.color_on = False
     display.print_guide_lines(2, "dots", 2)
     out = capsys.readouterr().out
     assert out.strip('\n') == "|        ||        |"
 
 
 def test_print_guide_lines_color_on_embeds_ansi(capsys):
-    menu_helper.WINDOW_WIDTH = 20
-    menu_helper.COLOR_ON = True
+    menu_helper.ui_state.window_width = 20
+    menu_helper.ui_state.color_on = True
     display.print_guide_lines(2, "dashes", 2)
     out = capsys.readouterr().out
     assert "\033[1;3" in out
@@ -554,7 +554,7 @@ def test_syntax_highlight_color_on_writes_composed_line(monkeypatch, fake_self, 
     monkeypatch.setattr(display, 'get_cursor_position', lambda: (0, 5))
     move_calls = []
     monkeypatch.setattr(display, 'move_cursor', lambda self, x, y: move_calls.append((x, y)))
-    menu_helper.COLOR_ON = True
+    menu_helper.ui_state.color_on = True
 
     display.syntax_highlight(fake_self, prompt="p> ", items=[(display.green, "hi")])
 
@@ -567,7 +567,7 @@ def test_syntax_highlight_color_on_writes_composed_line(monkeypatch, fake_self, 
 def test_syntax_highlight_color_off_is_noop(monkeypatch, fake_self, capsys):
     monkeypatch.setattr(display, 'get_cursor_position', lambda: (0, 5))
     monkeypatch.setattr(display, 'move_cursor', lambda self, x, y: (_ for _ in ()).throw(AssertionError("should not be called")))
-    menu_helper.COLOR_ON = False
+    menu_helper.ui_state.color_on = False
 
     result = display.syntax_highlight(fake_self, prompt="p> ", items=[(display.green, "hi")])
 
@@ -579,7 +579,7 @@ def test_syntax_highlight_string_not_in_place(monkeypatch, fake_self, capsys):
     monkeypatch.setattr(display, 'get_cursor_position', lambda: (0, 5))
     move_calls = []
     monkeypatch.setattr(display, 'move_cursor', lambda self, x, y: move_calls.append((x, y)))
-    menu_helper.COLOR_ON = True
+    menu_helper.ui_state.color_on = True
 
     display.syntax_highlight_string(fake_self, input_string="/foo", prompt="p> ", items=[(display.green, "/foo")], in_place=False)
 
@@ -594,7 +594,7 @@ def test_syntax_highlight_string_in_place(monkeypatch, fake_self, capsys):
     monkeypatch.setattr(display, 'move_cursor', lambda self, x, y: move_calls.append((x, y)) or None)
     clear_calls = []
     monkeypatch.setattr(display, 'ansi_clear_line', lambda: clear_calls.append(True))
-    menu_helper.COLOR_ON = True
+    menu_helper.ui_state.color_on = True
 
     display.syntax_highlight_string(fake_self, input_string="/foo", prompt="p> ", items=[(display.green, "/foo")], in_place=True)
 
@@ -603,14 +603,14 @@ def test_syntax_highlight_string_in_place(monkeypatch, fake_self, capsys):
 
 
 def test_syntax_highlight_string_color_off_is_noop(fake_self, capsys):
-    menu_helper.COLOR_ON = False
+    menu_helper.ui_state.color_on = False
     result = display.syntax_highlight_string(fake_self, input_string="/foo", prompt="p> ", items=[(display.green, "/foo")])
     assert result is None
     assert capsys.readouterr().out == ""
 
 
 def test_syntax_highlight_string_none_items_is_noop(fake_self, capsys):
-    menu_helper.COLOR_ON = True
+    menu_helper.ui_state.color_on = True
     result = display.syntax_highlight_string(fake_self, input_string="/foo", prompt="p> ", items=None)
     assert result is None
     assert capsys.readouterr().out == ""
@@ -639,8 +639,8 @@ def patched_terminal(monkeypatch):
 
 def test_assistant_header_write_smoke(patched_terminal, fake_self):
     patched_terminal.setattr(display, 'kbhit', lambda: False)
-    menu_helper.WINDOW_WIDTH = 20
-    menu_helper.ASSISTANT_TYPE_SPEED = 0.001
+    menu_helper.ui_state.window_width = 20
+    menu_helper.ui_state.assistant_type_speed = 0.001
     # should run to completion without raising
     display.assistant_header_write(fake_self, ["hi there"])
 
@@ -648,7 +648,7 @@ def test_assistant_header_write_smoke(patched_terminal, fake_self):
 def test_assistant_header_write_enter_interrupts_early(patched_terminal, fake_self, capsys):
     patched_terminal.setattr(display, 'kbhit', lambda: True)
     patched_terminal.setattr(display, 'getwch', lambda: '\r')
-    menu_helper.WINDOW_WIDTH = 20
+    menu_helper.ui_state.window_width = 20
 
     display.assistant_header_write(fake_self, ["a much longer line of text than one char"])
 

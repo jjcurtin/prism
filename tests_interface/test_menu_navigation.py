@@ -1,5 +1,5 @@
 """Tests for utils/_menu_navigation.py: get_relevant_menu_options/
-check_global_menu_options (fuzzy search over the _menu_helper._menu_options
+check_global_menu_options (fuzzy search over the _menu_helper.ui_state.menu_options
 global), goto_menu (the central dispatcher), get_input/prompt_confirmation
 (queue-override input), the queue-clearing helpers, CommandInjector, and
 process_chained_command.
@@ -29,7 +29,7 @@ from user_interface_menus.utils._menu_navigation import (
 # ------------------------------------------------------------
 
 def _set_menu_options(options):
-    _menu_helper._menu_options = options
+    _menu_helper.ui_state.menu_options = options
 
 
 def test_get_menu_options_reads_current_global():

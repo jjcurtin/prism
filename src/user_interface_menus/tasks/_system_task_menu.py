@@ -74,15 +74,6 @@ def system_task_menu(self):
         if print_menu_options(self, menu_options, submenu = True):
             break
 
-global ADD_TASK
-global ADD_SYSTEM_TASK
-global ADD_R_SCRIPT
-global REMOVE_TASK
-global EXECUTE_TASK
-global EXECUTE_SYSTEM_TASK
-global EXECUTE_R_SCRIPT
-global CLEAR_TASKS
-
 ADD_TASK = add_task_menu
 ADD_SYSTEM_TASK = add_new_task_menu
 ADD_R_SCRIPT = add_new_r_script_menu

@@ -37,5 +37,4 @@ def system_check_menu(self):
         if print_menu_options(self, menu_options, submenu = True):
             break
 
-global DIAGNOSTICS
 DIAGNOSTICS = diagnostics

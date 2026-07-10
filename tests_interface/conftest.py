@@ -75,26 +75,28 @@ def fake_interface():
 
 @pytest.fixture(autouse=True)
 def _menu_helper_state(monkeypatch):
-    """`_menu_helper.py` holds several module-level globals that
-    `_menu_navigation.py`/`_menu_display.py`/`_commands.py` read directly
-    (not passed as parameters): the global command registry
-    (`_menu_options`), fuzzy-match thresholds, `MENU_DELAY`
+    """`_menu_helper.py`'s `ui_state` (a `UIState` instance, see
+    `user_interface_menus/_ui_state.py`) holds several mutable attributes
+    that `_menu_navigation.py`/`_menu_display.py`/`_commands.py` read
+    directly (not passed as parameters): the global command registry
+    (`menu_options`), fuzzy-match thresholds, `menu_delay`
     (`goto_menu`/`process_chained_command` `time.sleep()` on this - real
-    default is 0.5s), `COLOR_ON` (gates some, but not all, of the
-    interactive-terminal codepaths), and `RECENT_COMMANDS`. Reset around
-    every test via monkeypatch (auto-reverted at teardown) so tests can't
-    leak global state into each other, and so the suite runs fast.
+    default is 0.5s), `color_on` (gates some, but not all, of the
+    interactive-terminal codepaths), and `recent_commands`. Reset around
+    every test via monkeypatch on `ui_state`'s attributes (auto-reverted at
+    teardown) so tests can't leak state into each other, and so the suite
+    runs fast.
     """
     import user_interface_menus._menu_helper as _menu_helper
 
-    monkeypatch.setattr(_menu_helper, '_menu_options', None)
-    monkeypatch.setattr(_menu_helper, 'RELATED_OPTIONS_THRESHOLD', 0.3)
-    monkeypatch.setattr(_menu_helper, 'BEST_OPTIONS_THRESHOLD', 0.7)
-    monkeypatch.setattr(_menu_helper, 'MENU_DELAY', 0)
-    monkeypatch.setattr(_menu_helper, 'COLOR_ON', False)
-    monkeypatch.setattr(_menu_helper, 'RECENT_COMMANDS', [])
-    monkeypatch.setattr(_menu_helper, 'local_menu_options', {})
-    monkeypatch.setattr(_menu_helper, 'current_menu', None)
+    monkeypatch.setattr(_menu_helper.ui_state, 'menu_options', None)
+    monkeypatch.setattr(_menu_helper.ui_state, 'related_options_threshold', 0.3)
+    monkeypatch.setattr(_menu_helper.ui_state, 'best_options_threshold', 0.7)
+    monkeypatch.setattr(_menu_helper.ui_state, 'menu_delay', 0)
+    monkeypatch.setattr(_menu_helper.ui_state, 'color_on', False)
+    monkeypatch.setattr(_menu_helper.ui_state, 'recent_commands', [])
+    monkeypatch.setattr(_menu_helper.ui_state, 'local_menu_options', {})
+    monkeypatch.setattr(_menu_helper.ui_state, 'current_menu', None)
 
     # Safety net: some error paths (e.g. error()/success() -> exit_menu())
     # call the builtin input() directly. Never let that block the suite on

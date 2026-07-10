@@ -67,28 +67,28 @@ class FakeApp:
 
 def test_add_recent_command_appends():
     menu_helper.add_recent_command("foo")
-    assert menu_helper.RECENT_COMMANDS == ["foo"]
+    assert menu_helper.ui_state.recent_commands == ["foo"]
 
 
 def test_add_recent_command_dedups():
     menu_helper.add_recent_command("foo")
     menu_helper.add_recent_command("foo")
-    assert menu_helper.RECENT_COMMANDS == ["foo"]
+    assert menu_helper.ui_state.recent_commands == ["foo"]
 
 
 def test_add_recent_command_excludes_recent_and_command():
     menu_helper.add_recent_command("recent")
     menu_helper.add_recent_command("command")
-    assert menu_helper.RECENT_COMMANDS == []
+    assert menu_helper.ui_state.recent_commands == []
 
 
 def test_add_recent_command_caps_at_ten_fifo():
     for i in range(11):
         menu_helper.add_recent_command(f"cmd{i}")
-    assert len(menu_helper.RECENT_COMMANDS) == 10
+    assert len(menu_helper.ui_state.recent_commands) == 10
     # cmd0 was the first in, should have been popped
-    assert "cmd0" not in menu_helper.RECENT_COMMANDS
-    assert "cmd10" in menu_helper.RECENT_COMMANDS
+    assert "cmd0" not in menu_helper.ui_state.recent_commands
+    assert "cmd10" in menu_helper.ui_state.recent_commands
 
 
 # ------------------------------------------------------------
@@ -98,7 +98,7 @@ def test_add_recent_command_caps_at_ten_fifo():
 def test_set_and_get_local_menu_options():
     options = {"a": {"description": "A", "menu_caller": lambda self: None}}
     menu_helper.set_local_menu_options("mymenu", options)
-    assert menu_helper.current_menu == "mymenu"
+    assert menu_helper.ui_state.current_menu == "mymenu"
     assert menu_helper.get_local_menu_options() == options
 
 
@@ -123,88 +123,88 @@ def test_print_local_menu_options_lists_keys(capsys):
 
 def test_set_window_width_valid(fake_repo):
     menu_helper.set_window_width(100)
-    assert menu_helper.WINDOW_WIDTH == 100
+    assert menu_helper.ui_state.window_width == 100
     assert (fake_repo / "config" / "uiconfig.txt").exists()
 
 
 def test_set_window_width_invalid_leaves_unchanged(fake_repo, capsys):
-    original = menu_helper.WINDOW_WIDTH
+    original = menu_helper.ui_state.window_width
     menu_helper.set_window_width(-5)
-    assert menu_helper.WINDOW_WIDTH == original
+    assert menu_helper.ui_state.window_width == original
     assert "Error" in capsys.readouterr().out
 
 
 def test_set_window_height_valid(fake_repo):
     menu_helper.set_window_height(30)
-    assert menu_helper.WINDOW_HEIGHT == 30
+    assert menu_helper.ui_state.window_height == 30
 
 
 def test_set_window_height_invalid_leaves_unchanged(fake_repo):
-    original = menu_helper.WINDOW_HEIGHT
+    original = menu_helper.ui_state.window_height
     menu_helper.set_window_height(0)
-    assert menu_helper.WINDOW_HEIGHT == original
+    assert menu_helper.ui_state.window_height == original
 
 
 def test_toggle_right_align(fake_repo):
-    original = menu_helper.RIGHT_ALIGN
+    original = menu_helper.ui_state.right_align
     menu_helper.toggle_right_align()
-    assert menu_helper.RIGHT_ALIGN is (not original)
+    assert menu_helper.ui_state.right_align is (not original)
     menu_helper.toggle_right_align()
-    assert menu_helper.RIGHT_ALIGN is original
+    assert menu_helper.ui_state.right_align is original
 
 
 def test_set_show_readme(fake_repo):
     menu_helper.set_show_readme(False)
-    assert menu_helper.SHOW_README is False
+    assert menu_helper.ui_state.show_readme is False
 
 
 def test_toggle_color_output(fake_repo):
-    original = menu_helper.COLOR_ON
+    original = menu_helper.ui_state.color_on
     menu_helper.toggle_color_output(FakeApp())
-    assert menu_helper.COLOR_ON is (not original)
+    assert menu_helper.ui_state.color_on is (not original)
 
 
 def test_set_related_options_threshold(fake_repo):
     menu_helper.set_related_options_threshold(0.5)
-    assert menu_helper.RELATED_OPTIONS_THRESHOLD == 0.5
+    assert menu_helper.ui_state.related_options_threshold == 0.5
 
 
 def test_set_best_options_threshold(fake_repo):
     menu_helper.set_best_options_threshold(0.9)
-    assert menu_helper.BEST_OPTIONS_THRESHOLD == 0.9
+    assert menu_helper.ui_state.best_options_threshold == 0.9
 
 
 def test_set_assistant_type_speed_valid(fake_repo, capsys):
     menu_helper.set_assistant_type_speed(0.03)
-    assert menu_helper.ASSISTANT_TYPE_SPEED == 0.03
+    assert menu_helper.ui_state.assistant_type_speed == 0.03
 
 
 def test_set_assistant_type_speed_invalid_leaves_unchanged(fake_repo):
-    original = menu_helper.ASSISTANT_TYPE_SPEED
+    original = menu_helper.ui_state.assistant_type_speed
     menu_helper.set_assistant_type_speed(-1)
-    assert menu_helper.ASSISTANT_TYPE_SPEED == original
+    assert menu_helper.ui_state.assistant_type_speed == original
 
 
 def test_set_menu_delay_valid(fake_repo):
     menu_helper.set_menu_delay(1.5)
-    assert menu_helper.MENU_DELAY == 1.5
+    assert menu_helper.ui_state.menu_delay == 1.5
 
 
 def test_set_menu_delay_rejects_negative(fake_repo):
-    original = menu_helper.MENU_DELAY
+    original = menu_helper.ui_state.menu_delay
     menu_helper.set_menu_delay(-1)
-    assert menu_helper.MENU_DELAY == original
+    assert menu_helper.ui_state.menu_delay == original
 
 
 def test_set_timeout_valid(fake_repo):
     menu_helper.set_timeout(20)
-    assert menu_helper.TIMEOUT == 20
+    assert menu_helper.ui_state.timeout == 20
 
 
 def test_set_timeout_rejects_non_positive(fake_repo):
-    original = menu_helper.TIMEOUT
+    original = menu_helper.ui_state.timeout
     menu_helper.set_timeout(0)
-    assert menu_helper.TIMEOUT == original
+    assert menu_helper.ui_state.timeout == original
 
 
 # ------------------------------------------------------------
@@ -212,16 +212,16 @@ def test_set_timeout_rejects_non_positive(fake_repo):
 
 
 def test_save_params_writes_expected_format(fake_repo):
-    menu_helper.WINDOW_WIDTH = 120
-    menu_helper.WINDOW_HEIGHT = 40
-    menu_helper.RIGHT_ALIGN = True
-    menu_helper.RELATED_OPTIONS_THRESHOLD = 0.3
-    menu_helper.BEST_OPTIONS_THRESHOLD = 0.7
-    menu_helper.ASSISTANT_TYPE_SPEED = 0.015
-    menu_helper.SHOW_README = True
-    menu_helper.COLOR_ON = True
-    menu_helper.MENU_DELAY = 0.5
-    menu_helper.TIMEOUT = 10
+    menu_helper.ui_state.window_width = 120
+    menu_helper.ui_state.window_height = 40
+    menu_helper.ui_state.right_align = True
+    menu_helper.ui_state.related_options_threshold = 0.3
+    menu_helper.ui_state.best_options_threshold = 0.7
+    menu_helper.ui_state.assistant_type_speed = 0.015
+    menu_helper.ui_state.show_readme = True
+    menu_helper.ui_state.color_on = True
+    menu_helper.ui_state.menu_delay = 0.5
+    menu_helper.ui_state.timeout = 10
 
     menu_helper.save_params()
 
@@ -245,15 +245,15 @@ def test_load_params_applies_valid_values(fake_repo):
         "ASSISTANT_TYPE_SPEED=0.02\n"
     )
     menu_helper.load_params()
-    assert menu_helper.WINDOW_WIDTH == 90
-    assert menu_helper.WINDOW_HEIGHT == 25
-    assert menu_helper.RELATED_OPTIONS_THRESHOLD == 0.4
-    assert menu_helper.BEST_OPTIONS_THRESHOLD == 0.8
-    assert menu_helper.SHOW_README is False
-    assert menu_helper.COLOR_ON is False
-    assert menu_helper.MENU_DELAY == 0.1
-    assert menu_helper.TIMEOUT == 5
-    assert menu_helper.ASSISTANT_TYPE_SPEED == 0.02
+    assert menu_helper.ui_state.window_width == 90
+    assert menu_helper.ui_state.window_height == 25
+    assert menu_helper.ui_state.related_options_threshold == 0.4
+    assert menu_helper.ui_state.best_options_threshold == 0.8
+    assert menu_helper.ui_state.show_readme is False
+    assert menu_helper.ui_state.color_on is False
+    assert menu_helper.ui_state.menu_delay == 0.1
+    assert menu_helper.ui_state.timeout == 5
+    assert menu_helper.ui_state.assistant_type_speed == 0.02
 
 
 def test_load_params_rejects_out_of_range_window_width(fake_repo):
@@ -261,26 +261,26 @@ def test_load_params_rejects_out_of_range_window_width(fake_repo):
     # `else` clause -- it silently no-ops (no "INVALID" print) rather than
     # reporting the rejection, inconsistent with e.g. RELATED_OPTIONS_THRESHOLD
     # below. Documenting current behavior, not fixing the inconsistency.
-    menu_helper.WINDOW_WIDTH = 155
+    menu_helper.ui_state.window_width = 155
     (fake_repo / "config" / "uiconfig.txt").write_text("WINDOW_WIDTH=300\n")
     menu_helper.load_params()
-    assert menu_helper.WINDOW_WIDTH == 155
+    assert menu_helper.ui_state.window_width == 155
 
 
 def test_load_params_rejects_out_of_range_threshold(fake_repo):
-    menu_helper.RELATED_OPTIONS_THRESHOLD = 0.3
+    menu_helper.ui_state.related_options_threshold = 0.3
     (fake_repo / "config" / "uiconfig.txt").write_text(
         "RELATED_OPTIONS_THRESHOLD=1.5\n"
     )
     menu_helper.load_params()
-    assert menu_helper.RELATED_OPTIONS_THRESHOLD == 0.3
+    assert menu_helper.ui_state.related_options_threshold == 0.3
 
 
 def test_load_params_rejects_non_numeric_value(fake_repo, capsys):
-    menu_helper.TIMEOUT = 10
+    menu_helper.ui_state.timeout = 10
     (fake_repo / "config" / "uiconfig.txt").write_text("TIMEOUT=notanumber\n")
     menu_helper.load_params()
-    assert menu_helper.TIMEOUT == 10
+    assert menu_helper.ui_state.timeout == 10
     assert "INVALID" in capsys.readouterr().out
 
 
@@ -291,15 +291,15 @@ def test_load_params_right_align_sets_directly_from_file(fake_repo):
     silent no-op regardless of current state. Now set directly from the
     file value in both directions, like every other field.
     """
-    menu_helper.RIGHT_ALIGN = True
+    menu_helper.ui_state.right_align = True
     (fake_repo / "config" / "uiconfig.txt").write_text("RIGHT_ALIGN=False\n")
     menu_helper.load_params()
-    assert menu_helper.RIGHT_ALIGN is False
+    assert menu_helper.ui_state.right_align is False
 
-    menu_helper.RIGHT_ALIGN = False
+    menu_helper.ui_state.right_align = False
     (fake_repo / "config" / "uiconfig.txt").write_text("RIGHT_ALIGN=True\n")
     menu_helper.load_params()
-    assert menu_helper.RIGHT_ALIGN is True
+    assert menu_helper.ui_state.right_align is True
 
 
 # ------------------------------------------------------------
@@ -350,7 +350,7 @@ def test_load_menus_calls_init_commands(fake_repo, monkeypatch):
         "user_interface_menus.utils._commands.init_commands", lambda: sentinel
     )
     menu_helper.load_menus()
-    assert menu_helper._menu_options == sentinel
+    assert menu_helper.ui_state.menu_options == sentinel
 
 
 # ------------------------------------------------------------

@@ -88,9 +88,9 @@ def test_window_height_settings_non_digit(fake_interface, monkeypatch, capsys):
 # ------------------------------------------------------------
 
 def test_print_display_params_prints_current_values(fake_interface, monkeypatch, capsys):
-    monkeypatch.setattr(menu_helper, 'WINDOW_WIDTH', 155)
-    monkeypatch.setattr(menu_helper, 'RIGHT_ALIGN', True)
-    monkeypatch.setattr(menu_helper, 'COLOR_ON', False)
+    monkeypatch.setattr(menu_helper.ui_state, 'window_width', 155)
+    monkeypatch.setattr(menu_helper.ui_state, 'right_align', True)
+    monkeypatch.setattr(menu_helper.ui_state, 'color_on', False)
     _settings_menu.print_display_params(fake_interface)
     out = capsys.readouterr().out
     assert "PRISM window width: 155" in out

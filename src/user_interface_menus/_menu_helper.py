@@ -1,144 +1,96 @@
 """globals and global editing functions"""
 
+# UIState/ui_state actually live in the tiny dependency-free _ui_state.py
+# leaf module, not here -- see that module's docstring for why: _display.py/
+# _menu_navigation.py/_menu_display.py (imported below, directly or
+# transitively) each need `ui_state` at their own top of file, and importing
+# it from *this* module would be a real circular import for whichever of
+# them happens to be the first one Python loads. Re-exported here so
+# `from user_interface_menus._menu_helper import ui_state` (used by files
+# loaded well after this module has fully initialized) keeps working.
+from user_interface_menus._ui_state import ui_state
+
 from user_interface_menus.utils._display import *
 from user_interface_menus.utils._menu_display import *
 
-_menu_options = None
-
-global local_menu_options
-local_menu_options = {}
-
-global current_menu
-current_menu = None
-
-global WINDOW_WIDTH
-WINDOW_WIDTH = 155
-
-global WINDOW_HEIGHT
-WINDOW_HEIGHT = 20
-
-global RIGHT_ALIGN
-RIGHT_ALIGN = True
-
-global RELATED_OPTIONS_THRESHOLD
-RELATED_OPTIONS_THRESHOLD = 0.3
-
-global BEST_OPTIONS_THRESHOLD
-BEST_OPTIONS_THRESHOLD = 0.7
-
-global ASSISTANT_TYPE_SPEED
-ASSISTANT_TYPE_SPEED = 0.015
-
-global SHOW_README
-SHOW_README = True
-
-global COLOR_ON
-COLOR_ON = True
-
-global RECENT_COMMANDS
-RECENT_COMMANDS = []
-
-global MENU_DELAY
-MENU_DELAY = 0.5
-
-global TIMEOUT
-TIMEOUT = 10
-
 def set_window_width(width):
-    global WINDOW_WIDTH
     if isinstance(width, int) and width > 0:
-        WINDOW_WIDTH = width
+        ui_state.window_width = width
     else:
         error("Window width must be a positive integer.")
     save_params()
 
 def set_window_height(height):
-    global WINDOW_HEIGHT
     if isinstance(height, int) and height > 0:
-        WINDOW_HEIGHT = height
+        ui_state.window_height = height
     else:
         error("Window height must be a positive integer.")
     save_params()
 
 def toggle_right_align(self = None):
-    global RIGHT_ALIGN
-    RIGHT_ALIGN = not RIGHT_ALIGN
+    ui_state.right_align = not ui_state.right_align
     save_params()
 
 def set_show_readme(show):
-    global SHOW_README
-    SHOW_README = show
+    ui_state.show_readme = show
     save_params()
 
 def toggle_color_output(self):
-    global COLOR_ON
-    COLOR_ON = not COLOR_ON
+    ui_state.color_on = not ui_state.color_on
     save_params()
 
 def set_related_options_threshold(new_threshold):
-    global RELATED_OPTIONS_THRESHOLD
-    RELATED_OPTIONS_THRESHOLD = new_threshold
+    ui_state.related_options_threshold = new_threshold
     save_params()
 
 def set_best_options_threshold(new_threshold):
-    global BEST_OPTIONS_THRESHOLD
-    BEST_OPTIONS_THRESHOLD = new_threshold
+    ui_state.best_options_threshold = new_threshold
     save_params()
 
 def set_assistant_type_speed(speed):
-    global ASSISTANT_TYPE_SPEED
     print(speed)
     if isinstance(speed, (int, float)) and speed > 0:
-        ASSISTANT_TYPE_SPEED = speed
+        ui_state.assistant_type_speed = speed
     else:
         error(f"Assistant type speed must be a positive number: {speed}")
     save_params()
 
 def set_menu_delay(delay):
-    global MENU_DELAY
     if isinstance(delay, (int, float)) and delay >= 0:
-        MENU_DELAY = delay
+        ui_state.menu_delay = delay
     else:
         error("Menu delay must be a non-negative number.")
     save_params()
 
 def set_timeout(timeout):
-    global TIMEOUT
     if isinstance(timeout, int) and timeout > 0:
-        TIMEOUT = timeout
+        ui_state.timeout = timeout
     else:
         error("Timeout must be a positive integer.")
     save_params()
 
 def add_recent_command(command):
-    global RECENT_COMMANDS
-    if command != 'recent' and command != 'command' and command not in RECENT_COMMANDS:
-        RECENT_COMMANDS.append(command)
-        if len(RECENT_COMMANDS) > 10:
-            RECENT_COMMANDS.pop(0)
+    if command != 'recent' and command != 'command' and command not in ui_state.recent_commands:
+        ui_state.recent_commands.append(command)
+        if len(ui_state.recent_commands) > 10:
+            ui_state.recent_commands.pop(0)
 
 def set_local_menu_options(menu_name, menu_options):
-    global current_menu, local_menu_options
-    current_menu = menu_name
-    local_menu_options = menu_options
+    ui_state.current_menu = menu_name
+    ui_state.local_menu_options = menu_options
 
 def print_local_menu_options(self = None):
-    global local_menu_options
-    if local_menu_options:
+    if ui_state.local_menu_options:
         print(f"\nLocal menu options ({yellow('/<command>')} to access):\n")
-        for key, value in local_menu_options.items():
+        for key, value in ui_state.local_menu_options.items():
             print(f"{yellow(key)}")
     print()
 
 def get_local_menu_options():
-    global local_menu_options
-    return local_menu_options
+    return ui_state.local_menu_options
 
 def load_params():
     import time
-    global RIGHT_ALIGN, RELATED_OPTIONS_THRESHOLD, \
-           BEST_OPTIONS_THRESHOLD, WINDOW_WIDTH, SHOW_README, COLOR_ON, \
-           MENU_DELAY, TIMEOUT, ASSISTANT_TYPE_SPEED, WINDOW_HEIGHT
 
     clear()
     print("Now loading parameters...")
@@ -151,24 +103,24 @@ def load_params():
             if global_var and val:
                 if global_var == "RIGHT_ALIGN":
                     if val == "True":
-                        RIGHT_ALIGN = True
+                        ui_state.right_align = True
                         print(global_var, val)
                     elif val == "False":
-                        RIGHT_ALIGN = False
+                        ui_state.right_align = False
                         print(global_var, val)
                     else:
                         print(global_var, "INVALID, please update")
                 elif global_var == "WINDOW_WIDTH":
                     try:
                         if int(val) and int(val) > 0 and int(val) < 200:
-                            WINDOW_WIDTH = int(val)
+                            ui_state.window_width = int(val)
                             print(global_var, val)
                     except Exception as e:
                         print(global_var, "INVALID, please update")
                 elif global_var == "WINDOW_HEIGHT":
                     try:
                         if int(val) and int(val) > 0 and int(val) < 100:
-                            WINDOW_HEIGHT = int(val)
+                            ui_state.window_height = int(val)
                             print(global_var, val)
                     except Exception as e:
                         print(global_var, "INVALID, please update")
@@ -177,7 +129,7 @@ def load_params():
                         if float(val) > 1.0 or float(val) < 0.0:
                             print(global_var, "INVALID, please update")
                         else:
-                            RELATED_OPTIONS_THRESHOLD = float(val)
+                            ui_state.related_options_threshold = float(val)
                             print(global_var, val)
                     except Exception as e:
                         print(global_var, "INVALID, please update")
@@ -186,25 +138,25 @@ def load_params():
                         if float(val) > 1.0 or float(val) < 0.0:
                             print(global_var, "INVALID, please update")
                         else:
-                            BEST_OPTIONS_THRESHOLD = float(val)
+                            ui_state.best_options_threshold = float(val)
                             print(global_var, val)
                     except Exception as e:
                         print(global_var, "INVALID, please update")
                 elif global_var == "SHOW_README":
                     if val == "True":
-                        SHOW_README = True
+                        ui_state.show_readme = True
                         print(global_var, val)
                     elif val == "False":
-                        SHOW_README = False
+                        ui_state.show_readme = False
                         print(global_var, val)
                     else:
                         print(global_var, "INVALID, please update")
                 elif global_var == "COLOR_ON":
                     if val == "True":
-                        COLOR_ON = True
+                        ui_state.color_on = True
                         print(global_var, val)
                     elif val == "False":
-                        COLOR_ON = False
+                        ui_state.color_on = False
                         print(global_var, val)
                     else:
                         print(global_var, "INVALID, please update")
@@ -213,7 +165,7 @@ def load_params():
                         if float(val) < 0:
                             print(global_var, "INVALID, please update")
                         else:
-                            MENU_DELAY = float(val)
+                            ui_state.menu_delay = float(val)
                             print(global_var, val)
                     except Exception as e:
                         print(global_var, "INVALID, please update")
@@ -222,7 +174,7 @@ def load_params():
                         if int(val) <= 0:
                             print(global_var, "INVALID, please update")
                         else:
-                            TIMEOUT = int(val)
+                            ui_state.timeout = int(val)
                             print(global_var, val)
                     except Exception as e:
                         print(global_var, "INVALID, please update")
@@ -231,38 +183,32 @@ def load_params():
                         if float(val) <= 0:
                             print(global_var, "INVALID, please update")
                         else:
-                            ASSISTANT_TYPE_SPEED = float(val)
+                            ui_state.assistant_type_speed = float(val)
                             print(global_var, val)
                     except Exception as e:
                         print(global_var, "INVALID, please update")
-    time.sleep(MENU_DELAY * 2)
+    time.sleep(ui_state.menu_delay * 2)
     save_params()
 
 def save_params():
-    global RIGHT_ALIGN, RELATED_OPTIONS_THRESHOLD, \
-           BEST_OPTIONS_THRESHOLD, WINDOW_WIDTH, SHOW_README, COLOR_ON, \
-           MENU_DELAY, TIMEOUT, ASSISTANT_TYPE_SPEED, WINDOW_HEIGHT
-
     file_path = "../config/uiconfig.txt"
     with open(file_path, 'w') as file:
-        file.write(f"RIGHT_ALIGN={RIGHT_ALIGN}\n")
-        file.write(f"RELATED_OPTIONS_THRESHOLD={RELATED_OPTIONS_THRESHOLD}\n")
-        file.write(f"BEST_OPTIONS_THRESHOLD={BEST_OPTIONS_THRESHOLD}\n")
-        file.write(f"ASSISTANT_TYPE_SPEED={ASSISTANT_TYPE_SPEED}\n")
-        file.write(f"WINDOW_WIDTH={WINDOW_WIDTH}\n")
-        file.write(f"WINDOW_HEIGHT={WINDOW_HEIGHT}\n")
-        file.write(f"SHOW_README={SHOW_README}\n")
-        file.write(f"COLOR_ON={COLOR_ON}\n")
-        file.write(f"MENU_DELAY={MENU_DELAY}\n")
-        file.write(f"TIMEOUT={TIMEOUT}\n")
+        file.write(f"RIGHT_ALIGN={ui_state.right_align}\n")
+        file.write(f"RELATED_OPTIONS_THRESHOLD={ui_state.related_options_threshold}\n")
+        file.write(f"BEST_OPTIONS_THRESHOLD={ui_state.best_options_threshold}\n")
+        file.write(f"ASSISTANT_TYPE_SPEED={ui_state.assistant_type_speed}\n")
+        file.write(f"WINDOW_WIDTH={ui_state.window_width}\n")
+        file.write(f"WINDOW_HEIGHT={ui_state.window_height}\n")
+        file.write(f"SHOW_README={ui_state.show_readme}\n")
+        file.write(f"COLOR_ON={ui_state.color_on}\n")
+        file.write(f"MENU_DELAY={ui_state.menu_delay}\n")
+        file.write(f"TIMEOUT={ui_state.timeout}\n")
 
 def load_menus():
-    global _menu_options
-
     clear()
     print("Now loading menus...")
     from user_interface_menus.utils._commands import init_commands
-    _menu_options = init_commands()
+    ui_state.menu_options = init_commands()
 
 def write_to_interface_log(message):
     try:
@@ -290,7 +236,6 @@ def read_from_interface_log():
 # imports README directly to show it on startup when SHOW_README is True --
 # this is not part of the help-menu navigation tree being removed.
 
-global read_me_lines
 read_me_lines = [
     f"I recommend looking through the commands available via {yellow('command')}.",
     f"\nYou can search for commands by typing {yellow('command <query>')} or {yellow('?<query>')}. Leave {yellow('<query>')} empty to search for all commands.",
@@ -307,10 +252,8 @@ read_me_lines = [
 def read_me(self):
     if not self.commands_queue:
         print_menu_header("readme")
-        global read_me_lines
         for line in read_me_lines:
             print(line)
         exit_menu()
 
-global README
 README = read_me

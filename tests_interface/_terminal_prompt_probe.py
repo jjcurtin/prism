@@ -14,7 +14,7 @@ from user_interface_menus.utils._display import print_fixed_terminal_prompt
 
 # avoid syntax_highlight_string's get_cursor_position() ANSI query, which
 # blocks forever waiting for a response a plain PTY child won't send.
-menu_helper.COLOR_ON = False
+menu_helper.ui_state.color_on = False
 
 
 class FakeSelf:

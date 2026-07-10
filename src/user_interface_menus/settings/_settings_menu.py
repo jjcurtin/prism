@@ -1,10 +1,13 @@
 """system settings for the user interface"""
 
 from user_interface_menus._menu_helper import *
+# Already reachable via the `import *` above (ui_state has no leading
+# underscore), but named explicitly here since this file reads several of
+# its attributes directly in function bodies below.
+from user_interface_menus._menu_helper import ui_state
 
 def window_width_settings(self):
-    from user_interface_menus._menu_helper import WINDOW_WIDTH
-    print("Current PRISM window width:", WINDOW_WIDTH)
+    print("Current PRISM window width:", ui_state.window_width)
     new_width = get_input(self, prompt = "Enter new width between 80 and 200: ")
     if not new_width.isdigit():
         error("Window width must be an integer.")
@@ -15,8 +18,7 @@ def window_width_settings(self):
     set_window_width(int(new_width))
 
 def window_height_settings(self):
-    from user_interface_menus._menu_helper import WINDOW_HEIGHT
-    print("Current PRISM window height:", WINDOW_HEIGHT)
+    print("Current PRISM window height:", ui_state.window_height)
     new_height = get_input(self, prompt = "Enter new height between 5 and 15: ")
     if not new_height.isdigit():
         error("Window height must be an integer.")
@@ -28,11 +30,10 @@ def window_height_settings(self):
 
 def print_display_params(self):
     if not self.commands_queue:
-        from user_interface_menus._menu_helper import WINDOW_WIDTH, RIGHT_ALIGN, COLOR_ON
         print()
-        print(f"PRISM window width: {WINDOW_WIDTH}")
-        print(f"Right alignment of menu options: {'enabled' if RIGHT_ALIGN else 'disabled'}")
-        print(f"Color output in terminal: {'enabled' if COLOR_ON else 'disabled'}")
+        print(f"PRISM window width: {ui_state.window_width}")
+        print(f"Right alignment of menu options: {'enabled' if ui_state.right_align else 'disabled'}")
+        print(f"Color output in terminal: {'enabled' if ui_state.color_on else 'disabled'}")
         exit_menu()
 
 def display_settings(self):
@@ -52,8 +53,7 @@ def display_settings(self):
             break
 
 def related_parameter(self):
-    from user_interface_menus._menu_helper import RELATED_OPTIONS_THRESHOLD
-    print("Current threshold:", RELATED_OPTIONS_THRESHOLD)
+    print("Current threshold:", ui_state.related_options_threshold)
     new_threshold = get_input(self, prompt = "Enter new threshold (ranges 0.0 to 1.0): ")
     if new_threshold == '':
         return 0
@@ -68,8 +68,7 @@ def related_parameter(self):
 
 
 def best_related_parameter(self):
-    from user_interface_menus._menu_helper import BEST_OPTIONS_THRESHOLD
-    print("Current threshold:", BEST_OPTIONS_THRESHOLD)
+    print("Current threshold:", ui_state.best_options_threshold)
     new_threshold = get_input(self, prompt = "Enter new threshold (ranges 0.0 to 1.0): ")
     if new_threshold == '':
         return 0
@@ -83,8 +82,7 @@ def best_related_parameter(self):
     set_best_options_threshold(float(new_threshold))
 
 def menu_delay_parameter(self):
-    from user_interface_menus._menu_helper import MENU_DELAY
-    print("Current menu delay:", MENU_DELAY)
+    print("Current menu delay:", ui_state.menu_delay)
     new_delay = get_input(self, prompt = "Enter new menu delay (must be a positive number): ")
     if new_delay == '':
         return 0
@@ -98,8 +96,7 @@ def menu_delay_parameter(self):
     set_menu_delay(float(new_delay))
 
 def timeout_parameter(self):
-    from user_interface_menus._menu_helper import TIMEOUT
-    print("Current timeout:", TIMEOUT)
+    print("Current timeout:", ui_state.timeout)
     new_timeout = get_input(self, prompt = "Enter new timeout (must be a positive integer): ")
     if new_timeout == '':
         return 0
@@ -113,8 +110,7 @@ def timeout_parameter(self):
     set_timeout(int(new_timeout))
 
 def param_set_type_speed(self):
-    from user_interface_menus._menu_helper import ASSISTANT_TYPE_SPEED
-    print("Current header type speed:", ASSISTANT_TYPE_SPEED)
+    print("Current header type speed:", ui_state.assistant_type_speed)
     new_speed = get_input(self, prompt = "Enter new type speed (must be a positive number recommended 0.015): ")
     print(f"New type speed: {new_speed}")
     if new_speed == '':
@@ -130,13 +126,11 @@ def param_set_type_speed(self):
 
 def print_params(self):
     if not self.commands_queue:
-        from user_interface_menus._menu_helper import RELATED_OPTIONS_THRESHOLD, BEST_OPTIONS_THRESHOLD, \
-                                                    MENU_DELAY, TIMEOUT, ASSISTANT_TYPE_SPEED
-        print(f"RELATED_OPTIONS_THRESHOLD: {RELATED_OPTIONS_THRESHOLD}")
-        print(f"BEST_OPTIONS_THRESHOLD: {BEST_OPTIONS_THRESHOLD}")
-        print(f"ASSISTANT_TYPE_SPEED: {ASSISTANT_TYPE_SPEED}")
-        print(f"MENU_DELAY: {MENU_DELAY}")
-        print(f"TIMEOUT: {TIMEOUT}")
+        print(f"RELATED_OPTIONS_THRESHOLD: {ui_state.related_options_threshold}")
+        print(f"BEST_OPTIONS_THRESHOLD: {ui_state.best_options_threshold}")
+        print(f"ASSISTANT_TYPE_SPEED: {ui_state.assistant_type_speed}")
+        print(f"MENU_DELAY: {ui_state.menu_delay}")
+        print(f"TIMEOUT: {ui_state.timeout}")
         exit_menu()
 
 def parameter_settings(self):
@@ -156,8 +150,7 @@ def parameter_settings(self):
             break
 
 def readme(self):
-    from user_interface_menus._menu_helper import SHOW_README
-    if SHOW_README:
+    if ui_state.show_readme:
         print("PRISM Readme is currently enabled.")
     else:
         print("PRISM Readme is currently disabled.")
@@ -192,38 +185,26 @@ def settings_menu(self):
         if print_menu_options(self, menu_options, submenu = True):
             break
 
-global DISPLAY 
 DISPLAY = display_settings
 
-global READ_ME_SET
 READ_ME_SET = readme
 
-global WINDOW_WIDTH_SETTINGS
 WINDOW_WIDTH_SETTINGS = window_width_settings
 
-global PARAM_WINDOW_HEIGHT
 PARAM_WINDOW_HEIGHT = window_height_settings
 
-global SYSTEM_SETTINGS
 SYSTEM_SETTINGS = system_settings
 
-global PARAMETER_SETTINGS
 PARAMETER_SETTINGS = parameter_settings
 
-global PRINT_PARAMS
 PRINT_PARAMS = print_params
 
-global PARAM_MENU_DELAY
 PARAM_MENU_DELAY = menu_delay_parameter
 
-global PARAM_TIMEOUT
 PARAM_TIMEOUT = timeout_parameter
 
-global PARAM_RELATED_THRESHOLD
 PARAM_RELATED_THRESHOLD = related_parameter
 
-global PARAM_BEST_OPTIONS_THRESHOLD
 PARAM_BEST_OPTIONS_THRESHOLD = best_related_parameter
 
-global PARAM_ASSISTANT_TYPE_SPEED
 PARAM_ASSISTANT_TYPE_SPEED = param_set_type_speed
