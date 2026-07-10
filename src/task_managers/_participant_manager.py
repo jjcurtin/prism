@@ -220,7 +220,16 @@ class ParticipantManager(TaskManager):
             if participant is None:
                 self.app.add_to_transcript(f"Participant {participant_id} not found; skipping SMS task.", "ERROR")
                 return -1
-            if participant['on_study'] is False:
+            # A recurring/scheduled task for an off-study participant is
+            # silently skipped -- nobody's watching to confirm it, and the
+            # whole point of turning off_study is to stop the automated
+            # cadence. A one-time task is different: it only exists because
+            # an RA deliberately triggered it right now (interface/API), and
+            # (for the interface path -- see send_one_time_survey_menu)
+            # already confirmed sending to an off-study participant
+            # specifically, so it should go through rather than be silently
+            # dropped here a second time.
+            if participant['on_study'] is False and not task.get('one_time'):
                 return 0
             # Default to "" (not a valid key in either task_column_map or
             # task_attr_map below) rather than None, purely so task_type has

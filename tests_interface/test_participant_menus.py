@@ -746,6 +746,12 @@ def test_individual_participant_menu_update_time_field_invalid_format(fake_inter
 
 
 def test_individual_participant_menu_send_ema_survey_confirmed_success(fake_interface, monkeypatch, capsys):
+    """Regression test: an off-study participant still gets sent the real,
+    personalized survey -- process_task's recurring-task off-study skip
+    doesn't apply to this one-time path -- but only behind an extra
+    confirmation naming that fact specifically, replacing (not stacking on
+    top of) the generic confirmation.
+    """
     participant = {'unique_id': '1', 'initials': 'Alice', 'subid': '3000', 'on_study': False,
                     'phone_number': '555', 'ema_time': '16:00:00', 'ema_reminder_time': '19:00:00',
                     'feedback_time': '07:00:00', 'feedback_reminder_time': '12:00:00'}
@@ -756,7 +762,49 @@ def test_individual_participant_menu_send_ema_survey_confirmed_success(fake_inte
     menu_options['ema']['menu_caller'](fake_interface)
 
     fake_interface.api.assert_called_once_with('POST', 'participants/send_survey/1/ema')
-    assert 'Ema survey sent.' in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert 'Participant is not on study. Send ema survey anyway?' in out
+    assert 'Ema survey sent.' in out
+
+
+def test_individual_participant_menu_send_ema_survey_on_study_uses_generic_prompt(fake_interface, monkeypatch, capsys):
+    """An on-study participant keeps the original generic confirmation --
+    the off-study-specific prompt replaces it only when actually off study."""
+    participant = {'unique_id': '1', 'initials': 'Alice', 'subid': '3000', 'on_study': True,
+                    'phone_number': '555', 'ema_time': '16:00:00', 'ema_reminder_time': '19:00:00',
+                    'feedback_time': '07:00:00', 'feedback_reminder_time': '12:00:00'}
+    menu_options = _open_individual_menu(fake_interface, monkeypatch, participant)
+
+    fake_interface.inputs_queue.put('y')
+    fake_interface.api = MagicMock(return_value=(True, True))
+    menu_options['ema']['menu_caller'](fake_interface)
+
+    fake_interface.api.assert_called_once_with('POST', 'participants/send_survey/1/ema')
+    out = capsys.readouterr().out
+    assert 'Send a one-time ema survey now?' in out
+    assert 'not on study' not in out
+
+
+def test_individual_participant_menu_send_ema_survey_off_study_as_string_still_warns(fake_interface, monkeypatch, capsys):
+    """Regression test: on_study is a real bool when freshly fetched from
+    the API, but update_field_menu stores a live edit back as the string
+    "False" instead (see test_individual_participant_menu_update_on_study_true).
+    The off-study warning must still trigger for that string form, not
+    just the bool -- an RA toggling on_study off and then immediately
+    sending a one-time survey in the same session is exactly the scenario
+    this covers.
+    """
+    participant = {'unique_id': '1', 'initials': 'Alice', 'subid': '3000', 'on_study': 'False',
+                    'phone_number': '555', 'ema_time': '16:00:00', 'ema_reminder_time': '19:00:00',
+                    'feedback_time': '07:00:00', 'feedback_reminder_time': '12:00:00'}
+    menu_options = _open_individual_menu(fake_interface, monkeypatch, participant)
+
+    fake_interface.inputs_queue.put('y')
+    fake_interface.api = MagicMock(return_value=(True, True))
+    menu_options['ema']['menu_caller'](fake_interface)
+
+    fake_interface.api.assert_called_once_with('POST', 'participants/send_survey/1/ema')
+    assert 'Participant is not on study. Send ema survey anyway?' in capsys.readouterr().out
 
 
 def test_individual_participant_menu_send_ema_survey_confirmed_failure(fake_interface, monkeypatch, capsys):
@@ -800,7 +848,9 @@ def test_individual_participant_menu_send_feedback_survey_confirmed_success(fake
     menu_options['feedback']['menu_caller'](fake_interface)
 
     fake_interface.api.assert_called_once_with('POST', 'participants/send_survey/1/feedback')
-    assert 'Feedback survey sent.' in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert 'Participant is not on study. Send feedback survey anyway?' in out
+    assert 'Feedback survey sent.' in out
 
 
 def test_individual_participant_menu_send_feedback_survey_not_confirmed_no_api_call(fake_interface, monkeypatch, capsys):

@@ -406,6 +406,27 @@ def test_process_task_off_study_returns_0_no_sms(fake_app, mocker):
     send_sms.assert_not_called()
 
 
+def test_process_task_off_study_one_time_task_still_sends(fake_app, mocker):
+    """The recurring-task off-study skip above must not apply to a
+    one-time task -- that's a deliberate RA-triggered send (send_survey
+    route), already confirmed off-study-aware at the interface layer
+    (see _individual_participant_menu.py's send_one_time_survey_menu), and
+    should get the real, personalized survey link like any other send.
+    """
+    pm = make_manager(fake_app)
+    participant = dict(PARTICIPANT, on_study=False)
+    pm.participants = [participant]
+    fake_app.mode = 'prod'
+    fake_app.ema_survey_id = 'fake_survey'
+    fake_app.ema_message = "Hello, it's time to take your daily survey."
+    send_sms = mocker.patch('task_managers._participant_manager.send_sms')
+
+    result = pm.process_task({'task_type': 'ema', 'participant_id': '000000000', 'one_time': True})
+
+    assert result == 0
+    send_sms.assert_called_once_with(fake_app, ['5555550100'], mocker.ANY)
+
+
 def test_process_task_sends_ema_sms_in_prod_mode(fake_app, mocker):
     pm = make_manager(fake_app)
     pm.participants = [dict(PARTICIPANT)]

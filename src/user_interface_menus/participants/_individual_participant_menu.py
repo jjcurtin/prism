@@ -61,8 +61,32 @@ def individual_participant_menu(self: Interface, participant_id: str) -> None:
         synchronously and returns the real outcome, so `ok` here reflects
         whether the SMS actually went out, not just whether a task was
         queued.
+
+        An off-study participant still gets the real, personalized survey
+        link -- same as an on-study participant -- but only after an extra,
+        specific confirmation naming that fact, replacing the generic
+        confirmation rather than stacking both. process_task's own
+        recurring-task off-study skip (_participant_manager.py) doesn't
+        apply here since this is a one-time task, deliberately triggered
+        and (for this path) already confirmed right here.
+
+        `participant['on_study']` isn't consistently typed: freshly fetched
+        from the API it's a real bool (JSON round-trip), but
+        update_field_menu above stores a live edit back as the string
+        "True"/"False" instead -- so this checks both representations
+        rather than `is False`, which would silently miss an off-study
+        participant right after their on_study field was just toggled in
+        this same session.
         """
-        if not prompt_confirmation(self, prompt = f"Send a one-time {survey_type} survey now?"):
+        on_study_value = participant.get('on_study')
+        off_study = on_study_value is False or (
+            isinstance(on_study_value, str) and on_study_value.strip().lower() == 'false'
+        )
+        if off_study:
+            prompt = f"Participant is not on study. Send {survey_type} survey anyway?"
+        else:
+            prompt = f"Send a one-time {survey_type} survey now?"
+        if not prompt_confirmation(self, prompt = prompt):
             return
         ok, _ = self.api("POST", f"participants/send_survey/{participant_id}/{survey_type}")
         if ok:
