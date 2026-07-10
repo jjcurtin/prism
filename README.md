@@ -6,6 +6,21 @@ bare Qualtrics survey link, with no PRISM-side page personalization), pulls
 down survey/GPS data, and gives research staff a terminal UI
 (`src/prism_interface.py`) to manage participants and background tasks.
 
+## Getting Started
+
+`python tasks.py --help` is the canonical, cross-platform entry point for
+every dev task (setup, running the server, running the interface, running
+tests) -- it works the same on Windows (no `make` there) as on Linux/macOS.
+Run `python tasks.py <command> --help` for a given command's own options.
+On Linux/macOS, `make <target>` is a thin convenience wrapper around the
+same commands; run `make` with no target for the same list. Available
+commands: `setup` (create the venv and install dependencies -- run with the
+system python, before the venv exists), `run --mode test` / `run --mode
+prod` (stop any running server, then start PRISM in the given mode -- no
+default mode, to avoid accidentally booting prod), `interface` (launch the
+RA terminal interface), and `test server` / `test client` / `test
+integration` / `test all` (run the pytest suites described below).
+
 ## Navigating this repo
 
 - **api/** *(git-ignored, created at runtime)* — plaintext API credential CSVs

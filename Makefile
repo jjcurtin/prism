@@ -2,59 +2,53 @@ VENV := .venv
 
 ifeq ($(OS),Windows_NT)
 PYTHON := $(VENV)\Scripts\python.exe
-PIP := $(VENV)\Scripts\pip.exe
 PY_SYS := python
 else
 PYTHON := $(CURDIR)/$(VENV)/bin/python
-PIP := $(VENV)/bin/pip
 PY_SYS := python3
 endif
 
-.PHONY: setup run interface test-server test-client test-all test-integration
+.PHONY: help setup run-test run-prod interface test-server test-client test-all test-integration
 
-.DEFAULT_GOAL := run
+.DEFAULT_GOAL := help
 
-ifeq ($(OS),Windows_NT)
-# Windows has prebuilt wheels for every requirement (including pandas), so a
-# plain venv + pip install is enough.
+# No target given: delegate to tasks.py's own no-args help (avoids
+# maintaining two separate lists of available commands).
+help:
+	$(PY_SYS) tasks.py
+
+# Create .venv and install all dependencies (system python -- no venv exists yet).
 setup:
-	python -m venv $(VENV)
-	$(PIP) install --upgrade pip
-	$(PIP) install -r requirements.txt
-	$(PIP) install -r requirements-dev.txt
-	python setup_env.py
-else
-# pandas has no prebuilt wheel for this platform (cp313/aarch64); install it
-# via apt and build the venv with --system-site-packages so pip doesn't try
-# (and fail/hang) to compile it from source.
-setup:
-	sudo apt-get install -y python3-pandas
-	python3 -m venv --system-site-packages $(VENV)
-	$(PIP) install --upgrade pip
-	grep -v '^pandas' requirements.txt | $(PIP) install -r /dev/stdin
-	$(PIP) install -r requirements-dev.txt
-	python3 setup_env.py
-endif
+	$(PY_SYS) tasks.py setup
 
-run:
-	$(PY_SYS) stop_server.py
-	cd src && $(PYTHON) run_prism.py -mode test
+# Stop any running server and start PRISM in test mode.
+run-test:
+	$(PYTHON) tasks.py run --mode test
 
+# Stop any running server and start PRISM in production mode.
+run-prod:
+	$(PYTHON) tasks.py run --mode prod
+
+# Launch the RA terminal interface.
 interface:
-	cd src && $(PYTHON) prism_interface.py
+	$(PYTHON) tasks.py interface
 
+# Server-side suite: config loading, task scheduling, participant
+# management, coordinator SMS alerting on system failures.
 test-server:
-	$(PYTHON) -m pytest tests -v
+	$(PYTHON) tasks.py test server
 
-# interface-side tests: full user_interface_menus/ coverage (phase 04).
+# Interface-side tests: full user_interface_menus/ coverage (phase 04).
 test-client:
-	$(PYTHON) -m pytest tests_interface -v
+	$(PYTHON) tasks.py test client
 
-test-all: test-server test-client
+# Full offline test suite: server + client + integration.
+test-all:
+	$(PYTHON) tasks.py test all
 
 # real end-to-end tests against real external services (Qualtrics, FollowMee,
 # the research drive) using real dev-environment credentials -- local-only,
 # not run in CI, skips cleanly if dev credentials aren't configured here.
 # See tests_integration/README.md.
 test-integration:
-	$(PYTHON) -m pytest tests_integration -v
+	$(PYTHON) tasks.py test integration
