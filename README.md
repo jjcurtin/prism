@@ -1,10 +1,10 @@
 # PRISM
 
 PRISM is a Flask-based backend that runs a behavioral-health research study: it
-schedules and sends daily surveys to participants over SMS, serves the
-Qualtrics survey pages that collect responses, pulls down survey/GPS data, and
-gives research staff a terminal UI (`src/prism_interface.py`) to manage
-participants and background tasks.
+schedules and sends daily surveys to participants over SMS (delivered as a
+bare Qualtrics survey link, with no PRISM-side page personalization), pulls
+down survey/GPS data, and gives research staff a terminal UI
+(`src/prism_interface.py`) to manage participants and background tasks.
 
 ## Navigating this repo
 
@@ -48,12 +48,22 @@ Every folder in this repo has two docs, kept deliberately separate:
   confirmation before changing. *(2026-07-09)*
 
 ### Completed
+- Research-drive sync now assumes the drive is already mounted (no more
+  `net use`/plaintext-password `os.system()` mapping step) and copies
+  cross-platform (`robocopy` on Windows, `rsync` on Linux) via `subprocess.run`
+  argument lists instead of shell strings. Added integration tests
+  (`tests_integration/`, local-only, real dev credentials, `make
+  test-integration`) for the previously-untested pulldown/research-drive
+  tasks. `uiconfig.txt`/`saved_macros.txt`/`system_prompt.txt` are now
+  tracked in `config/` (copied from the prod drive) instead of git-ignored,
+  so a fresh clone no longer needs to fetch them from the drive before the
+  interface will start. *(2026-07-10)*
 - Cross-platform port: server and interface now run on Linux (previously
   Windows-only — hard-coded paths centralized, the Windows-only `msvcrt`
   keypress module replaced with a `platform.system()`-branched
   `_keyboard.py`, a busy-wait CPU bug fixed). *(2026-07-09)*
-- Automated test suite: 449 tests total — 59 server-side (`tests/`, config
-  loading, task scheduling, participant management) and 390 interface-side
+- Automated test suite: 540 tests total — 141 server-side (`tests/`, config
+  loading, task scheduling, participant management) and 399 interface-side
   (`tests_interface/`, full `user_interface_menus/` coverage). Runs via
   `make test-server` / `make test-client` / `make test-all`, with GitHub
   Actions CI split into semantically-grouped jobs per side. *(2026-07-09)*
@@ -76,14 +86,6 @@ session's error-handling audit — see those files for full detail:
   including shutdown and arbitrary R-script execution).
 - Close the open SMS relay (unvalidated participant/announcement endpoints
   can trigger real Twilio sends).
-- Fix command injection and plaintext-credential handling in the
-  research-drive sync (`os.system()` calls building shell strings from
-  plaintext passwords).
-- Resolve the `first_name`/`last_name` vs. `initials`/`subid` participant
-  schema mismatch between `_participant_manager.py` and several still-stale
-  call sites (`_routes.py`'s `add_participant`/EMA/feedback routes,
-  `_check_system.py`'s `check_participants()`) — deferred pending
-  confirmation of real external callers.
 - Reconsider `self.api()`'s (`prism_interface.py`) collapsing of "server
   unreachable," "server returned an error," and certain success cases into
   one indistinguishable `None` — touches ~390 interface tests and every

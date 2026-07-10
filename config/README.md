@@ -17,16 +17,17 @@ to `S:` (a fixed lab convention, not a per-machine setting) — that's why
 baked directly into `run_prism.py` are the same constant; there's no
 per-machine Windows drive-letter substitution to worry about.
 
-This folder now only holds two things:
-- `repo_paths.csv` — **tracked**, unlike everything else here. Internal
-  resolution facts for this repo checkout itself (where logs live locally,
-  how the drive mounts per-platform, which drive subpath this project is
-  under) — as opposed to study-specific data, which comes from the drive.
-- Nothing else — no local `.template`/placeholder files anymore. Removed
-  2026-07-09: `PRISM.__init__` now depends on `config_base` (drive-sourced)
-  regardless of dev/prod, so local placeholders no longer serve a
-  boot-without-the-drive purpose the way they briefly did during initial
-  Linux port work — the drive is the single source of truth.
+This folder now holds four things, all **tracked** (unlike everything else
+here, which is drive-sourced or git-ignored):
+- `repo_paths.csv` — internal resolution facts for this repo checkout itself
+  (where logs live locally, how the drive mounts per-platform, which drive
+  subpath this project is under) — as opposed to study-specific data, which
+  comes from the drive.
+- `uiconfig.txt`, `saved_macros.txt`, `system_prompt.txt` — interface
+  defaults (display/assistant tunables, starter macros, the PRISM Assistant's
+  system prompt). These are generic, not study-specific or secret, so unlike
+  the drive-sourced files they ship with the repo rather than requiring a
+  fresh clone to copy them from the drive first. *(2026-07-10)*
 
 ## Current known schema (from the real files on the drive)
 
