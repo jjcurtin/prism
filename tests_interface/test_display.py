@@ -207,8 +207,12 @@ def test_display_in_columns_none_items_returns_error_string(fake_self):
 def test_display_in_columns_handles_internal_exception_via_error(monkeypatch, fake_self):
     # Force an exception inside assemble_content (missing 'text' key) and
     # confirm display_in_columns funnels it through error() rather than
-    # raising, returning the documented ([], 0) fallback.
+    # raising, returning the documented ([], 0) fallback. get_cursor_position
+    # runs before the KeyError is hit (it's called at the top of
+    # assemble_content), so it needs mocking here too, same as every other
+    # display_in_columns test above.
     calls = []
+    monkeypatch.setattr(display, 'get_cursor_position', lambda: (0, 5))
     monkeypatch.setattr(display, 'error', lambda message="", self=None: calls.append(message))
     result = display.display_in_columns(fake_self, [{'not_text': 'a'}])
     assert result == ([], 0)
