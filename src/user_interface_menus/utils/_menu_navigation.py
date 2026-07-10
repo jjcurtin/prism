@@ -261,17 +261,7 @@ class CommandInjector:
                 if stripped:
                     self_ref.commands_queue.appendleft(stripped)
         except Exception as e:
-            # FLAGGED, NOT FIXED (see mypy-adoption report): `self` here is
-            # this CommandInjector instance (it's `__call__`'s own first
-            # parameter), not the PRISMInterface `self_ref` -- error()
-            # expects an Interface-like object and, when given one, calls
-            # clear_commands_queue(self) on it, which would AttributeError
-            # on a CommandInjector (no `commands_queue` attribute), inside
-            # an already-executing exception handler. Pre-existing bug, not
-            # introduced by adding types; left as-is (only silenced for
-            # mypy) per instructions not to change runtime behavior while
-            # annotating.
-            error(f"Error processing command string: {e}", self)  # type: ignore[arg-type]
+            error(f"Error processing command string: {e}", self_ref)
         finally:
             return True
 

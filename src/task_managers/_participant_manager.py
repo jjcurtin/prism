@@ -180,21 +180,30 @@ class ParticipantManager(TaskManager):
     
     def get_task_schedule(self) -> list[dict[str, Any]]:
         try:
-            data: list[dict[str, Any]] = [
-                {
+            data: list[dict[str, Any]] = []
+            for task in self.tasks:
+                participant_id = task.get('participant_id')
+                if participant_id is not None:
+                    # get_participant() can return None (e.g. a task
+                    # lingering for a since-removed participant); such a
+                    # task can no longer run meaningfully, so it's excluded
+                    # from the returned schedule rather than crashing this
+                    # whole lookup (get_participant() itself already logs
+                    # the "not found" error -- see process_task()'s
+                    # equivalent handling of a missing participant).
+                    participant = self.get_participant(participant_id)
+                    if participant is None:
+                        continue
+                    on_study: Any = participant['on_study']
+                else:
+                    on_study = 'N/A'
+                data.append({
                     "participant_id": task.get('participant_id', 'N/A'),
-                    # FLAGGED, NOT FIXED (see mypy-adoption report): get_participant()
-                    # can return None (e.g. a task lingering for a since-removed
-                    # participant), and this indexes its result unchecked -- a
-                    # pre-existing crash risk, not something introduced by adding
-                    # types. Left as-is (only silenced for mypy) per instructions
-                    # not to change runtime behavior while annotating.
-                    "on_study": self.get_participant(task['participant_id'])['on_study'] if 'participant_id' in task else 'N/A',  # type: ignore[index]
+                    "on_study": on_study,
                     "task_type": task['task_type'],
                     "task_time": task['task_time'].strftime('%H:%M:%S'),
                     "run_today": task.get('run_today', False)
-                } for task in self.tasks
-            ]
+                })
             data.sort(key = lambda x: (x['participant_id'], x['task_time']))
             return data
         except Exception as e:
@@ -264,7 +273,8 @@ class ParticipantManager(TaskManager):
                 survey_link = f"https://uwmadison.co1.qualtrics.com/jfe/form/{survey_id}?Q_ExternalData={participant_id}"
                 body = f"{message} {survey_link}"
             except Exception as e:
-                self.app.add_to_transcript(f"Error parsing link: {e}")
+                self.app.add_to_transcript(f"Error parsing link: {e}", "ERROR")
+                return -1
             try:
                 if self.app.mode == "prod":
                     send_sms(self.app, [participant_phone_number], [body])

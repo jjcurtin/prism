@@ -307,6 +307,28 @@ def test_command_injector_swallows_exceptions_and_still_returns_true():
     assert injector(BrokenSelf()) is True
 
 
+def test_command_injector_error_path_reports_against_self_ref(fake_interface, monkeypatch):
+    """Regression test for a fixed bug: __call__'s except branch used to
+    call error(message, self) -- `self` being this CommandInjector instance
+    (its own first parameter), not `self_ref` (the actual interface object
+    passed in). error() expects an Interface-like object and calls
+    clear_commands_queue(...) on whatever it's given, so passing the
+    CommandInjector meant the *interface's* commands_queue was never the
+    thing acted on when a command string failed to parse. Now error() is
+    called with self_ref.
+    """
+    import user_interface_menus.utils._menu_navigation as _menu_navigation
+
+    calls = []
+    monkeypatch.setattr(_menu_navigation, 'error', lambda message, self=None: calls.append(self))
+
+    injector = CommandInjector(None)  # None.split('/') raises inside __call__
+    result = injector(fake_interface)
+
+    assert result is True
+    assert calls == [fake_interface]
+
+
 def test_command_injector_repr():
     assert repr(CommandInjector('cmd1/cmd2')) == '<CommandInjector: cmd1/cmd2>'
 

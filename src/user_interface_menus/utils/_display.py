@@ -56,12 +56,12 @@ def syntax_highlight(self: Interface, prompt: str = "", items: list[SyntaxItem] 
     if not ui_state.color_on:
         return
     curr_pos = get_cursor_position()
-    # FLAGGED, NOT FIXED (see mypy-adoption report): curr_pos[1] can be None
-    # (a failed ANSI cursor-position read -- see get_cursor_position()'s own
-    # return type below), and this does arithmetic on it unguarded, unlike
-    # every call site that checks `is not None` first. Pre-existing crash
-    # risk, not introduced by adding types.
-    move_cursor(self, 0, curr_pos[1] - 1)  # type: ignore[operator]
+    # curr_pos[1] can be None (a failed ANSI cursor-position read -- see
+    # get_cursor_position()'s own return type below); fall back to 0, the
+    # same convention display_in_columns()'s assemble_content() uses for a
+    # failed read.
+    curr_y = curr_pos[1] if curr_pos[1] is not None else 0
+    move_cursor(self, 0, curr_y - 1)
     output = prompt
     for item in items:  # type: ignore[union-attr]
         output += item[0](item[1])
@@ -79,21 +79,21 @@ def syntax_highlight_string(
             return
         curr_pos = get_cursor_position()
         if not in_place:
-            # FLAGGED, NOT FIXED (see mypy-adoption report): same
-            # unguarded-None-arithmetic pattern as syntax_highlight() above.
-            move_cursor(self, 0, curr_pos[1] - 1)  # type: ignore[operator]
+            # curr_pos[1] can be None (a failed ANSI cursor-position read);
+            # same fallback-to-0 convention as syntax_highlight() above.
+            curr_y = curr_pos[1] if curr_pos[1] is not None else 0
+            move_cursor(self, 0, curr_y - 1)
         elif in_place:
             try:
                 ansi_clear_line()
-                # FLAGGED, NOT FIXED (see mypy-adoption report): move_cursor()
-                # always returns None, so this `while` loop's body never
-                # executes more than once regardless -- functionally just a
-                # single move_cursor() call dressed up as a loop. Not a
-                # crash, just dead-looking control flow; left as-is per
-                # instructions not to change runtime behavior while
-                # annotating.
-                while move_cursor(self, 0, curr_pos[1]):  # type: ignore[func-returns-value]
-                    pass
+                # move_cursor() always returns None, so a `while
+                # move_cursor(...): pass` loop here never runs its body --
+                # it has only ever amounted to a single unconditional call
+                # (confirmed back to this function's first version in
+                # c5150da; move_cursor() has never returned a truthy value).
+                # Simplified to what actually executes, no new looping
+                # behavior introduced.
+                move_cursor(self, 0, curr_pos[1])
             except Exception as e:
                 error(f"ANSI error: " + str(e), self)
         
@@ -517,14 +517,13 @@ def print_fixed_terminal_prompt(self: Interface | None = None, submenu: bool = T
 
 def re_print_fixed_terminal_prompt(self: Interface) -> str:
     x, y = save_current_cursor_pos(self)
-    # FLAGGED, NOT FIXED (see mypy-adoption report): x/y are `int | None`
-    # (get_cursor_position() returns (None, None) on a failed ANSI
-    # position read -- see its own docstring/return below), but this is the
-    # one call site that does arithmetic on them without the `is not None`
-    # guard every other caller in this file uses. Pre-existing crash risk,
-    # not introduced by adding types; left as-is (only silenced for mypy)
-    # per instructions not to change runtime behavior while annotating.
-    move_cursor(self, x + len('prism> '), y - 1)  # type: ignore[operator]
+    # x/y are `int | None` (get_cursor_position() returns (None, None) on a
+    # failed ANSI position read -- see its own docstring/return below);
+    # fall back to 0, the same convention used elsewhere in this file for a
+    # failed read.
+    x = x if x is not None else 0
+    y = y if y is not None else 0
+    move_cursor(self, x + len('prism> '), y - 1)
     return print_fixed_terminal_prompt(self).strip()
 
 def print_twilio_terminal_prompt() -> str:

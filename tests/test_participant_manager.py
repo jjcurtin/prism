@@ -143,6 +143,33 @@ def test_get_task_schedule_sorts_by_participant_then_time(fake_app):
     assert result[0]['on_study'] is True
 
 
+def test_get_task_schedule_excludes_task_for_since_removed_participant(fake_app):
+    """Regression test for a fixed bug: get_task_schedule() used to index
+    self.get_participant(...)['on_study'] unconditionally whenever a task
+    had a participant_id, without checking whether get_participant()
+    returned None -- which it does for a task lingering after its
+    participant was removed from the roster (see remove_participant(),
+    which removes the participant but not necessarily every task some
+    other path may have added). That indexed a None and crashed the whole
+    schedule lookup. Now such a task is silently excluded from the
+    returned schedule (it can no longer run meaningfully), matching how
+    process_task() itself handles a since-removed participant (logs and
+    skips, doesn't crash).
+    """
+    from datetime import time
+    pm = make_manager(fake_app)
+    pm.participants = [PARTICIPANT]  # only 000000000 is a known participant
+    pm.tasks = [
+        {'task_type': 'ema', 'task_time': time(9, 0, 0), 'participant_id': '000000000'},
+        {'task_type': 'feedback', 'task_time': time(19, 0, 0), 'participant_id': 'removed-participant'},
+    ]
+
+    result = pm.get_task_schedule()
+
+    assert [r['task_type'] for r in result] == ['ema']
+    assert result[0]['on_study'] is True
+
+
 def test_update_participant_unknown_field_returns_1(fake_app):
     pm = make_manager(fake_app)
     pm.participants = [dict(PARTICIPANT)]
@@ -320,6 +347,32 @@ def test_process_task_unknown_participant_returns_neg1_no_crash(fake_app):
     result = pm.process_task({'task_type': 'ema', 'participant_id': '000000000'})
 
     assert result == -1
+
+
+def test_process_task_link_parsing_failure_returns_neg1_no_crash(fake_app, mocker):
+    """Regression test for a fixed bug: `body` was built inside a try block
+    (parsing the survey link/message via getattr(self.app, ...)) whose
+    except branch only logged the error and fell through -- with no
+    return. If that getattr() lookup failed (e.g. app not configured with
+    ema_survey_id/ema_message), `body` was never assigned, and the
+    following `send_sms(self.app, [...], [body])` call referenced an
+    undefined name instead of failing cleanly. Now the except branch
+    returns -1 immediately, matching every other failure path in this
+    function.
+    """
+    fake_app.mode = 'prod'
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+    # Deliberately don't set fake_app.ema_survey_id/ema_message, so the
+    # getattr() lookups inside process_task()'s link-building try block
+    # raise AttributeError.
+    send_sms = mocker.patch('task_managers._participant_manager.send_sms')
+
+    result = pm.process_task({'task_type': 'ema', 'participant_id': '000000000'})
+
+    assert result == -1
+    send_sms.assert_not_called()
+    assert any('Error parsing link' in msg for _, msg in fake_app.transcript)
 
 
 def test_process_task_unknown_sms_task_type_does_not_notify_coordinators(fake_app, mocker):

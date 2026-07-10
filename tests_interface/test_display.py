@@ -617,6 +617,88 @@ def test_syntax_highlight_string_none_items_is_noop(fake_self, capsys):
 
 
 # ------------------------------------------------------------
+# Regression tests: unguarded cursor-position arithmetic (bug #4) and the
+# dead in_place while-loop (bug #5) in syntax_highlight/
+# syntax_highlight_string/re_print_fixed_terminal_prompt.
+# ------------------------------------------------------------
+
+def test_syntax_highlight_none_cursor_position_falls_back_to_zero(monkeypatch, fake_self, capsys):
+    """Regression test for a fixed bug: syntax_highlight() used to do
+    `curr_pos[1] - 1` directly on get_cursor_position()'s result without
+    checking for None (a failed ANSI cursor-position read), unlike every
+    other guarded call site in this file -- that would TypeError. Now
+    falls back to 0 first, the same convention display_in_columns()'s
+    assemble_content() uses.
+    """
+    monkeypatch.setattr(display, 'get_cursor_position', lambda: (None, None))
+    move_calls = []
+    monkeypatch.setattr(display, 'move_cursor', lambda self, x, y: move_calls.append((x, y)))
+    menu_helper.ui_state.color_on = True
+
+    display.syntax_highlight(fake_self, prompt="p> ", items=[(display.green, "hi")])
+
+    assert move_calls == [(0, -1)]
+
+
+def test_syntax_highlight_string_not_in_place_none_cursor_position_falls_back_to_zero(monkeypatch, fake_self, capsys):
+    """Regression test for a fixed bug: same unguarded-None-arithmetic
+    pattern as syntax_highlight() above, in the `not in_place` branch of
+    syntax_highlight_string()."""
+    monkeypatch.setattr(display, 'get_cursor_position', lambda: (None, None))
+    move_calls = []
+    monkeypatch.setattr(display, 'move_cursor', lambda self, x, y: move_calls.append((x, y)))
+    menu_helper.ui_state.color_on = True
+
+    display.syntax_highlight_string(fake_self, input_string="/foo", prompt="p> ", items=[(display.green, "/foo")], in_place=False)
+
+    assert move_calls == [(0, -1)]
+
+
+def test_syntax_highlight_string_in_place_calls_move_cursor_exactly_once(monkeypatch, fake_self, capsys):
+    """Regression test for a fixed bug: the in_place branch used to do
+    `while move_cursor(...): pass`. move_cursor() always returns None, so
+    that loop's body could never run more than once regardless -- it was
+    dead-looking control flow, simplified to a single unconditional call.
+    Proven here by making the move_cursor stub return a truthy value
+    (unlike the real one): a lingering `while` loop would call it
+    repeatedly (or hang) on a truthy return; the fixed single call doesn't.
+    """
+    monkeypatch.setattr(display, 'get_cursor_position', lambda: (0, 5))
+    move_calls = []
+
+    def fake_move_cursor(self, x, y):
+        move_calls.append((x, y))
+        return True  # truthy, unlike the real move_cursor (-> None)
+
+    monkeypatch.setattr(display, 'move_cursor', fake_move_cursor)
+    monkeypatch.setattr(display, 'ansi_clear_line', lambda: None)
+    menu_helper.ui_state.color_on = True
+
+    display.syntax_highlight_string(fake_self, input_string="/foo", prompt="p> ", items=[(display.green, "/foo")], in_place=True)
+
+    assert move_calls == [(0, 5)]
+
+
+def test_re_print_fixed_terminal_prompt_none_cursor_position_falls_back_to_zero(monkeypatch, fake_self):
+    """Regression test for a fixed bug: re_print_fixed_terminal_prompt()
+    was the one call site in this file doing arithmetic (`x + ...`,
+    `y - 1`) on get_cursor_position()'s result (via
+    save_current_cursor_pos()) without the `is not None` guard every other
+    caller here uses -- a failed ANSI position read would TypeError. Now
+    falls back to 0, like the other guarded sites.
+    """
+    monkeypatch.setattr(display, 'get_cursor_position', lambda: (None, None))
+    move_calls = []
+    monkeypatch.setattr(display, 'move_cursor', lambda self, x, y: move_calls.append((x, y)))
+    monkeypatch.setattr(display, 'print_fixed_terminal_prompt', lambda self: "")
+
+    result = display.re_print_fixed_terminal_prompt(fake_self)
+
+    assert result == ""
+    assert move_calls == [(len('prism> '), -1)]
+
+
+# ------------------------------------------------------------
 # assistant_header_write smoke tests -- typewriter effect with real
 # time.sleep() calls normally; these monkeypatch time.sleep to a no-op and
 # kbhit to never-interrupt, and confirm the function runs to completion
