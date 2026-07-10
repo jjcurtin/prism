@@ -19,6 +19,9 @@ api/*
 config/*.csv
 config/*.txt
 !config/repo_paths.csv
+!config/uiconfig.txt
+!config/saved_macros.txt
+!config/system_prompt.txt
 
 data/qualtrics/
 data/followmee/
