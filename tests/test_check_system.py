@@ -82,6 +82,36 @@ def test_check_research_drive_prod_mode_missing_mount_returns_1(tmp_path, fake_a
     assert any('Failed to connect to Research Drive' in msg for _, msg in fake_app.transcript)
 
 
+def test_check_research_drive_hang_times_out_and_does_not_block(fake_app, mocker):
+    """Regression test: os.path.ismount()/os.listdir() have no native
+    timeout and can block for minutes on a stale mount (empirically
+    measured: 267s on a real stale CIFS mount) or indefinitely on a worse
+    network hang. check_research_drive() must give up after a bounded
+    deadline -- and, just as important, must not itself block waiting for
+    the abandoned worker thread to finish (that would defeat the point of
+    the timeout) -- rather than freezing the whole manager's pipeline.
+    Patches DRIVE_CHECK_TIMEOUT_SECONDS down to keep this test fast while
+    still exercising the real timeout/abandon mechanism; the probe sleeps
+    far longer than that patched deadline.
+    """
+    import time
+
+    fake_app.mode = 'prod'
+    fake_app.drive_mount = '/some/mount'
+    mocker.patch('system_tasks._check_system.DRIVE_CHECK_TIMEOUT_SECONDS', 0.1)
+    mocker.patch.object(
+        CheckSystem, '_probe_research_drive', staticmethod(lambda drive_mount: time.sleep(5) or True)
+    )
+
+    start = time.monotonic()
+    result = CheckSystem(fake_app).check_research_drive()
+    elapsed = time.monotonic() - start
+
+    assert result == 1
+    assert elapsed < 2  # nowhere near the probe's 5s sleep -- the call didn't wait for it
+    assert any('did not respond within' in msg for _, msg in fake_app.transcript)
+
+
 def test_check_research_drive_prod_mode_unset_drive_mount_returns_1(fake_app):
     fake_app.mode = 'prod'
 

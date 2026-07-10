@@ -1,4 +1,4 @@
-from _helper import notify_coordinators, send_sms
+from _helper import SMS_SEND_TIMEOUT_SECONDS, notify_coordinators, send_sms
 
 
 def _mock_twilio_client(mocker, fake_app):
@@ -15,6 +15,30 @@ def _mock_twilio_client(mocker, fake_app):
     mock_client.messages.create.return_value.sid = 'FAKE_SID'
     mocker.patch('_helper.Client', return_value=mock_client)
     return mock_client
+
+
+def test_send_sms_constructs_client_with_bounded_timeout(fake_app, mocker):
+    """Regression test: twilio-python's TwilioHttpClient defaults to
+    timeout=None (an unbounded requests call) unless a caller sets one
+    explicitly. Every SMS send runs synchronously on TaskManager.run()'s
+    single background thread -- a network stall with no timeout would
+    freeze that entire manager's pipeline (every other participant's
+    scheduled message, or all system tasks) for as long as the stall
+    lasts, not just fail the one send. send_sms() must always construct
+    its Twilio client with an explicit, bounded timeout.
+    """
+    fake_app.twilio_account_sid = 'fake_sid'
+    fake_app.twilio_auth_token = 'fake_token'
+    fake_app.twilio_from_number = '+15555550199'
+    mock_http_client_cls = mocker.patch('_helper.TwilioHttpClient')
+    mock_client_cls = mocker.patch('_helper.Client')
+    mock_client_cls.return_value.messages.create.return_value.sid = 'FAKE_SID'
+
+    send_sms(fake_app, ['5555550100'], ['Time for your survey.'])
+
+    mock_http_client_cls.assert_called_once_with(timeout=SMS_SEND_TIMEOUT_SECONDS)
+    _, kwargs = mock_client_cls.call_args
+    assert kwargs['http_client'] is mock_http_client_cls.return_value
 
 
 def test_send_sms_missing_credentials_returns_failure_without_raising(fake_app):

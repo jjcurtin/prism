@@ -1,10 +1,24 @@
 """Helper methods for PRISM"""
 
 from twilio.rest import Client
+from twilio.http.http_client import TwilioHttpClient
 from twilio.base.exceptions import TwilioRestException
 import os
 
 from _types import App
+
+# twilio-python's TwilioHttpClient defaults to timeout=None (confirmed
+# against the installed 9.0.5 package) -- an unbounded requests call. Since
+# every SMS send happens synchronously on TaskManager.run()'s single
+# background thread (one task at a time, no concurrency), a network stall
+# here doesn't just fail one send -- it freezes that entire manager's
+# pipeline (every other participant's scheduled EMA/reminder/feedback, or
+# all system tasks) for as long as the stall lasts, with no other task
+# able to run until it resolves. 30s is generous for Twilio's normal
+# response time (sub-second to a few seconds) while still bounding the
+# worst case to something that resolves and gets logged/alerted on,
+# instead of hanging indefinitely.
+SMS_SEND_TIMEOUT_SECONDS = 30
 
 # Placeholder marker used in the checked-in-nowhere, drive-sourced .api
 # template files (e.g. "REPLACE_WITH_QUALTRICS_API_TOKEN") -- a value still
@@ -94,7 +108,8 @@ def send_sms(app: App, receiver_numbers: list[str], messages: list[str], is_coor
         )
         return len(receiver_numbers)
     try:
-        client = Client(account_sid, auth_token)
+        http_client = TwilioHttpClient(timeout = SMS_SEND_TIMEOUT_SECONDS)
+        client = Client(account_sid, auth_token, http_client = http_client)
     except Exception as e:
         app.add_to_transcript(f"Failed to initialize Twilio client (check credentials): {e}", "ERROR")
         return len(receiver_numbers)

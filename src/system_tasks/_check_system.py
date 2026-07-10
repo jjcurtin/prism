@@ -1,9 +1,21 @@
 """This file checks the system to make sure components work"""
 
+import concurrent.futures
 import os
 import shutil
 
 from system_tasks._system_task import SystemTask
+
+# os.path.ismount()/os.listdir() have no native timeout -- on a stale
+# network mount they can block for minutes (empirically measured: 267s on
+# a real stale CIFS mount) or, in a worse network-hang scenario,
+# indefinitely. Since check_research_drive() runs synchronously on
+# whichever TaskManager.run() thread called it, an unbounded hang here
+# freezes that entire manager's pipeline (every other scheduled system
+# task) for as long as it lasts. 20s is well under the observed real-world
+# hang duration, so this proactively gives up and reports failure instead
+# of passively waiting minutes.
+DRIVE_CHECK_TIMEOUT_SECONDS = 20
 
 class CheckSystem(SystemTask):
     def run(self) -> int:
@@ -27,17 +39,50 @@ class CheckSystem(SystemTask):
             # os.path.ismount() alone isn't reliable for network shares on
             # every platform/filesystem, so also fail if the directory can't
             # be listed (e.g. present but not actually connected/stale).
+            #
+            # Run on a worker thread with a hard deadline (future.result's
+            # timeout) rather than calling these directly: neither
+            # os.path.ismount() nor os.listdir() can be cancelled or given
+            # a native timeout, so a stale/unresponsive mount can block for
+            # minutes (or indefinitely). If the deadline is hit, the worker
+            # thread itself is abandoned (shutdown(wait=False) -- there's
+            # no way to actually kill a thread stuck in a blocking syscall)
+            # rather than blocking this call again waiting for it to exit,
+            # which would defeat the entire point of the timeout.
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers = 1)
             try:
-                mounted = os.path.ismount(drive_mount) or os.path.isdir(drive_mount)
-                if not mounted:
-                    self.app.add_to_transcript(f"Failed to connect to Research Drive: {drive_mount} does not exist.", "ERROR")
-                    return 1
-                os.listdir(drive_mount)
+                future = executor.submit(self._probe_research_drive, drive_mount)
+                mounted = future.result(timeout = DRIVE_CHECK_TIMEOUT_SECONDS)
+            except concurrent.futures.TimeoutError:
+                self.app.add_to_transcript(
+                    f"Failed to connect to Research Drive: {drive_mount} did not respond within "
+                    f"{DRIVE_CHECK_TIMEOUT_SECONDS}s -- mount may be stale.",
+                    "ERROR",
+                )
+                return 1
             except Exception as e:
                 self.app.add_to_transcript(f"Failed to connect to Research Drive: {e}", "ERROR")
                 return 1
+            finally:
+                executor.shutdown(wait = False)
+            if not mounted:
+                self.app.add_to_transcript(f"Failed to connect to Research Drive: {drive_mount} does not exist.", "ERROR")
+                return 1
             self.app.add_to_transcript("INFO: Successfully connected to Research Drive.")
         return 0
+
+    @staticmethod
+    def _probe_research_drive(drive_mount: str) -> bool:
+        """Runs on the worker thread submitted by check_research_drive()
+        above -- kept as a plain function (no self.app access) so it has no
+        shared state to race against the caller if it ends up abandoned
+        past the timeout.
+        """
+        mounted = os.path.ismount(drive_mount) or os.path.isdir(drive_mount)
+        if not mounted:
+            return False
+        os.listdir(drive_mount)
+        return True
 
     def check_rscript_available(self) -> int:
         """Unlike check_research_drive above, not gated on mode == "prod" --
