@@ -23,6 +23,20 @@ down survey/GPS data, and gives research staff a terminal UI
   (`system_tasks/`, `task_managers/`, `user_interface_menus/` and its 8
   submenus).
 
+## Security model
+
+The Flask server (`src/run_prism.py`) binds to `127.0.0.1` only — it is not
+reachable over the network, and the only client that talks to it
+(`src/prism_interface.py`) is hardcoded to `http://localhost:5000/`. Given
+that, none of its ~24 routes (`src/_routes.py`) require authentication: any
+process or user account on the same machine can reach every route
+unauthenticated, including `POST /system/shutdown` (hard exit) and R-script
+execution. This was a deliberate, discussed tradeoff — not an oversight —
+made because loopback-only binding already rules out network exposure;
+per-process/per-user auth on a single-operator research machine was judged
+not worth the added complexity right now. Revisit if the deployment model
+ever changes (e.g. multi-user machine, network exposure).
+
 ## Documentation conventions
 
 Every folder in this repo has two docs, kept deliberately separate:
@@ -48,6 +62,10 @@ Every folder in this repo has two docs, kept deliberately separate:
   confirmation before changing. *(2026-07-09)*
 
 ### Completed
+- Documented the server's trust model explicitly (see "Security model"
+  above): loopback-only binding, no authentication on any route, a
+  deliberate/discussed tradeoff rather than an oversight, not a gap to fix
+  reflexively. *(2026-07-10)*
 - Research-drive sync now assumes the drive is already mounted (no more
   `net use`/plaintext-password `os.system()` mapping step) and copies
   cross-platform (`robocopy` on Windows, `rsync` on Linux) via `subprocess.run`
@@ -82,8 +100,6 @@ Every folder in this repo has two docs, kept deliberately separate:
 ### Planned
 Pulled from the per-folder CLAUDE.md "Improvements" notes and this
 session's error-handling audit — see those files for full detail:
-- Add authentication to the Flask backend (every route is currently open,
-  including shutdown and arbitrary R-script execution).
 - Close the open SMS relay (unvalidated participant/announcement endpoints
   can trigger real Twilio sends).
 - Reconsider `self.api()`'s (`prism_interface.py`) collapsing of "server
