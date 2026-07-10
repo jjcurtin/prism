@@ -1,4 +1,4 @@
-# script to get data from FollowMee and process it
+"""script to get data from FollowMee and process it"""
 
 import pandas as pd
 import json
@@ -29,6 +29,11 @@ class PulldownFollowmeeData(SystemTask):
         return one_day_ago.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     def get_followmee_devices(self):
+        """Fetches the device list from FollowMee and writes it to a local
+        raw JSON file as a side effect. Returns that file's path (not the
+        parsed device data) on success -- pull_down_followmee_data() re-reads
+        it from disk -- or None on any fetch/parse failure.
+        """
         self.app.add_to_transcript("Retrieving FollowMee devices...", "INFO")
         username = self.app.followmee_username
         api_key = self.app.followmee_api_token
@@ -111,6 +116,11 @@ class PulldownFollowmeeData(SystemTask):
             return 1
         
     def process_followmee_data(self, raw_file_name, processed_file_name):
+        """Appends the newly pulled data onto each device's existing
+        processed CSV (rather than overwriting it) and drops exact-duplicate
+        rows -- this is what lets re-running the pulldown after a
+        partial/previous run avoid double-counting overlapping records.
+        """
         try:
             filepath = os.path.join(self.app.data_dir, 'followmee', 'raw', raw_file_name)
             with open(filepath, "r") as file:

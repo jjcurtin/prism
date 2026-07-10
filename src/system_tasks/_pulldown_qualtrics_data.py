@@ -1,4 +1,4 @@
-# script to pull down Qualtrics data and process it
+"""script to pull down Qualtrics data and process it"""
 
 import pandas as pd
 import time
@@ -23,6 +23,11 @@ class PulldownQualtricsData(SystemTask):
         return 0
 
     def pull_down_qualtrics_data(self, data_type, raw_file_name, processed_file_name):
+        """Drives Qualtrics's asynchronous export flow end-to-end: kick off a
+        report, poll until it's ready, download it, then process it.
+        Qualtrics doesn't return export data synchronously, hence the
+        multi-request dance across the three helper methods below.
+        """
         if data_type == "EMA":
             self.app.add_to_transcript("Now pulling down EMA data from Qualtrics...", "INFO")
             survey_id = self.app.ema_survey_id
@@ -140,6 +145,12 @@ class PulldownQualtricsData(SystemTask):
             return None
 
     def process_qualtrics_responses(self, raw_file_name, processed_file_name, data_type):
+        """Qualtrics's raw CSV export has extra header/metadata rows before
+        the actual response rows -- start_row and the StartDate regex filter
+        skip past those. Rows containing "(already submitted feedback)"
+        (participants who already completed this survey elsewhere) are
+        filtered out before saving.
+        """
         try:
             filepath = os.path.join(self.app.data_dir, 'qualtrics', 'raw', raw_file_name)
             df = pd.read_csv(filepath, encoding = 'ISO-8859-1', skip_blank_lines = True)

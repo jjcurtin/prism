@@ -1,4 +1,4 @@
-# extend this class to create system tasks
+"""extend this class to create system tasks"""
 
 import random
 from datetime import datetime

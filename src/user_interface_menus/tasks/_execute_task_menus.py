@@ -1,3 +1,5 @@
+"""menus for executing system tasks/R scripts on demand"""
+
 from user_interface_menus.utils._menu_display import *
 from user_interface_menus._menu_helper import *
 

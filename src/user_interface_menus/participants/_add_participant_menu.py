@@ -1,4 +1,4 @@
-# menu for adding a participant
+"""menu for adding a participant"""
 
 import random
 import time
@@ -7,6 +7,11 @@ from user_interface_menus.utils._menu_display import *
 from user_interface_menus._menu_helper import *
 
 def add_participant_menu(self):
+    """Generates a random 9-digit unique_id when the user doesn't supply a
+    valid one, and regenerates again if that ID collides with an existing
+    participant -- the ID actually saved may not be what the user typed (or
+    the first one generated).
+    """
     if not self.commands_queue:
         print_menu_header("participants add")
     initials = get_input(self, prompt = "Initials: ")

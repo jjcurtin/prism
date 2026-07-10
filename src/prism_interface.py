@@ -1,4 +1,4 @@
-# Main runner for the RA PRISM interface
+"""Main runner for the RA PRISM interface"""
 
 import requests, queue
 from collections import deque

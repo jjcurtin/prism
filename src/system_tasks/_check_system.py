@@ -1,4 +1,4 @@
-# This file checks the system to make sure components work
+"""This file checks the system to make sure components work"""
 
 import os
 import subprocess

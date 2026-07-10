@@ -1,4 +1,4 @@
-# menus for adding tasks
+"""menus for adding tasks"""
 
 import time
 

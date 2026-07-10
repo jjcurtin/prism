@@ -1,10 +1,8 @@
-# participant management menus
+"""participant management menus"""
 
 from user_interface_menus._menu_helper import *
 from user_interface_menus.participants._individual_participant_menu import individual_participant_menu
 from user_interface_menus.participants._add_participant_menu import add_participant_menu
-
-# ------------------------------------------------------------
 
 def refresh_participants_menu(self):
     if prompt_confirmation(self, prompt = "Refresh participants from CSV?"):
@@ -56,8 +54,6 @@ def access_specific_participant_menu(self):
     else:
         error("Failed to retrieve participant data. Unique ID not found.", self)
         return 0
-
-# ------------------------------------------------------------
 
 def participant_management_menu(self):
     def print_task_schedule(self):
@@ -178,8 +174,6 @@ def participant_management_menu(self):
         raise
     except Exception as e:
         error(f"An error occurred in the participant management menu: {e}", self)
-
-# ------------------------------------------------------------
 
 global ADD_PARTICIPANT
 ADD_PARTICIPANT = add_participant_menu

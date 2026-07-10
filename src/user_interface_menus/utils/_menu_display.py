@@ -1,11 +1,9 @@
-# menu display api most text based methods are in _display.py
+"""menu display api most text based methods are in _display.py"""
 
 from difflib import get_close_matches
 
 from user_interface_menus.utils._display import *
 from user_interface_menus.utils._menu_navigation import *
-
-# ------------------------------------------------------------
 
 def print_menu_options(self, menu_options, submenu = False, index_and_text = False, choice = None, recommended_actions = None):
     from user_interface_menus._menu_helper import add_recent_command, set_local_menu_options
@@ -210,8 +208,6 @@ def print_menu_options(self, menu_options, submenu = False, index_and_text = Fal
         error(f"Error parsing command: {e}")
         return 0
 
-# ------------------------------------------------------------
-
 def print_global_command_menu(self, query = None):
     menu_options = get_relevant_menu_options(query)
     if query is None:
@@ -240,8 +236,6 @@ def print_recent_commands(self):
         print_menu_header("recent")
     if print_menu_options(self, menu_options, submenu = True):
         return
-
-# ------------------------------------------------------------
 
 def invalid_choice_menu(self, menu_options, choice = None, submenu = False):
     from user_interface_menus._menu_helper import RELATED_OPTIONS_THRESHOLD, \
@@ -290,8 +284,6 @@ def invalid_choice_menu(self, menu_options, choice = None, submenu = False):
             goto_menu(menu_caller, self)
     else:
         print_menu_options(self, menu_options, submenu = True, index_and_text = False, choice = choice)
-
-# ------------------------------------------------------------
 
 def infopage(self, content = [], title = 'help infopage'):
     if not self.commands_queue:

@@ -1,4 +1,4 @@
-# task for running an R script within the PRISM framework
+"""task for running an R script within the PRISM framework"""
 
 import subprocess, os
 from system_tasks._system_task import SystemTask
@@ -17,6 +17,11 @@ class RunRScript(SystemTask):
             raise Exception(f"Failed to change directory to {new_dir}. Error message: {e}")
 
     def run(self):
+        """Refuses to execute if `r_script_path` resolves (via realpath)
+        outside `scripts_dir` -- guards against a path-traversal-style script
+        path (e.g. "../../etc/whatever") escaping the sandboxed R scripts
+        directory.
+        """
         self.task_type = f"RUN_R_SCRIPT (script path: {self.r_script_path})"
         self.app.add_to_transcript(f"{self.task_type} #{self.task_number} initiated.")
         initial_dir = os.getcwd()

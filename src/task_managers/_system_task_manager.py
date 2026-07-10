@@ -1,4 +1,4 @@
-# task management logic
+"""task management logic"""
 
 import os
 import importlib
@@ -15,6 +15,13 @@ class SystemTaskManager(TaskManager):
         self.load_task_schedule()
 
     def get_task_types(self):
+        """Discovers system task types by listing .py files in system_tasks/
+        (excluding the base class) rather than from an explicit registry --
+        the dict key is the module's UPPER_SNAKE name (matches
+        process_task()'s `system_tasks._{task_type.lower()}` import
+        convention) and the value is a human-readable label derived the
+        same way.
+        """
         return {
             (f[:-3].upper().lstrip('_')): (f[:-3].replace('_', ' ').title().replace(' ', ''))
             for f in os.listdir('system_tasks')
@@ -93,6 +100,11 @@ class SystemTaskManager(TaskManager):
         return 1
 
     def process_task(self, task):
+        """Re-imports and importlib.reload()s the task module on every call
+        (rather than caching it) so a task file edited on disk takes effect
+        on its next scheduled/triggered run without restarting the whole
+        PRISM process.
+        """
         task_type = task.get('task_type')
         self.app.add_to_transcript(f"Executing task: {task_type}", "INFO")
         if self.app.mode == "test":

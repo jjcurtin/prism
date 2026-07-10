@@ -1,4 +1,4 @@
-# menu for managing an individual participant
+"""menu for managing an individual participant"""
 
 import time
 

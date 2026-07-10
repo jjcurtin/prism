@@ -1,9 +1,7 @@
-# globals and global editing functions
+"""globals and global editing functions"""
 
 from user_interface_menus.utils._display import *
 from user_interface_menus.utils._menu_display import *
-
-# ------------------------------------------------------------
 
 _menu_options = None
 
@@ -46,8 +44,6 @@ MENU_DELAY = 0.5
 global TIMEOUT
 TIMEOUT = 10
 
-# ------------------------------------------------------------
-
 def set_window_width(width):
     global WINDOW_WIDTH
     if isinstance(width, int) and width > 0:
@@ -79,8 +75,6 @@ def toggle_color_output(self):
     COLOR_ON = not COLOR_ON
     save_params()
 
-# ------------------------------------------------------------
-
 def set_related_options_threshold(new_threshold):
     global RELATED_OPTIONS_THRESHOLD
     RELATED_OPTIONS_THRESHOLD = new_threshold
@@ -91,8 +85,6 @@ def set_best_options_threshold(new_threshold):
     BEST_OPTIONS_THRESHOLD = new_threshold
     save_params()
 
-# ------------------------------------------------------------
-
 def set_assistant_type_speed(speed):
     global ASSISTANT_TYPE_SPEED
     print(speed)
@@ -101,8 +93,6 @@ def set_assistant_type_speed(speed):
     else:
         error(f"Assistant type speed must be a positive number: {speed}")
     save_params()
-
-# ------------------------------------------------------------
 
 def set_menu_delay(delay):
     global MENU_DELAY
@@ -120,19 +110,12 @@ def set_timeout(timeout):
         error("Timeout must be a positive integer.")
     save_params()
 
-
-# ------------------------------------------------------------
-
 def add_recent_command(command):
     global RECENT_COMMANDS
     if command != 'recent' and command != 'command' and command not in RECENT_COMMANDS:
         RECENT_COMMANDS.append(command)
         if len(RECENT_COMMANDS) > 10:
             RECENT_COMMANDS.pop(0)
-
-# ------------------------------------------------------------
-
-# ------------------------------------------------------------
 
 def set_local_menu_options(menu_name, menu_options):
     global current_menu, local_menu_options
@@ -150,8 +133,6 @@ def print_local_menu_options(self = None):
 def get_local_menu_options():
     global local_menu_options
     return local_menu_options
-
-# ------------------------------------------------------------
 
 def load_params():
     import time
@@ -257,8 +238,6 @@ def load_params():
     time.sleep(MENU_DELAY * 2)
     save_params()
 
-# ------------------------------------------------------------
-
 def save_params():
     global RIGHT_ALIGN, RELATED_OPTIONS_THRESHOLD, \
            BEST_OPTIONS_THRESHOLD, WINDOW_WIDTH, SHOW_README, COLOR_ON, \
@@ -276,8 +255,6 @@ def save_params():
         file.write(f"COLOR_ON={COLOR_ON}\n")
         file.write(f"MENU_DELAY={MENU_DELAY}\n")
         file.write(f"TIMEOUT={TIMEOUT}\n")
-
-# ------------------------------------------------------------
 
 def load_menus():
     global _menu_options
@@ -308,7 +285,6 @@ def read_from_interface_log():
         print(f"An unexpected error occurred while reading the interface log: {e}")
         return ""
 
-# ------------------------------------------------------------
 # Startup README display: relocated from the now-removed help/_help_menu.py
 # (2026-07-10 removal of the help-menu tree) because prism_interface.py
 # imports README directly to show it on startup when SHOW_README is True --

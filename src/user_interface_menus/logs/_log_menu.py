@@ -1,8 +1,6 @@
-# menu for accessing logs
+"""menu for accessing logs"""
 
 from user_interface_menus._menu_helper import *
-
-# ------------------------------------------------------------
 
 def log_menu(self):
     menu_options = {
@@ -16,8 +14,6 @@ def log_menu(self):
             assistant_header_write(self, ["Logs Menu"])
         if print_menu_options(self, menu_options, submenu = True, recommended_actions = ['transcript']):
             break
-
-# ------------------------------------------------------------
 
 def print_transcript(self, log_type):
     if not self.commands_queue:
@@ -51,8 +47,6 @@ def print_interface_log(self):
             error(f"Interface log file not found.")
         except Exception as e:
             error(f"An unexpected error occurred while reading the interface log: {e}")
-
-# ------------------------------------------------------------
 
 global PRINT_TRANSCRIPT
 PRINT_TRANSCRIPT = print_transcript

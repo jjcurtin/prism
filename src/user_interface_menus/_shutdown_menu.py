@@ -1,8 +1,6 @@
-# self explanatory
+"""self explanatory"""
 
 from user_interface_menus._menu_helper import *
-
-# ------------------------------------------------------------
 
 def shutdown_menu(self):
     ok, _ = self.api("GET", "system/uptime")

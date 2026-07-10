@@ -1,4 +1,4 @@
-# global commands for prism user interface
+"""global commands for prism user interface"""
 
 def init_commands():
     from user_interface_menus._main_menu import main_menu

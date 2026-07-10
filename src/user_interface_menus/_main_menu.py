@@ -1,4 +1,4 @@
-# first menu shown on startup of the user interface
+"""first menu shown on startup of the user interface"""
 
 from user_interface_menus._menu_helper import *
 from user_interface_menus.utils._menu_navigation import ReturnToMainMenu
@@ -8,8 +8,6 @@ from user_interface_menus.participants._participant_management_menus import part
 from user_interface_menus.logs._log_menu import log_menu
 from user_interface_menus._shutdown_menu import shutdown_menu
 from user_interface_menus.settings._settings_menu import settings_menu
-
-# ------------------------------------------------------------
 
 def main_menu(self):
     menu_options = {

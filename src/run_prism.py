@@ -1,4 +1,4 @@
-# Main runner for the PRISM application
+"""Main runner for the PRISM application"""
 
 import os
 import platform

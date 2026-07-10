@@ -1,8 +1,6 @@
-# system check menu; basically just runs _check_system.py
+"""system check menu; basically just runs _check_system.py"""
 
 from user_interface_menus._menu_helper import *
-
-# ------------------------------------------------------------
 
 def diagnostics(self):
     ok, _ = self.api("POST", "system/execute_task/CHECK_SYSTEM")
@@ -11,8 +9,6 @@ def diagnostics(self):
     else:
         self.request_transcript(25, "get_transcript")
         error("Failure detected. Please check the transcript for details.")
-
-# ------------------------------------------------------------
 
 def system_check_menu(self):
     menu_options = {
@@ -40,8 +36,6 @@ def system_check_menu(self):
         print()
         if print_menu_options(self, menu_options, submenu = True):
             break
-
-# ------------------------------------------------------------
 
 global DIAGNOSTICS
 DIAGNOSTICS = diagnostics

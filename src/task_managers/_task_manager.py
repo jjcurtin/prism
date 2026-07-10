@@ -1,4 +1,4 @@
-# base class for task managers
+"""base class for task managers"""
 
 import queue
 import threading
@@ -17,6 +17,12 @@ class TaskManager():
         self.thread.start()
 
     def add_task(self, task_type, task_time, r_script_path = None, participant_id = None):
+        """`r_script_path` accepts the literal string "None" as an
+        empty/none value in addition to "". Callers that pass this through a
+        URL path segment (e.g. _routes.py's add_system_task route) can't
+        encode a truly empty string there, so they send the literal "None"
+        instead.
+        """
         task_dict = {
             'task_type': task_type,
             'task_time': datetime.strptime(task_time, '%H:%M:%S').time() if isinstance(task_time, str) else task_time,
@@ -42,6 +48,11 @@ class TaskManager():
             self.app.add_to_transcript(f"Failed to save data to CSV at {file_path}: {e}", "ERROR")
 
     def check_tasks(self):
+        """A task fires once its scheduled time is within 1 second of "now"
+        (this runs frequently enough that the window doesn't need to be
+        wider), and won't fire again until run_today is reset back to False
+        at the next midnight tick.
+        """
         current_time = datetime.now().time()
         if current_time.hour == 0 and current_time.minute == 0 and current_time.second == 0:
             for task in self.tasks:

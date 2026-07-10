@@ -1,5 +1,5 @@
-# cross-platform non-blocking single-keypress reading, replacing msvcrt
-# (Windows-only stdlib) so the interface can run on Linux/Mac too.
+"""cross-platform non-blocking single-keypress reading, replacing msvcrt
+(Windows-only stdlib) so the interface can run on Linux/Mac too."""
 
 import sys
 import os

@@ -1,4 +1,4 @@
-# Helper methods for PRISM
+"""Helper methods for PRISM"""
 
 from twilio.rest import Client
 from twilio.base.exceptions import TwilioRestException
@@ -25,6 +25,11 @@ def _is_real_value(value):
     return True
 
 def send_sms(app, receiver_numbers, messages):
+    """Returns the number of recipients the send failed for (0 on success,
+    or `len(receiver_numbers)` if the Twilio client itself couldn't be
+    built) -- not a bool. notify_coordinators() re-uses this same contract
+    when it delegates here.
+    """
     account_sid = app.twilio_account_sid
     auth_token = app.twilio_auth_token
     from_number = app.twilio_from_number

@@ -1,10 +1,8 @@
-# task management menu
+"""task management menu"""
 
 from user_interface_menus._menu_helper import *
 from user_interface_menus.tasks._add_task_menus import *
 from user_interface_menus.tasks._execute_task_menus import *
-
-# ------------------------------------------------------------
 
 def print_task_schedule(self):
     tasks_ok, tasks = self.api("GET", "system/get_task_schedule")
@@ -20,8 +18,6 @@ def print_task_schedule(self):
             print(f"{red("No tasks scheduled.")}")
     else:
         print(f"{red("No tasks scheduled.")}")
-
-# ------------------------------------------------------------
 
 def remove_task_menu(self):
     if not self.commands_queue:
@@ -51,8 +47,6 @@ def remove_task_menu(self):
     except Exception as e:
         error(f"An error occurred while removing the task: {e}", self)
 
-# ------------------------------------------------------------
-
 def clear_task_schedule_menu(self):
     if prompt_confirmation(self, prompt = "Are you sure you want to clear the task schedule?"):
         ok, _ = self.api("DELETE", "system/clear_task_schedule")
@@ -63,8 +57,6 @@ def clear_task_schedule_menu(self):
     else:
         success("Task schedule not cleared.", self)
 
-# ------------------------------------------------------------
-        
 def system_task_menu(self):
     menu_options = {
         'add': {'description': 'Add New Task', 'menu_caller': add_task_menu},
@@ -81,8 +73,6 @@ def system_task_menu(self):
             print()
         if print_menu_options(self, menu_options, submenu = True):
             break
-
-# ------------------------------------------------------------
 
 global ADD_TASK
 global ADD_SYSTEM_TASK

@@ -1,8 +1,6 @@
-# system settings for the user interface
+"""system settings for the user interface"""
 
 from user_interface_menus._menu_helper import *
-
-# ------------------------------------------------------------
 
 def window_width_settings(self):
     from user_interface_menus._menu_helper import WINDOW_WIDTH
@@ -52,8 +50,6 @@ def display_settings(self):
             assistant_header_write(self, ["Display Settings Menu"])
         if print_menu_options(self, menu_options, submenu = True, recommended_actions = ['color']):
             break
-
-# ------------------------------------------------------------
 
 def related_parameter(self):
     from user_interface_menus._menu_helper import RELATED_OPTIONS_THRESHOLD
@@ -183,8 +179,6 @@ def system_settings(self):
         if print_menu_options(self, menu_options, submenu = True):
             break
 
-# ------------------------------------------------------------
-
 def settings_menu(self):
     menu_options = {
         'system': {'description': 'System Settings', 'menu_caller': system_settings},
@@ -198,8 +192,6 @@ def settings_menu(self):
         if print_menu_options(self, menu_options, submenu = True):
             break
 
-# ------------------------------------------------------------
-
 global DISPLAY 
 DISPLAY = display_settings
 
@@ -211,8 +203,6 @@ WINDOW_WIDTH_SETTINGS = window_width_settings
 
 global PARAM_WINDOW_HEIGHT
 PARAM_WINDOW_HEIGHT = window_height_settings
-
-# ------------------------------------------------------------
 
 global SYSTEM_SETTINGS
 SYSTEM_SETTINGS = system_settings

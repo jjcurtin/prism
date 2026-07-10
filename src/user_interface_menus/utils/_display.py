@@ -1,20 +1,13 @@
-# display api
+"""display api"""
 
 import os, sys, time
 from user_interface_menus.utils._keyboard import kbhit, getwch, read_arrow_key, raw_mode
 
-
-# ------------------------------------------------------------
-
 def clear():
     os.system('cls' if os.name == 'nt' else 'clear')
 
-# ------------------------------------------------------------
-
 def toggle_debug_mode(self):
     self.debug = not self.debug
-
-# ------------------------------------------------------------
 
 def green(message = None):
     from user_interface_menus._menu_helper import COLOR_ON
@@ -82,8 +75,6 @@ def syntax_highlight_string(self, input_string, prompt = "", items = None, in_pl
         if self.debug:
             print(f"Input string: {input_string}, Prompt: {prompt}, Items: {items}")
         return
-
-# ------------------------------------------------------------
 
 def align(self, text, column_number, num_columns, formatless = None, window_width = None, align_right = None, locked = False, border_left = False, border_right = False):
     from user_interface_menus._menu_helper import RIGHT_ALIGN, WINDOW_WIDTH
@@ -177,8 +168,6 @@ def align(self, text, column_number, num_columns, formatless = None, window_widt
 
     return output
 
-# ------------------------------------------------------------
-
 def display_in_columns(self, items = None):
     try:
         from user_interface_menus._menu_helper import WINDOW_WIDTH
@@ -252,8 +241,6 @@ def display_in_columns(self, items = None):
         error(f"Error displaying items in columns: {e}", self)
         return [], 0
 
-# ------------------------------------------------------------
-
 def error(message = "An unexpected error occurred.", self = None):
     from user_interface_menus.utils._menu_navigation import clear_commands_queue
     from user_interface_menus._menu_helper import write_to_interface_log
@@ -287,8 +274,6 @@ def exit_menu():
 def exit_interface(self):
     print(green("Exiting PRISM Interface."))
     exit(0)
-
-# ------------------------------------------------------------
 
 def print_menu_header(title):
     clear()
@@ -369,8 +354,6 @@ def print_guide_lines(divisions, line_type, num_segments):
 def print_equals():
     from user_interface_menus._menu_helper import WINDOW_WIDTH
     print("=" * WINDOW_WIDTH)
-
-# ------------------------------------------------------------
 
 def print_fixed_terminal_prompt(self = None, submenu = True):
     from user_interface_menus._menu_helper import WINDOW_WIDTH
@@ -498,8 +481,6 @@ def re_print_fixed_terminal_prompt(self):
 def print_twilio_terminal_prompt():
     print("Please enter your message below. Press ENTER to send.")
     return input(f"\n{green('twilio> ')}").strip()
-
-# ------------------------------------------------------------
 
 def get_cursor_position():
     sys.stdout.write("\033[6n")

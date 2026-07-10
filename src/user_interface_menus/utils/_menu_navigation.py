@@ -1,8 +1,6 @@
-# menu navigation logic
+"""menu navigation logic"""
 
 from user_interface_menus.utils._display import *
-
-# ------------------------------------------------------------
 
 class ReturnToMainMenu(Exception):
     """Raised by the global "home" command (see _menu_display.py's
@@ -22,8 +20,6 @@ class ReturnToMainMenu(Exception):
     only in _main_menu.py's main_menu().
     """
     pass
-
-# ------------------------------------------------------------
 
 def menu_loop(self, menu_options, header = "main", name = "Main Menu", submenu = True, recommended_actions = [], additional_content = None):
     if 'print_menu_options' not in globals():
@@ -45,8 +41,6 @@ def menu_loop(self, menu_options, header = "main", name = "Main Menu", submenu =
             assistant_header_write(self, [name])
         if print_menu_options(self, menu_options, submenu = submenu, recommended_actions = recommended_actions) and submenu:
             break
-
-# ------------------------------------------------------------
 
 def get_menu_options():
     from user_interface_menus._menu_helper import _menu_options
@@ -97,8 +91,6 @@ def check_global_menu_options(query = None):
         return None
     return result['description'], result['menu_caller']
 
-# ------------------------------------------------------------
-
 def goto_menu(menu_caller, self):
     import time
     from user_interface_menus._menu_helper import MENU_DELAY
@@ -134,8 +126,6 @@ def goto_menu(menu_caller, self):
     except Exception as e:
         error(f"An error occurred while navigating to the menu: {e}", self)
         return False
-
-# ------------------------------------------------------------
 
 def get_input(self, prompt = None, default_value = None, print_prompt = True):
     try:
@@ -173,8 +163,6 @@ def prompt_confirmation(self, prompt = "Are you sure?", default_value = "n"):
         print(f"Invalid confirmation input. Defaulting to {default_value}.")
         return default_value.lower() in ['y', 'yes']
 
-# ------------------------------------------------------------
-
 def clear_inputs_queue(self):
     from queue import Empty
     inputs_queue = self.inputs_queue
@@ -199,8 +187,6 @@ def clear_commands_queue(self):
             commands_queue.popleft()
     except IndexError:
         pass  # empty
-
-# ------------------------------------------------------------
 
 class CommandInjector:
     def __init__(self, command_string):
