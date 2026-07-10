@@ -8,9 +8,10 @@ from user_interface_menus.participants._participant_management_menus import part
 from user_interface_menus.logs._log_menu import log_menu
 from user_interface_menus._shutdown_menu import shutdown_menu
 from user_interface_menus.settings._settings_menu import settings_menu
+from user_interface_menus._types import Interface, MenuOptions
 
-def main_menu(self):
-    menu_options = {
+def main_menu(self: Interface) -> None:
+    menu_options: MenuOptions = {
         'command': {'description': 'Global Command Menu', 'menu_caller': print_global_command_menu},
         'check': {'description': 'System Status and Diagnostics', 'menu_caller': system_check_menu},
         'tasks': {'description': 'Manage System Tasks/R Scripts', 'menu_caller': system_task_menu},

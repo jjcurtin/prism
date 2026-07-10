@@ -1,7 +1,10 @@
 """This file contains every Flask route for the PRISM application.
 These routes are accessed by the ui."""
 
+from typing import Any
+
 from flask import Flask, jsonify, request
+from flask.wrappers import Response
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -11,8 +14,15 @@ from datetime import datetime
 
 from _helper import send_sms, notify_coordinators
 from _error_codes import code_prefix
+from _types import App
 
-def create_flask_app(app_instance):
+# Every route handler below returns either `(jsonify(...), <status code>)`
+# or a bare `jsonify(...)` (Flask defaults the status to 200) -- this alias
+# covers both idiomatically rather than fighting Flask's own dynamic return
+# typing.
+RouteResponse = Response | tuple[Response, int]
+
+def create_flask_app(app_instance: App) -> Flask:
     flask_app = Flask(__name__)
     
     if app_instance.mode == "prod":
@@ -39,47 +49,47 @@ def create_flask_app(app_instance):
     ################
 
     @flask_app.route('/system/get_mode', methods = ['GET'])
-    def get_mode():
+    def get_mode() -> RouteResponse:
         return jsonify({'mode': app_instance.mode}), 200
     
     @flask_app.route('/system/uptime', methods = ['GET'])
-    def get_uptime():
+    def get_uptime() -> RouteResponse:
         return jsonify({"uptime": time.strftime('%H:%M:%S', time.gmtime((datetime.now() - app_instance.start_time).total_seconds()))})
     
     @flask_app.route('/system/get_transcript/<num_lines>', methods = ['GET'])
-    def get_transcript(num_lines):
+    def get_transcript(num_lines: str) -> RouteResponse:
         ok, transcript = app_instance.get_transcript(num_lines)
         if not ok:
             return jsonify({"error": "Failed to read transcript"}), 500
         return jsonify({"transcript": transcript}), 200
 
     @flask_app.route('/system/shutdown', methods = ['POST'])
-    def shutdown():
+    def shutdown() -> RouteResponse:
         app_instance.shutdown()
         return jsonify({"message": "Shutdown initiated"}), 200
     
     @flask_app.route('/system/get_task_schedule', methods = ['GET'])
-    def get_task_schedule():
+    def get_task_schedule() -> RouteResponse:
         tasks = app_instance.system_task_manager.get_task_schedule()
         if not tasks:
             return jsonify({"error": "No scheduled tasks found"}), 404
         return jsonify({"tasks": tasks}), 200
     
     @flask_app.route('/system/get_task_types', methods = ['GET'])
-    def get_task_types():
+    def get_task_types() -> RouteResponse:
         if not app_instance.system_task_manager.task_types:
             return jsonify({"error": "No task types available"}), 404
         return jsonify({"task_types": app_instance.system_task_manager.task_types}), 200
     
     @flask_app.route('/system/get_r_script_tasks', methods = ['GET'])
-    def get_r_script_tasks():
+    def get_r_script_tasks() -> RouteResponse:
         tasks = app_instance.system_task_manager.get_r_script_tasks()
         if not tasks:
             return jsonify({"error": "No R script tasks found"}), 404
         return jsonify({"r_script_tasks": tasks}), 200
     
     @flask_app.route('/system/add_system_task/<task_type>/<task_time>', methods = ['POST'])
-    def add_system_task(task_type, task_time):
+    def add_system_task(task_type: str, task_time: str) -> RouteResponse:
         if task_type not in app_instance.system_task_manager.task_types:
             return jsonify({"error": "Invalid task type"}), 400
         try:
@@ -92,7 +102,7 @@ def create_flask_app(app_instance):
         return jsonify({"message": "Task added successfully"}), 200
     
     @flask_app.route('/system/remove_system_task/<task_type>/<task_time>', methods = ['DELETE'])
-    def remove_system_task(task_type, task_time):
+    def remove_system_task(task_type: str, task_time: str) -> RouteResponse:
         if task_type not in app_instance.system_task_manager.task_types:
             return jsonify({"error": "Invalid task type."}), 400
         try:
@@ -104,13 +114,13 @@ def create_flask_app(app_instance):
         return jsonify({"message": "Task removed successfully."}), 200
     
     @flask_app.route('/system/clear_task_schedule', methods = ['DELETE'])
-    def clear_task_schedule():
+    def clear_task_schedule() -> RouteResponse:
         app_instance.system_task_manager.clear_schedule()
         app_instance.add_to_transcript("Task schedule cleared via API.", "INFO")
         return jsonify({"message": "Task schedule cleared successfully"}), 200
     
     @flask_app.route('/system/execute_task/<task_type>', methods = ['POST'])
-    def execute_task(task_type):
+    def execute_task(task_type: str) -> RouteResponse:
         if task_type not in app_instance.system_task_manager.task_types:
             return jsonify({"error": "Invalid task type."}), 400
         elif app_instance.system_task_manager.process_task({'task_type': task_type}) != 0:
@@ -118,7 +128,7 @@ def create_flask_app(app_instance):
         return jsonify({"message": f"{task_type} executed successfully."}), 200
     
     @flask_app.route('/system/add_r_script_task/<r_script_path>/<task_time>', methods = ['POST'])
-    def add_r_script_task(r_script_path, task_time):
+    def add_r_script_task(r_script_path: str, task_time: str) -> RouteResponse:
         if not r_script_path:
             return jsonify({"error": "R script path cannot be empty."}), 400
         try:
@@ -131,7 +141,7 @@ def create_flask_app(app_instance):
         return jsonify({"message": "R script task added successfully"}), 200
     
     @flask_app.route('/system/remove_r_script_task/<r_script_path>/<task_time>', methods = ['DELETE'])
-    def remove_r_script_task(r_script_path, task_time):
+    def remove_r_script_task(r_script_path: str, task_time: str) -> RouteResponse:
         if not r_script_path:
             return jsonify({"error": "R script path cannot be empty."}), 400
         try:
@@ -143,7 +153,7 @@ def create_flask_app(app_instance):
         return jsonify({"message": "R script task removed successfully."}), 200
     
     @flask_app.route('/system/execute_r_script_task/<r_script_path>', methods = ['POST'])
-    def execute_r_script_task(r_script_path):
+    def execute_r_script_task(r_script_path: str) -> RouteResponse:
         if not r_script_path:
             return jsonify({"error": "R script path cannot be empty."}), 400
         task = {'task_type': 'RUN_R_SCRIPT', 'r_script_path': r_script_path}
@@ -156,28 +166,28 @@ def create_flask_app(app_instance):
     #################
 
     @flask_app.route('/participants/get_participants', methods = ['GET'])
-    def get_participants():
+    def get_participants() -> RouteResponse:
         participants = app_instance.participant_manager.get_participants()
         if not participants:
             return jsonify({"error": "No participants found"}), 404
         return jsonify({"participants": participants}), 200
     
     @flask_app.route('/participants/get_participant_task_schedule', methods = ['GET'])
-    def get_participant_task_schedule():
+    def get_participant_task_schedule() -> RouteResponse:
         tasks = app_instance.participant_manager.get_task_schedule()
         if not tasks:
             return jsonify({"error": "No participant tasks found"}), 404
         return jsonify({"tasks": tasks}), 200
     
     @flask_app.route('/participants/refresh_participants', methods = ['POST'])
-    def refresh_participants():
+    def refresh_participants() -> RouteResponse:
         if app_instance.participant_manager.load_participants() != 0:
             return jsonify({"error": "Failed to refresh participants"}), 500
         app_instance.add_to_transcript("Participants refreshed via API.", "WARNING")
         return jsonify({"message": "Participants refreshed successfully"}), 200
     
     @flask_app.route('/participants/get_participant/<unique_id>', methods = ['GET'])
-    def get_participant(unique_id):
+    def get_participant(unique_id: str) -> RouteResponse:
         participant = app_instance.participant_manager.get_participant(unique_id)
         if not participant:
             app_instance.add_to_transcript(f"Participant {unique_id} not found for retrieval", "ERROR")
@@ -186,7 +196,7 @@ def create_flask_app(app_instance):
         return jsonify({"participant": participant}), 200
 
     @flask_app.route('/participants/add_participant', methods = ['POST'])
-    def add_participant():
+    def add_participant() -> RouteResponse:
         data = request.get_json(silent=True)
         if not isinstance(data, dict):
             return jsonify({"error": "Request body must be a JSON object"}), 400
@@ -199,21 +209,21 @@ def create_flask_app(app_instance):
         return jsonify({"message": "Participant added successfully"}), 200
     
     @flask_app.route('/participants/remove_participant/<unique_id>', methods = ['DELETE'])
-    def remove_participant(unique_id):
+    def remove_participant(unique_id: str) -> RouteResponse:
         if app_instance.participant_manager.remove_participant(unique_id) != 0:
             return jsonify({"error": "Participant not found"}), 404
         app_instance.add_to_transcript(f"Participant #{unique_id} removed via API.", "INFO")
         return jsonify({"message": "Participant removed successfully"}), 200
         
     @flask_app.route('/participants/update_participant/<unique_id>/<field>/<new_value>', methods = ['PUT'])
-    def update_participant(unique_id, field, new_value):
+    def update_participant(unique_id: str, field: str, new_value: str) -> RouteResponse:
         if app_instance.participant_manager.update_participant(unique_id, field, new_value) != 0:
             return jsonify({"error": "Participant not found"}), 404
         app_instance.add_to_transcript(f"Participant #{unique_id} updated via API: {field} changed to {new_value}", "INFO")
         return jsonify({"message": "Participant updated successfully"}), 200
     
     @flask_app.route('/participants/send_survey/<unique_id>/<survey_type>', methods = ['POST'])
-    def send_survey(unique_id, survey_type):
+    def send_survey(unique_id: str, survey_type: str) -> RouteResponse:
         """Sends a single, one-off ema/feedback survey to one participant
         right now, synchronously -- distinct from the permanent recurring
         ema/ema_reminder/feedback/feedback_reminder tasks
@@ -234,7 +244,7 @@ def create_flask_app(app_instance):
         return jsonify({"message": f"{survey_type.capitalize()} survey sent to participant {unique_id}"}), 200
 
     @flask_app.route('/participants/send_custom_sms/<unique_id>', methods = ['POST'])
-    def send_custom_sms(unique_id):
+    def send_custom_sms(unique_id: str) -> RouteResponse:
         data = request.get_json(silent=True)
         if not isinstance(data, dict) or 'message' not in data:
             return jsonify({"error": "Message content is required"}), 400
@@ -247,7 +257,7 @@ def create_flask_app(app_instance):
         return jsonify({"message": f"Custom SMS sent to participant {unique_id}"}), 200
     
     @flask_app.route('/participants/study_announcement/<require_on_study>', methods = ['POST'])
-    def study_announcement(require_on_study):
+    def study_announcement(require_on_study: str) -> RouteResponse:
         data = request.get_json(silent=True)
         if not isinstance(data, dict) or 'message' not in data:
             app_instance.add_to_transcript("Study announcement failed: message content is required", "ERROR")
@@ -310,7 +320,7 @@ def create_flask_app(app_instance):
     # rendering -- with TESTING/DEBUG on, that surfaces as an uncaught
     # exception rather than a clean response.)
     @flask_app.errorhandler(Exception)
-    def handle_unexpected_error(e):
+    def handle_unexpected_error(e: Exception) -> RouteResponse | HTTPException:
         if isinstance(e, HTTPException):
             return e
         app_instance.add_to_transcript(f"Unhandled exception in Flask route: {e}", "ERROR")

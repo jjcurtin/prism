@@ -18,8 +18,10 @@ commands: `setup` (create the venv and install dependencies -- run with the
 system python, before the venv exists), `run --mode test` / `run --mode
 prod` (stop any running server, then start PRISM in the given mode -- no
 default mode, to avoid accidentally booting prod), `interface` (launch the
-RA terminal interface), and `test server` / `test client` / `test
-integration` / `test all` (run the pytest suites described below).
+RA terminal interface), `test server` / `test client` / `test
+integration` / `test all` (run the pytest suites described below), and
+`typecheck` (run mypy over `src/`; see `mypy.ini` -- gradual/non-strict,
+`src/` only, wired into CI as its own job).
 
 ## Navigating this repo
 

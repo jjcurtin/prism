@@ -7,6 +7,26 @@ on:
     branches: [dev, main]
 
 jobs:
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          # Matches mypy.ini's python_version = 3.12, and every other job
+          # below -- see the config-loading job's comment for why CI stays
+          # on 3.12 even though pandas itself isn't imported by mypy here.
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Run mypy
+        run: python -m mypy src
+
   routes:
     name: routes
     runs-on: ubuntu-latest

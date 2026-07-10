@@ -8,7 +8,7 @@ PYTHON := $(CURDIR)/$(VENV)/bin/python
 PY_SYS := python3
 endif
 
-.PHONY: help setup run-test run-prod interface test-server test-client test-all test-integration
+.PHONY: help setup run-test run-prod interface test-server test-client test-all test-integration typecheck
 
 .DEFAULT_GOAL := help
 
@@ -52,3 +52,8 @@ test-all:
 # See tests_integration/README.md.
 test-integration:
 	$(PYTHON) tasks.py test integration
+
+# Static type check of src/ via mypy (see mypy.ini). Gradual/non-strict;
+# tests/, tests_interface/, tests_integration/ are out of scope for now.
+typecheck:
+	$(PYTHON) tasks.py typecheck

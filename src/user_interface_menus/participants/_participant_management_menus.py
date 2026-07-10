@@ -1,10 +1,13 @@
 """participant management menus"""
 
+from typing import Any
+
 from user_interface_menus._menu_helper import *
 from user_interface_menus.participants._individual_participant_menu import individual_participant_menu
 from user_interface_menus.participants._add_participant_menu import add_participant_menu
+from user_interface_menus._types import Interface, MenuOptions
 
-def refresh_participants_menu(self):
+def refresh_participants_menu(self: Interface) -> None:
     if prompt_confirmation(self, prompt = "Refresh participants from CSV?"):
         ok, _ = self.api("POST", "participants/refresh_participants")
         if ok:
@@ -14,7 +17,7 @@ def refresh_participants_menu(self):
     else:
         success("Refresh cancelled.", self)
 
-def send_announcement_menu(self):
+def send_announcement_menu(self: Interface) -> None:
     require_on_study = prompt_confirmation(self, prompt = "Send to participants on study only?", default_value = "y")
     print("Sending to participants on study only." if require_on_study else "Sending to all participants.")
     message = print_twilio_terminal_prompt()
@@ -29,7 +32,7 @@ def send_announcement_menu(self):
     else:
         error("No participants found or failed to retrieve.", self)
 
-def remove_participant_menu(self):
+def remove_participant_menu(self: Interface) -> int | None:
     participant_id = get_input(self, prompt = "Please enter the unique ID of the participant that you would like to remove: ")
     if not participant_id or participant_id.strip() == '':
         error("Participant ID cannot be empty.")
@@ -42,8 +45,9 @@ def remove_participant_menu(self):
         else:
             error("Failed to remove participant. Unique ID not found", self)
             return 0
+    return None
 
-def access_specific_participant_menu(self):
+def access_specific_participant_menu(self: Interface) -> int | None:
     participant_id = get_input(self, prompt = "Please enter the unique ID of the participant that you would like to access: ")
     if not participant_id or participant_id.strip() == '':
         error("Participant ID cannot be empty.")
@@ -51,12 +55,13 @@ def access_specific_participant_menu(self):
     ok, data = self.api("GET", f"participants/get_participant/{participant_id}")
     if ok:
         individual_participant_menu(self, participant_id)
+        return None
     else:
         error("Failed to retrieve participant data. Unique ID not found.", self)
         return 0
 
-def participant_management_menu(self):
-    def print_task_schedule(self):
+def participant_management_menu(self: Interface) -> None:
+    def print_task_schedule(self: Interface) -> None:
         if not self.commands_queue:
             tasks_ok, tasks = self.api("GET", "participants/get_participant_task_schedule")
             if tasks_ok and tasks:
@@ -65,7 +70,7 @@ def participant_management_menu(self):
                     print(f"{task['participant_id']}: {task['task_type']} at {task['task_time']} - On Study: {task['on_study']}")
                 exit_menu()
 
-    def _sort(participants):
+    def _sort(participants: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if self.participant_display_mode == "name":
             return sorted(participants, key = lambda x: (x['subid'].lower(), x['initials'].lower()))
         elif self.participant_display_mode == "unique_id":
@@ -76,8 +81,8 @@ def participant_management_menu(self):
             return on_study_true + on_study_false
         else:
             return participants
-        
-    def change_display_mode(self):
+
+    def change_display_mode(self: Interface) -> None:
         modes = ["name", "unique_id", "on_study"]
         print("Select display mode:")
         for mode in modes:
@@ -90,7 +95,7 @@ def participant_management_menu(self):
         else:
             error("Invalid mode selected.", self)
 
-    def _filter(participants):
+    def _filter(participants: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if not self.participant_filter_settings:
             return participants
         filtered = []
@@ -101,7 +106,7 @@ def participant_management_menu(self):
                 filtered.append(p)
         return filtered
 
-    def filter_participants_menu(self):
+    def filter_participants_menu(self: Interface) -> None:
         print("Current filter settings:")
         for key, value in self.participant_filter_settings.items():
             print(f"{key}: {value}")
@@ -133,7 +138,7 @@ def participant_management_menu(self):
             if not self.commands_queue:
                 print_menu_header("participants")
                 assistant_header_write(self, ["Participant Management Menu"])
-            menu_options = {}
+            menu_options: MenuOptions = {}
 
             # Fetch participants from the API
             participants_ok, data = self.api("GET", "participants/get_participants")

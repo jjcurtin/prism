@@ -1,5 +1,7 @@
 """menu display api most text based methods are in _display.py"""
 
+from typing import Any
+
 from difflib import get_close_matches
 
 from user_interface_menus.utils._display import *
@@ -8,14 +10,33 @@ from user_interface_menus.utils._menu_navigation import *
 # here instead of per-function-body, and why it comes from _ui_state.py
 # rather than _menu_helper.py (avoids a real circular import).
 from user_interface_menus._ui_state import ui_state
+from user_interface_menus._types import Interface, MenuOptions
 
-def print_menu_options(self, menu_options, submenu = False, index_and_text = False, choice = None, recommended_actions = None):
+def print_menu_options(
+    self: Interface,
+    menu_options: MenuOptions,
+    submenu: bool = False,
+    index_and_text: bool = False,
+    choice: str | None = None,
+    recommended_actions: list[str] | None = None,
+) -> int:
     from user_interface_menus._menu_helper import add_recent_command, set_local_menu_options
 
     if submenu:
         set_local_menu_options("debug", menu_options)
-    
-    def print_key_line(self, key, item, index, total_items, top_window = False, key2 = None, item2 = None, key3 = None, item3 = None):
+
+    def print_key_line(
+        self: Interface,
+        key: str,
+        item: dict[str, Any],
+        index: int,
+        total_items: int,
+        top_window: bool = False,
+        key2: str | None = None,
+        item2: dict[str, Any] | None = None,
+        key3: str | None = None,
+        item3: dict[str, Any] | None = None,
+    ) -> None:
         try:
             recommended_text = f" (recommended)" if recommended_actions is not None and key in recommended_actions else ""
 
@@ -49,7 +70,13 @@ def print_menu_options(self, menu_options, submenu = False, index_and_text = Fal
                     {"text": f"{yellow(key + green(recommended_text))}", "align_right" : False, "locked": True, "bordered": "both"},
                     {"text": f"{item['description']}", "align_right": False, "locked": False, "bordered": "both"},
                 ]
-            window_positions, column_width = display_in_columns(self, items)
+            columns_result = display_in_columns(self, items)
+            # display_in_columns() only returns its `str` error case when
+            # called with `items=None` -- `items` here is always one of the
+            # literal lists built above, never None, so this is always the
+            # (window_positions, column_width) tuple in practice.
+            assert not isinstance(columns_result, str), columns_result
+            window_positions, column_width = columns_result
             for i, pos in enumerate(window_positions):
                 if index == 0:
                     setattr(self, f"window_{i}_x", pos[0])
@@ -62,7 +89,9 @@ def print_menu_options(self, menu_options, submenu = False, index_and_text = Fal
         except Exception as e:
             error(f"Error printing key line: {e}")
 
-    def display_local_menu_options(self, start_index = 1, num_to_print = None, indexed = False):
+    def display_local_menu_options(
+        self: Interface, start_index: int = 1, num_to_print: int | None = None, indexed: bool = False
+    ) -> None:
         try:
             if num_to_print is None:
                 num_to_print = len(menu_options)
@@ -82,6 +111,8 @@ def print_menu_options(self, menu_options, submenu = False, index_and_text = Fal
 
                 elif indexed and key.isdigit() and num_printed < num_to_print:
                     num_printed += 1
+                    key2: str | None
+                    item2: dict[str, Any] | None
                     if index + ui_state.window_height < total_items:
                         key2, item2 = menu_items[index + ui_state.window_height]
                         if not key2.isdigit():
@@ -89,6 +120,8 @@ def print_menu_options(self, menu_options, submenu = False, index_and_text = Fal
                     else:
                         key2, item2 = None, None
 
+                    key3: str | None
+                    item3: dict[str, Any] | None
                     if index + (ui_state.window_height * 2) < total_items:
                         key3, item3 = menu_items[index + (ui_state.window_height * 2)]
                         if not key3.isdigit():
@@ -105,7 +138,7 @@ def print_menu_options(self, menu_options, submenu = False, index_and_text = Fal
         except Exception as e:
             error(f"Error displaying local menu options: {e}")
 
-    def print_keys(self):
+    def print_keys(self: Interface) -> None:
         try:
             if index_and_text:
                 display_local_menu_options(self, start_index = 1, num_to_print = ui_state.window_height, indexed = True)
@@ -115,7 +148,7 @@ def print_menu_options(self, menu_options, submenu = False, index_and_text = Fal
         except Exception as e:
             error(f"Error printing keys: {e}")
 
-    def check_for_special_commands(choice, self):
+    def check_for_special_commands(choice: str, self: Interface) -> bool:
         try:
             # "home" is a reserved word, not a symbol prefix like the ones
             # below -- matched by exact equality (not startswith) so it
@@ -126,10 +159,10 @@ def print_menu_options(self, menu_options, submenu = False, index_and_text = Fal
             if choice == "home":
                 raise ReturnToMainMenu()
 
-            def check_prefix(prefix):
+            def check_prefix(prefix: str) -> bool:
                 return choice.startswith(prefix)
 
-            def check_prefixes(prefixes):
+            def check_prefixes(prefixes: list[str]) -> list[bool]:
                 return [check_prefix(prefix) for prefix in prefixes]
 
             command, \
@@ -177,9 +210,8 @@ def print_menu_options(self, menu_options, submenu = False, index_and_text = Fal
             return 1
         elif check_for_special_commands(choice, self):
             return 1
-        elif menu_options.get(choice):
+        elif selected := menu_options.get(choice):
             try:
-                selected = menu_options.get(choice)
                 menu_caller = selected['menu_caller']
                 add_recent_command(choice)
                 if goto_menu(menu_caller, self):
@@ -189,9 +221,9 @@ def print_menu_options(self, menu_options, submenu = False, index_and_text = Fal
             except Exception as e:
                 error(f"Local menu option error: {e}")
                 return 0
-        elif check_global_menu_options(choice):
+        elif global_selected := check_global_menu_options(choice):
             try:
-                description, menu_caller = check_global_menu_options(choice)
+                description, menu_caller = global_selected
                 add_recent_command(choice)
                 if goto_menu(menu_caller, self):
                     return 1
@@ -210,7 +242,7 @@ def print_menu_options(self, menu_options, submenu = False, index_and_text = Fal
         error(f"Error parsing command: {e}")
         return 0
 
-def print_global_command_menu(self, query = None):
+def print_global_command_menu(self: Interface, query: str | None = None) -> None:
     menu_options = get_relevant_menu_options(query)
     if query is None:
         menu_options = {k: v for k, v in sorted(menu_options.items(), key=lambda item: item[0])}
@@ -221,13 +253,13 @@ def print_global_command_menu(self, query = None):
     if print_menu_options(self, menu_options, submenu = True):
         return
 
-def print_recent_commands(self):
+def print_recent_commands(self: Interface) -> None:
     if not ui_state.recent_commands:
         if not self.commands_queue:
             print("No recent commands found.")
             exit_menu()
         return
-    menu_options = {}
+    menu_options: MenuOptions = {}
     for command in ui_state.recent_commands:
         menu_options[command] = {
             'description': f"",
@@ -238,20 +270,31 @@ def print_recent_commands(self):
     if print_menu_options(self, menu_options, submenu = True):
         return
 
-def invalid_choice_menu(self, menu_options, choice = None, submenu = False):
+def invalid_choice_menu(self: Interface, menu_options: MenuOptions, choice: str | None = None, submenu: bool = False) -> None:
     from user_interface_menus._menu_helper import add_recent_command
 
-    def sort(iterable):
-        overall_matches = get_close_matches(choice, iterable, n = 5, cutoff = max(ui_state.related_options_threshold, 0.1))
-        best_matches = get_close_matches(choice, iterable, n = 5, cutoff = ui_state.best_options_threshold)
+    # `query` is threaded through explicitly (see get_relevant_menu_options()
+    # in _menu_navigation.py for the same pattern/rationale) rather than
+    # closing over `choice` -- this file's only caller (print_menu_options()
+    # above) always passes a real string by the time it reaches the `else`
+    # branch that calls invalid_choice_menu(), never None, but the
+    # parameter stays Optional for signature flexibility.
+    def sort(iterable: set[str], query: str) -> list[str]:
+        overall_matches = get_close_matches(query, iterable, n = 5, cutoff = max(ui_state.related_options_threshold, 0.1))
+        best_matches = get_close_matches(query, iterable, n = 5, cutoff = ui_state.best_options_threshold)
         if best_matches and ui_state.related_options_threshold < ui_state.best_options_threshold:
             return best_matches
         return overall_matches
 
     potential_local_choices = ', '.join(menu_options.keys())
-    potential_glocal_choices = ', '.join(ui_state.menu_options.keys())
+    potential_glocal_choices = ', '.join(get_menu_options().keys())
     combined_choices = potential_local_choices + ', ' + potential_glocal_choices
-    combined_choices = ', '.join(sort(set(combined_choices.split(', '))))
+    # get_close_matches() (inside sort()) requires a real str and would
+    # already raise TypeError on a None `choice` at runtime -- this assert
+    # just makes that same "never actually None here" invariant explicit
+    # for mypy instead of silently substituting a default.
+    assert choice is not None
+    combined_choices = ', '.join(sort(set(combined_choices.split(', ')), choice))
 
     diagnosis = f"\n{red("Invalid choice.")}"
 
@@ -278,13 +321,13 @@ def invalid_choice_menu(self, menu_options, choice = None, submenu = False):
         if first_choice in menu_options:
             menu_caller = menu_options[first_choice]['menu_caller']
             goto_menu(menu_caller, self)
-        elif first_choice in ui_state.menu_options:
-            menu_caller = ui_state.menu_options[first_choice]['menu_caller']
+        elif first_choice in get_menu_options():
+            menu_caller = get_menu_options()[first_choice]['menu_caller']
             goto_menu(menu_caller, self)
     else:
         print_menu_options(self, menu_options, submenu = True, index_and_text = False, choice = choice)
 
-def infopage(self, content = [], title = 'help infopage'):
+def infopage(self: Interface, content: list[str] = [], title: str = 'help infopage') -> None:
     if not self.commands_queue:
         if content:
             print_menu_header(title)

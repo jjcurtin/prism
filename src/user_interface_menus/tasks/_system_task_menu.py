@@ -3,8 +3,9 @@
 from user_interface_menus._menu_helper import *
 from user_interface_menus.tasks._add_task_menus import *
 from user_interface_menus.tasks._execute_task_menus import *
+from user_interface_menus._types import Interface, MenuOptions
 
-def print_task_schedule(self):
+def print_task_schedule(self: Interface) -> None:
     tasks_ok, tasks = self.api("GET", "system/get_task_schedule")
     if tasks_ok and tasks and "tasks" in tasks:
         self.scheduled_tasks = tasks["tasks"]
@@ -19,7 +20,7 @@ def print_task_schedule(self):
     else:
         print(f"{red("No tasks scheduled.")}")
 
-def remove_task_menu(self):
+def remove_task_menu(self: Interface) -> None:
     if not self.commands_queue:
         print_menu_header("tasks remove")
         print_task_schedule(self)
@@ -47,7 +48,7 @@ def remove_task_menu(self):
     except Exception as e:
         error(f"An error occurred while removing the task: {e}", self)
 
-def clear_task_schedule_menu(self):
+def clear_task_schedule_menu(self: Interface) -> None:
     if prompt_confirmation(self, prompt = "Are you sure you want to clear the task schedule?"):
         ok, _ = self.api("DELETE", "system/clear_task_schedule")
         if ok:
@@ -57,8 +58,8 @@ def clear_task_schedule_menu(self):
     else:
         success("Task schedule not cleared.", self)
 
-def system_task_menu(self):
-    menu_options = {
+def system_task_menu(self: Interface) -> None:
+    menu_options: MenuOptions = {
         'add': {'description': 'Add New Task', 'menu_caller': add_task_menu},
         'remove': {'description': 'Remove Task', 'menu_caller': remove_task_menu},
         'execute': {'description': 'Execute Task Now', 'menu_caller': execute_menu},

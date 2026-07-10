@@ -3,8 +3,9 @@
 import time
 
 from user_interface_menus._menu_helper import *
+from user_interface_menus._types import Interface
 
-def shutdown_menu(self):
+def shutdown_menu(self: Interface) -> None:
     ok, _ = self.api("GET", "system/uptime")
     if ok:
         if prompt_confirmation(self, "Are you sure you want to shut down PRISM?"):

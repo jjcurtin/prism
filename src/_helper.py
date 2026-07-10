@@ -4,6 +4,8 @@ from twilio.rest import Client
 from twilio.base.exceptions import TwilioRestException
 import os
 
+from _types import App
+
 # Placeholder marker used in the checked-in-nowhere, drive-sourced .api
 # template files (e.g. "REPLACE_WITH_QUALTRICS_API_TOKEN") -- a value still
 # carrying this prefix means the credential/field was never actually filled
@@ -14,7 +16,7 @@ import os
 PLACEHOLDER_PREFIX = "REPLACE_WITH_"
 
 
-def _is_real_value(value):
+def _is_real_value(value: object) -> bool:
     if value is None:
         return False
     value = str(value).strip()
@@ -24,7 +26,7 @@ def _is_real_value(value):
         return False
     return True
 
-def send_sms(app, receiver_numbers, messages, is_coordinator_message = False):
+def send_sms(app: App, receiver_numbers: list[str], messages: list[str], is_coordinator_message: bool = False) -> int:
     """Returns the number of recipients the send failed for (0 on success,
     or `len(receiver_numbers)` if the Twilio client itself couldn't be
     built) -- not a bool. notify_coordinators() re-uses this same contract
@@ -84,7 +86,7 @@ def send_sms(app, receiver_numbers, messages, is_coordinator_message = False):
 
     return result
 
-def notify_coordinators(app, message):
+def notify_coordinators(app: App, message: str) -> int:
     """Send `message` to every study coordinator listed in
     `app.study_coordinators_path`, via send_sms(). Gated internally on
     `app.mode == "prod"` -- returns 0 immediately otherwise, matching the
@@ -114,8 +116,8 @@ def notify_coordinators(app, message):
         app.add_to_transcript(f"Failed to read study coordinators. Error message: {e}", "ERROR")
         return 1
 
-    phone_numbers = []
-    bodies = []
+    phone_numbers: list[str] = []
+    bodies: list[str] = []
     for line in lines:
         line = line.strip()
         if not line:
@@ -139,5 +141,5 @@ def notify_coordinators(app, message):
 
     return send_sms(app, phone_numbers, bodies, is_coordinator_message = True)
 
-def clear():
+def clear() -> None:
     os.system('cls' if os.name == 'nt' else 'clear')

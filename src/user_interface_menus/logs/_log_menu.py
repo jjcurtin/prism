@@ -1,9 +1,10 @@
 """menu for accessing logs"""
 
 from user_interface_menus._menu_helper import *
+from user_interface_menus._types import Interface, MenuOptions
 
-def log_menu(self):
-    menu_options = {
+def log_menu(self: Interface) -> None:
+    menu_options: MenuOptions = {
         'transcript': {'description': 'View Today\'s Transcript', 'menu_caller': lambda self: print_transcript(self, 'get_transcript')},
         'interface': {'description': 'View Interface Log', 'menu_caller': lambda self: print_interface_log(self)}
     }
@@ -15,7 +16,7 @@ def log_menu(self):
         if print_menu_options(self, menu_options, submenu = True, recommended_actions = ['transcript']):
             break
 
-def print_transcript(self, log_type):
+def print_transcript(self: Interface, log_type: str) -> None:
     if not self.commands_queue:
         print_menu_header(f"logs {log_type.removeprefix('get_')}")
         num_lines = get_input(self, prompt = "Enter number of lines to view: ", default_value = "10")
@@ -24,7 +25,7 @@ def print_transcript(self, log_type):
         self.request_transcript(num_lines, log_type)
         success(f"{log_type.replace('_', ' ').title()}", self)
 
-def print_interface_log(self):
+def print_interface_log(self: Interface) -> None:
     from user_interface_menus._menu_helper import read_from_interface_log
     if not self.commands_queue:
         print_menu_header("logs interface")

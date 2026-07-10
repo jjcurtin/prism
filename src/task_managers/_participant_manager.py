@@ -1,12 +1,21 @@
 """participant management logic"""
 
+from typing import Any
+
 from _helper import send_sms, notify_coordinators
 from _error_codes import code_prefix
-from task_managers._task_manager import TaskManager
+from _types import App
+from task_managers._task_manager import TaskManager, Task
 import csv
 
+# A participant is a small, loosely-structured dict parsed straight from
+# participants.csv (see load_participants() below) -- kept as
+# `dict[str, Any]` rather than a TypedDict/dataclass, matching Task's own
+# convention in _task_manager.py.
+Participant = dict[str, Any]
+
 class ParticipantManager(TaskManager):
-    def __init__(self, app, name = "ParticipantManager"):
+    def __init__(self, app: App, name: str = "ParticipantManager") -> None:
         try:
             super().__init__(app, name)
             self.survey_types = {
@@ -15,13 +24,13 @@ class ParticipantManager(TaskManager):
                 'feedback': 'feedback_time',
                 'feedback_reminder': 'feedback_reminder_time'
             }
-            self.participants = []
+            self.participants: list[Participant] = []
             self.file_path = self.app.participants_path
             self.load_participants()
         except Exception as e:
             self.app.add_to_transcript(f"Failed to initialize ParticipantManager: {e}", "ERROR")
 
-    def load_participants(self):
+    def load_participants(self) -> int:
         try:
             self.participants.clear()
             self.tasks.clear()
@@ -36,7 +45,7 @@ class ParticipantManager(TaskManager):
                 continue
             try:
                 parts = line.strip().split(',')
-                participant = {
+                participant: Participant = {
                     'initials': parts[0].strip('"'),
                     'subid': parts[1].strip('"'),
                     'unique_id': parts[2].strip('"'),
@@ -53,7 +62,7 @@ class ParticipantManager(TaskManager):
                 self.app.add_to_transcript(f"Skipping malformed participant row {row_number}: {e}", "ERROR")
         return 0
         
-    def get_participant(self, unique_id):
+    def get_participant(self, unique_id: str) -> Participant | None:
         try:
             for participant in self.participants:
                 if participant['unique_id'] == unique_id:
@@ -64,7 +73,7 @@ class ParticipantManager(TaskManager):
             self.app.add_to_transcript(f"Failed to retrieve participant {unique_id}: {e}", "ERROR")
             return None
         
-    def get_lapse_data_and_message(self, unique_id):
+    def get_lapse_data_and_message(self, unique_id: str) -> dict[str, str]:
         """Stub -- always returns the same placeholder values regardless of
         `unique_id`; not yet wired to any real lapse-detection logic.
         """
@@ -75,7 +84,7 @@ class ParticipantManager(TaskManager):
             'message': 'Sample message'
         }
     
-    def get_participants(self):
+    def get_participants(self) -> list[Participant]:
         try:
             return [
                 {
@@ -89,18 +98,19 @@ class ParticipantManager(TaskManager):
             self.app.add_to_transcript(f"Failed to retrieve participants: {e}", "ERROR")
             return []
 
-    def save_participants(self):
+    def save_participants(self) -> int | None:
         try:
             with open(self.file_path, 'w') as file:
                 file.write('"initials","subid","unique_id","on_study","phone_number","ema_time","ema_reminder_time","feedback_time","feedback_reminder_time"\n')
                 for participant in self.participants:
                     on_study_str = 'yes' if participant['on_study'] else 'no'
                     file.write(f'"{participant["initials"]}","{participant["subid"]}","{participant["unique_id"]}","{on_study_str}","{participant["phone_number"]}","{participant["ema_time"]}","{participant["ema_reminder_time"]}","{participant["feedback_time"]}","{participant["feedback_reminder_time"]}"\n')
+            return None
         except Exception as e:
             self.app.add_to_transcript(f"Failed to save participants to CSV: {e}", "ERROR")
             return 1
         
-    def update_participant(self, unique_id, field, value):
+    def update_participant(self, unique_id: str, field: str, value: Any) -> int:
         try:
             participant = self.get_participant(unique_id)
             if participant:
@@ -131,7 +141,7 @@ class ParticipantManager(TaskManager):
             self.app.add_to_transcript(f"An error occurred while updating participant {unique_id}: {e}", "ERROR")
             return 1
         
-    def add_participant(self, participant):
+    def add_participant(self, participant: Participant) -> int:
         """Rolls back the in-memory append if save_participants() fails, so
         self.participants stays in sync with what's actually on disk.
         """
@@ -142,13 +152,13 @@ class ParticipantManager(TaskManager):
         self.schedule_participant_tasks(participant)
         return 0
 
-    def schedule_participant_tasks(self, participant):
+    def schedule_participant_tasks(self, participant: Participant) -> None:
         for task_type, field_name in self.survey_types.items():
             task_time_str = participant.get(field_name)
             if task_time_str:
                 self.add_task(task_type, task_time_str, participant_id = participant['unique_id'])
 
-    def remove_participant(self, unique_id):
+    def remove_participant(self, unique_id: str) -> int:
         participant = self.get_participant(unique_id)
         if participant:
             self.participants.remove(participant)
@@ -159,7 +169,7 @@ class ParticipantManager(TaskManager):
             return 0
         return 1
         
-    def remove_task(self, task_type, task_time = None, participant_id = None):
+    def remove_task(self, task_type: str, task_time: str | None = None, participant_id: str | None = None) -> int:
         for task in self.tasks:
             if task['participant_id'] == participant_id and task['task_type'] == task_type:
                 self.tasks.remove(task)
@@ -168,12 +178,18 @@ class ParticipantManager(TaskManager):
         self.app.add_to_transcript(f"SMS task {task_type} for participant {participant_id} not found.", "ERROR")
         return 1
     
-    def get_task_schedule(self):
+    def get_task_schedule(self) -> list[dict[str, Any]]:
         try:
-            data = [
+            data: list[dict[str, Any]] = [
                 {
                     "participant_id": task.get('participant_id', 'N/A'),
-                    "on_study": self.get_participant(task['participant_id'])['on_study'] if 'participant_id' in task else 'N/A',
+                    # FLAGGED, NOT FIXED (see mypy-adoption report): get_participant()
+                    # can return None (e.g. a task lingering for a since-removed
+                    # participant), and this indexes its result unchecked -- a
+                    # pre-existing crash risk, not something introduced by adding
+                    # types. Left as-is (only silenced for mypy) per instructions
+                    # not to change runtime behavior while annotating.
+                    "on_study": self.get_participant(task['participant_id'])['on_study'] if 'participant_id' in task else 'N/A',  # type: ignore[index]
                     "task_type": task['task_type'],
                     "task_time": task['task_time'].strftime('%H:%M:%S'),
                     "run_today": task.get('run_today', False)
@@ -185,7 +201,7 @@ class ParticipantManager(TaskManager):
             self.app.add_to_transcript(f"Failed to retrieve system task schedule: {e}", "ERROR")
             return []
     
-    def process_task(self, task):
+    def process_task(self, task: Task) -> int:
         try:
             participant_id = task.get('participant_id')
             if not participant_id:
@@ -197,7 +213,11 @@ class ParticipantManager(TaskManager):
                 return -1
             if participant['on_study'] is False:
                 return 0
-            task_type = task.get('task_type')
+            # Default to "" (not a valid key in either task_column_map or
+            # task_attr_map below) rather than None, purely so task_type has
+            # a concrete `str` type -- behaviorally identical to the old
+            # implicit-None case, since neither dict has "" as a key either.
+            task_type: str = task.get('task_type', '')
 
             # reminder checking logic -- remind_ema/remind_feedback ("yes"/"no",
             # config/README.md's reminders.csv schema) record whether this

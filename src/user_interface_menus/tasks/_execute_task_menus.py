@@ -2,8 +2,9 @@
 
 from user_interface_menus.utils._menu_display import *
 from user_interface_menus._menu_helper import *
+from user_interface_menus._types import Interface, MenuOptions
 
-def execute_r_script_menu(self):
+def execute_r_script_menu(self: Interface) -> None:
     if not self.commands_queue:
         print_menu_header("tasks execute rscript")
     r_scripts_ok, r_scripts = self.api("GET", "system/get_r_script_tasks")
@@ -29,7 +30,7 @@ def execute_r_script_menu(self):
     else:
         error(f"Failed to execute R script task {selected_script_name}.", self)
 
-def execute_task_menu(self):
+def execute_task_menu(self: Interface) -> None:
     if not self.commands_queue:
         print_menu_header("tasks execute system")
     task_types = self.get_task_types()
@@ -60,8 +61,8 @@ def execute_task_menu(self):
                 print("No transcript found or failed to retrieve.")
             error("Failed to execute task.", self)
 
-def execute_menu(self):
-    menu_options = {
+def execute_menu(self: Interface) -> None:
+    menu_options: MenuOptions = {
         'system': {'description': 'Execute System Task', 'menu_caller': execute_task_menu},
         'rscript': {'description': 'Execute R Script Task', 'menu_caller': execute_r_script_menu},
     }

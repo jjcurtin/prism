@@ -1,5 +1,7 @@
 """Main runner for the RA PRISM interface"""
 
+from typing import Any
+
 import requests, queue
 from collections import deque
 
@@ -7,22 +9,36 @@ from user_interface_menus._main_menu import main_menu
 from user_interface_menus._menu_helper import README, load_menus, exit_menu, load_params, ui_state
 
 class PRISMInterface:
-    def __init__(self):
+    # Attributes set outside __init__, dynamically, by the various menu
+    # functions under user_interface_menus/ (which take `self` as a plain
+    # first argument -- see user_interface_menus/_types.py). Declared here
+    # (type only, no value) so those modules' `self: Interface` annotations
+    # type-check against the real shape of this object.
+    debug: bool
+    participant_display_mode: str
+    participant_filter_settings: dict[str, str]
+    scheduled_tasks: list[dict[str, Any]]
+    saved_positions: list[tuple[int | None, int | None]]
+    column_width: int
+    window_height: int
+    num_columns: int
+
+    def __init__(self) -> None:
         self.base_url = "http://localhost:5000/"
         ok, _ = self.api("GET", "system/uptime")
         if not ok:
             print("PRISM instance is not running or is not accessible. Please start the PRISM server first.")
             exit(0)
 
-        self.inputs_queue = queue.Queue()
-        self.commands_queue = deque()
+        self.inputs_queue: queue.Queue[str] = queue.Queue()
+        self.commands_queue: deque[str] = deque()
         self.debug = False
 
         if ui_state.show_readme == True:
             README(self)
         main_menu(self)
 
-    def api(self, method, endpoint, json=None):
+    def api(self, method: str, endpoint: str, json: dict[str, Any] | None = None) -> tuple[bool, Any]:
         """Talks to the PRISM Flask server over HTTP. Returns a (ok, data)
         tuple rather than a bare value: `ok` is True only for a real HTTP 200
         response, `data` is the parsed JSON body in that case (None
@@ -59,11 +75,11 @@ class PRISMInterface:
             print(f"An unexpected error occurred: {e}")
         return False, None
 
-    def get_task_types(self):
+    def get_task_types(self) -> dict[str, str]:
         ok, data = self.api("GET", "system/get_task_types")
         return data.get("task_types", {}) if ok and data else {}
 
-    def request_transcript(self, lines, log_type):
+    def request_transcript(self, lines: str | int, log_type: str) -> None:
         ok, data = self.api("GET", f"system/{log_type}/{lines}")
         if ok and data and "transcript" in data:
             for entry in data["transcript"]:

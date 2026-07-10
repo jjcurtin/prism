@@ -1,6 +1,8 @@
 """global commands for prism user interface"""
 
-def init_commands():
+from user_interface_menus._types import MenuOptions
+
+def init_commands() -> MenuOptions:
     from user_interface_menus._main_menu import main_menu
 
     # ------------------------------------------------------------
@@ -52,7 +54,7 @@ def init_commands():
 
     # ------------------------------------------------------------
 
-    _menu_options = {
+    _menu_options: MenuOptions = {
         'main': {'description': 'Main Menu', 'menu_caller': main_menu},
         'check': {'description': 'System Status and Diagnostics', 'menu_caller': system_check_menu},
         'diagnostics': {'description': 'Run System Diagnostics', 'menu_caller': lambda self: DIAGNOSTICS(self)},

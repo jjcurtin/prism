@@ -1,8 +1,9 @@
 """system check menu; basically just runs _check_system.py"""
 
 from user_interface_menus._menu_helper import *
+from user_interface_menus._types import Interface, MenuOptions
 
-def diagnostics(self):
+def diagnostics(self: Interface) -> None:
     ok, _ = self.api("POST", "system/execute_task/CHECK_SYSTEM")
     if ok:
         success("System checks complete. No issues found.")
@@ -10,8 +11,8 @@ def diagnostics(self):
         self.request_transcript(25, "get_transcript")
         error("Failure detected. Please check the transcript for details.")
 
-def system_check_menu(self):
-    menu_options = {
+def system_check_menu(self: Interface) -> None:
+    menu_options: MenuOptions = {
         'diagnostics': {"description": "Run System Diagnostics", "menu_caller": diagnostics},
     }
     while True:

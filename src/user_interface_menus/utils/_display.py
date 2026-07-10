@@ -1,5 +1,7 @@
 """display api"""
 
+from typing import Any, Callable
+
 import os, sys, time
 from user_interface_menus.utils._keyboard import kbhit, getwch, read_arrow_key, raw_mode
 # `ui_state` is imported here (before any of this module's functions are
@@ -16,54 +18,81 @@ from user_interface_menus.utils._keyboard import kbhit, getwch, read_arrow_key, 
 # _menu_display.py, which import it too) happens to be the first module
 # Python loads. See _ui_state.py's docstring for the full explanation.
 from user_interface_menus._ui_state import ui_state
+from user_interface_menus._types import Interface
 
-def clear():
+def clear() -> None:
     os.system('cls' if os.name == 'nt' else 'clear')
 
-def toggle_debug_mode(self):
+def toggle_debug_mode(self: Interface) -> None:
     self.debug = not self.debug
 
-def green(message = None):
+def green(message: object = None) -> str:
     green, color_end = ("\033[32m", "\033[0m") if ui_state.color_on else ("\033[1m", "\033[0m")
     return f"{green}{message}{color_end}"
 
-def red(message = None):
+def red(message: object = None) -> str:
     red, color_end = ("\033[31m", "\033[0m") if ui_state.color_on else ("\033[1m", "\033[0m")
     return f"{red}{message}{color_end}"
 
-def yellow(message = None):
+def yellow(message: object = None) -> str:
     yellow, color_end = ("\033[33m", "\033[0m") if ui_state.color_on else ("\033[4m", "\033[0m")
     return f"{yellow}{message}{color_end}"
 
-def cyan(message = None):
+def cyan(message: object = None) -> str:
     cyan, color_end = ("\033[36m", "\033[0m") if ui_state.color_on else ("", "")
     return f"{cyan}{message}{color_end}"
 
-def white(message = None):
+def white(message: object = None) -> str:
     white, color_end = ("\033[37m", "\033[0m") if ui_state.color_on else ("", "")
     return f"{white}{message}{color_end}"
 
-def syntax_highlight(self, prompt = "", items = None):
+# A "syntax item" pairs a color function (green/red/yellow/cyan/white above)
+# with the substring it should be applied to -- see syntax_highlight() and
+# syntax_highlight_string() below, and their callers (e.g.
+# print_fixed_terminal_prompt()'s scan_recovered_string()).
+SyntaxItem = tuple[Callable[[object], str], str]
+
+def syntax_highlight(self: Interface, prompt: str = "", items: list[SyntaxItem] | None = None) -> None:
     if not ui_state.color_on:
         return
     curr_pos = get_cursor_position()
-    move_cursor(self, 0, curr_pos[1] - 1)
+    # FLAGGED, NOT FIXED (see mypy-adoption report): curr_pos[1] can be None
+    # (a failed ANSI cursor-position read -- see get_cursor_position()'s own
+    # return type below), and this does arithmetic on it unguarded, unlike
+    # every call site that checks `is not None` first. Pre-existing crash
+    # risk, not introduced by adding types.
+    move_cursor(self, 0, curr_pos[1] - 1)  # type: ignore[operator]
     output = prompt
-    for item in items:
+    for item in items:  # type: ignore[union-attr]
         output += item[0](item[1])
     print(output)
 
-def syntax_highlight_string(self, input_string, prompt = "", items = None, in_place = False):
+def syntax_highlight_string(
+    self: Interface,
+    input_string: str,
+    prompt: str = "",
+    items: list[SyntaxItem] | None = None,
+    in_place: bool = False,
+) -> None:
     try:
         if not ui_state.color_on or items is None:
             return
         curr_pos = get_cursor_position()
         if not in_place:
-            move_cursor(self, 0, curr_pos[1] - 1)
+            # FLAGGED, NOT FIXED (see mypy-adoption report): same
+            # unguarded-None-arithmetic pattern as syntax_highlight() above.
+            move_cursor(self, 0, curr_pos[1] - 1)  # type: ignore[operator]
         elif in_place:
             try:
                 ansi_clear_line()
-                while move_cursor(self, 0, curr_pos[1]):
+                # FLAGGED, NOT FIXED (see mypy-adoption report): move_cursor()
+                # always returns None, so this `while` loop's body never
+                # executes more than once regardless -- functionally just a
+                # single move_cursor() call dressed up as a loop. Not a
+                # crash, just dead-looking control flow; left as-is per
+                # instructions not to change runtime behavior while
+                # annotating.
+                while move_cursor(self, 0, curr_pos[1]):  # type: ignore[func-returns-value]
                     pass
             except Exception as e:
                 error(f"ANSI error: " + str(e), self)
@@ -83,7 +112,18 @@ def syntax_highlight_string(self, input_string, prompt = "", items = None, in_pl
             print(f"Input string: {input_string}, Prompt: {prompt}, Items: {items}")
         return
 
-def align(self, text, column_number, num_columns, formatless = None, window_width = None, align_right = None, locked = False, border_left = False, border_right = False):
+def align(
+    self: Interface,
+    text: str,
+    column_number: int,
+    num_columns: int,
+    formatless: str | None = None,
+    window_width: int | None = None,
+    align_right: bool | None = None,
+    locked: bool = False,
+    border_left: bool = False,
+    border_right: bool = False,
+) -> str:
     import re
 
     if window_width is None:
@@ -174,7 +214,11 @@ def align(self, text, column_number, num_columns, formatless = None, window_widt
 
     return output
 
-def display_in_columns(self, items = None):
+DisplayItem = dict[str, Any]
+# window_positions is a list of (x, y) screen coordinates, one per column.
+WindowPositions = list[tuple[int, int]]
+
+def display_in_columns(self: Interface, items: list[DisplayItem] | None = None) -> str | tuple[WindowPositions, int]:
     try:
         import re
 
@@ -185,9 +229,9 @@ def display_in_columns(self, items = None):
             return "Error: No items to display."
         num_segments = len(items)
 
-        window_positions = []
+        window_positions: WindowPositions = []
 
-        def assemble_content():
+        def assemble_content() -> tuple[str, int]:
             column_width = int(ui_state.window_width / num_segments)
             frame_width = column_width
             output = ""
@@ -246,7 +290,7 @@ def display_in_columns(self, items = None):
         error(f"Error displaying items in columns: {e}", self)
         return [], 0
 
-def error(message = "An unexpected error occurred.", self = None):
+def error(message: str = "An unexpected error occurred.", self: Interface | None = None) -> None:
     from user_interface_menus.utils._menu_navigation import clear_commands_queue
     from user_interface_menus._menu_helper import write_to_interface_log
 
@@ -261,7 +305,7 @@ def error(message = "An unexpected error occurred.", self = None):
         clear_commands_queue(self)
     exit_menu()
 
-def success(message = "Operation completed successfully.", self = None):
+def success(message: str = "Operation completed successfully.", self: Interface | None = None) -> None:
     print(f"{green('Success')}: {message}")
     from user_interface_menus._menu_helper import write_to_interface_log
     try:
@@ -272,15 +316,15 @@ def success(message = "Operation completed successfully.", self = None):
     # skip exit menu
     if self is None or not self.commands_queue:
         exit_menu()
-    
-def exit_menu():
+
+def exit_menu() -> None:
     input(f"\n{yellow("ENTER to Continue>")} ")
 
-def exit_interface(self):
+def exit_interface(self: Interface) -> None:
     print(green("Exiting PRISM Interface."))
     exit(0)
 
-def print_menu_header(title):
+def print_menu_header(title: str) -> None:
     clear()
     padding = (ui_state.window_width - len(title)) // 2
     print_equals()
@@ -291,7 +335,7 @@ def print_menu_header(title):
     print_dashes()
     print()
 
-def print_dashes(delay = None):
+def print_dashes(delay: float | None = None) -> None:
     if delay is not None:
         for i in range(ui_state.window_width):
             print("-", end="", flush = True)
@@ -299,7 +343,7 @@ def print_dashes(delay = None):
     else:
         print("-" * ui_state.window_width)
 
-def print_guide_lines(divisions, line_type, num_segments):
+def print_guide_lines(divisions: int, line_type: str, num_segments: int) -> None:
     max_divisions = 3
     if divisions > max_divisions:
         error(f"Maximum divisions is {max_divisions}. You requested {divisions}.")
@@ -353,15 +397,15 @@ def print_guide_lines(divisions, line_type, num_segments):
         )
         print(s.strip())
 
-def print_equals():
+def print_equals() -> None:
     print("=" * ui_state.window_width)
 
-def print_fixed_terminal_prompt(self = None, submenu = True):
-    def scan_recovered_string(recovered_string):
+def print_fixed_terminal_prompt(self: Interface | None = None, submenu: bool = True) -> str:
+    def scan_recovered_string(recovered_string: str) -> list[SyntaxItem]:
         from user_interface_menus.utils._menu_navigation import get_relevant_menu_options
         from user_interface_menus._menu_helper import get_local_menu_options
         import re
-        items = []
+        items: list[SyntaxItem] = []
         if not recovered_string or not recovered_string.startswith('/'):
 
             if recovered_string.startswith("?"):
@@ -471,16 +515,23 @@ def print_fixed_terminal_prompt(self = None, submenu = True):
     print()
     return recovered_string.strip()
 
-def re_print_fixed_terminal_prompt(self):
+def re_print_fixed_terminal_prompt(self: Interface) -> str:
     x, y = save_current_cursor_pos(self)
-    move_cursor(self, x + len('prism> '), y - 1)
+    # FLAGGED, NOT FIXED (see mypy-adoption report): x/y are `int | None`
+    # (get_cursor_position() returns (None, None) on a failed ANSI
+    # position read -- see its own docstring/return below), but this is the
+    # one call site that does arithmetic on them without the `is not None`
+    # guard every other caller in this file uses. Pre-existing crash risk,
+    # not introduced by adding types; left as-is (only silenced for mypy)
+    # per instructions not to change runtime behavior while annotating.
+    move_cursor(self, x + len('prism> '), y - 1)  # type: ignore[operator]
     return print_fixed_terminal_prompt(self).strip()
 
-def print_twilio_terminal_prompt():
+def print_twilio_terminal_prompt() -> str:
     print("Please enter your message below. Press ENTER to send.")
     return input(f"\n{green('twilio> ')}").strip()
 
-def get_cursor_position():
+def get_cursor_position() -> tuple[int | None, int | None]:
     sys.stdout.write("\033[6n")
     sys.stdout.flush()
 
@@ -512,31 +563,36 @@ def get_cursor_position():
         error(f"Failed to parse cursor position: {e}")
         return None, None
         
-def save_current_cursor_pos(self):
+def save_current_cursor_pos(self: Interface) -> tuple[int | None, int | None]:
     x, y = get_cursor_position()
     save_cursor_pos(self, x, y)
     return x, y
-        
-def save_cursor_pos(self, x, y):
+
+def save_cursor_pos(self: Interface, x: int | None, y: int | None) -> None:
     if not hasattr(self, 'saved_positions'):
         self.saved_positions = []
     self.saved_positions.append((x, y))
 
-def restore_cursor_pos(self, index=-1):
+def restore_cursor_pos(self: Interface, index: int = -1) -> None:
     if not hasattr(self, 'saved_positions') or not self.saved_positions:
         return
     x, y = self.saved_positions[index]
     move_cursor(self, x, y)
 
-def move_cursor(self, x, y):
+def move_cursor(self: Interface, x: int | None, y: int | None) -> None:
     try:
-        sys.stdout.write(f"\033[{y+1};{x+1}H")
+        # x/y may genuinely be None (e.g. a failed get_cursor_position()
+        # read) -- unlike the flagged spots noted elsewhere in this file,
+        # that's not a bug here: the arithmetic below is wrapped in this
+        # try/except specifically to swallow that case (see the `except`
+        # branch's debug-only message).
+        sys.stdout.write(f"\033[{y+1};{x+1}H")  # type: ignore[operator]
         sys.stdout.flush()
     except Exception as e:
         if getattr(self, 'debug', False):
             print(f"error moving: {x if x is not None else 'None'}, {y if y is not None else 'None'}")
 
-def clear_column(self, x, y, width, height):
+def clear_column(self: Interface, x: int, y: int, width: int, height: int) -> None:
     save_x, save_y = get_cursor_position()
     if save_x is not None and save_y is not None:
         save_cursor_pos(self, save_x, save_y)
@@ -545,41 +601,41 @@ def clear_column(self, x, y, width, height):
         sys.stdout.write(" " * width)
     restore_cursor_pos(self, 0)
 
-def ansi_save_cursor():
+def ansi_save_cursor() -> None:
     sys.stdout.write("\033[s")
     sys.stdout.flush()
 
-def ansi_restore_cursor():
+def ansi_restore_cursor() -> None:
     sys.stdout.write("\033[u")
     sys.stdout.flush()
 
-def ansi_clear_line():
+def ansi_clear_line() -> None:
     sys.stdout.write("\033[2K")
     sys.stdout.flush()
 
-def ansi_clear_screen():
+def ansi_clear_screen() -> None:
     sys.stdout.write("\033[2J")
     sys.stdout.flush()
 
-def ansi_write_char(c):
+def ansi_write_char(c: str) -> None:
     sys.stdout.write(c)
     sys.stdout.flush()
 
-def ansi_hide_cursor():
+def ansi_hide_cursor() -> None:
     sys.stdout.write("\033[?25l")
     sys.stdout.flush()
 
-def ansi_show_cursor():
+def ansi_show_cursor() -> None:
     sys.stdout.write("\033[?25h")
     sys.stdout.flush()
 
-def ansi_write_str(s):
+def ansi_write_str(s: str) -> None:
     sys.stdout.write(s)
     sys.stdout.flush()
 
 # def screen_write(self, content, initial_x, initial_y, column_width, window_height):
 
-def assistant_header_write(self, lines):
+def assistant_header_write(self: Interface, lines: list[str]) -> None:
     import re
 
     lines = [line.encode().decode('unicode_escape') for line in lines]

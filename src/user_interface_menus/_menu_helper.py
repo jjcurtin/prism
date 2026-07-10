@@ -12,42 +12,43 @@ from user_interface_menus._ui_state import ui_state
 
 from user_interface_menus.utils._display import *
 from user_interface_menus.utils._menu_display import *
+from user_interface_menus._types import Interface, MenuOptions
 
-def set_window_width(width):
+def set_window_width(width: int) -> None:
     if isinstance(width, int) and width > 0:
         ui_state.window_width = width
     else:
         error("Window width must be a positive integer.")
     save_params()
 
-def set_window_height(height):
+def set_window_height(height: int) -> None:
     if isinstance(height, int) and height > 0:
         ui_state.window_height = height
     else:
         error("Window height must be a positive integer.")
     save_params()
 
-def toggle_right_align(self = None):
+def toggle_right_align(self: Interface | None = None) -> None:
     ui_state.right_align = not ui_state.right_align
     save_params()
 
-def set_show_readme(show):
+def set_show_readme(show: bool) -> None:
     ui_state.show_readme = show
     save_params()
 
-def toggle_color_output(self):
+def toggle_color_output(self: Interface) -> None:
     ui_state.color_on = not ui_state.color_on
     save_params()
 
-def set_related_options_threshold(new_threshold):
+def set_related_options_threshold(new_threshold: float) -> None:
     ui_state.related_options_threshold = new_threshold
     save_params()
 
-def set_best_options_threshold(new_threshold):
+def set_best_options_threshold(new_threshold: float) -> None:
     ui_state.best_options_threshold = new_threshold
     save_params()
 
-def set_assistant_type_speed(speed):
+def set_assistant_type_speed(speed: float) -> None:
     print(speed)
     if isinstance(speed, (int, float)) and speed > 0:
         ui_state.assistant_type_speed = speed
@@ -55,41 +56,41 @@ def set_assistant_type_speed(speed):
         error(f"Assistant type speed must be a positive number: {speed}")
     save_params()
 
-def set_menu_delay(delay):
+def set_menu_delay(delay: float) -> None:
     if isinstance(delay, (int, float)) and delay >= 0:
         ui_state.menu_delay = delay
     else:
         error("Menu delay must be a non-negative number.")
     save_params()
 
-def set_timeout(timeout):
+def set_timeout(timeout: int) -> None:
     if isinstance(timeout, int) and timeout > 0:
         ui_state.timeout = timeout
     else:
         error("Timeout must be a positive integer.")
     save_params()
 
-def add_recent_command(command):
+def add_recent_command(command: str) -> None:
     if command != 'recent' and command != 'command' and command not in ui_state.recent_commands:
         ui_state.recent_commands.append(command)
         if len(ui_state.recent_commands) > 10:
             ui_state.recent_commands.pop(0)
 
-def set_local_menu_options(menu_name, menu_options):
+def set_local_menu_options(menu_name: str, menu_options: MenuOptions) -> None:
     ui_state.current_menu = menu_name
     ui_state.local_menu_options = menu_options
 
-def print_local_menu_options(self = None):
+def print_local_menu_options(self: Interface | None = None) -> None:
     if ui_state.local_menu_options:
         print(f"\nLocal menu options ({yellow('/<command>')} to access):\n")
         for key, value in ui_state.local_menu_options.items():
             print(f"{yellow(key)}")
     print()
 
-def get_local_menu_options():
+def get_local_menu_options() -> MenuOptions:
     return ui_state.local_menu_options
 
-def load_params():
+def load_params() -> None:
     import time
 
     clear()
@@ -190,7 +191,7 @@ def load_params():
     time.sleep(ui_state.menu_delay * 2)
     save_params()
 
-def save_params():
+def save_params() -> None:
     file_path = "../config/uiconfig.txt"
     with open(file_path, 'w') as file:
         file.write(f"RIGHT_ALIGN={ui_state.right_align}\n")
@@ -204,13 +205,13 @@ def save_params():
         file.write(f"MENU_DELAY={ui_state.menu_delay}\n")
         file.write(f"TIMEOUT={ui_state.timeout}\n")
 
-def load_menus():
+def load_menus() -> None:
     clear()
     print("Now loading menus...")
     from user_interface_menus.utils._commands import init_commands
     ui_state.menu_options = init_commands()
 
-def write_to_interface_log(message):
+def write_to_interface_log(message: str) -> None:
     try:
         import os
         os.makedirs("../logs/interface_logs", exist_ok=True)
@@ -219,7 +220,7 @@ def write_to_interface_log(message):
     except Exception as e:
         print(f"Error: Could not write to log file: {e}")
 
-def read_from_interface_log():
+def read_from_interface_log() -> str:
     try:
         with open("../logs/interface_logs/test_interface_log.txt", "r") as file:
             content = file.read()
@@ -236,7 +237,7 @@ def read_from_interface_log():
 # imports README directly to show it on startup when SHOW_README is True --
 # this is not part of the help-menu navigation tree being removed.
 
-read_me_lines = [
+read_me_lines: list[str] = [
     f"I recommend looking through the commands available via {yellow('command')}.",
     f"\nYou can search for commands by typing {yellow('command <query>')} or {yellow('?<query>')}. Leave {yellow('<query>')} empty to search for all commands.",
     f"Most commands are globally accessible but some are only available in specific menus.",
@@ -249,7 +250,7 @@ read_me_lines = [
     f"\nTo stop this message from displaying on startup use the command {yellow('readme set')}."
 ]
 
-def read_me(self):
+def read_me(self: Interface) -> None:
     if not self.commands_queue:
         print_menu_header("readme")
         for line in read_me_lines:

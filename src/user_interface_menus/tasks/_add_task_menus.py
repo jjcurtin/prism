@@ -4,8 +4,9 @@ import time
 
 from user_interface_menus.utils._menu_display import *
 from user_interface_menus._menu_helper import *
+from user_interface_menus._types import Interface, MenuOptions
 
-def add_new_r_script_menu(self):
+def add_new_r_script_menu(self: Interface) -> None:
     if not self.commands_queue:
         print_menu_header("tasks add rscript")
     r_scripts_ok, r_scripts = self.api("GET", "system/get_r_script_tasks")
@@ -39,7 +40,7 @@ def add_new_r_script_menu(self):
     else:
         error(f"Failed to schedule R script task {selected_script_name}.", self)
 
-def add_new_task_menu(self):
+def add_new_task_menu(self: Interface) -> None:
     if not self.commands_queue:
         print_menu_header("tasks add system")
     task_types = self.get_task_types()
@@ -74,8 +75,8 @@ def add_new_task_menu(self):
         else:
             error("Failed to add task.", self)
 
-def add_task_menu(self):
-    menu_options = {
+def add_task_menu(self: Interface) -> None:
+    menu_options: MenuOptions = {
         'system': {'description': 'Add New System Task', 'menu_caller': add_new_task_menu},
         'rscript': {'description': 'Add New R Script Task', 'menu_caller': add_new_r_script_menu},
     }

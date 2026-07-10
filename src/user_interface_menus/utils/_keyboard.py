@@ -5,8 +5,9 @@ import sys
 import os
 import platform
 import contextlib
+from typing import Iterator
 
-IS_WINDOWS = platform.system() == 'Windows'
+IS_WINDOWS: bool = platform.system() == 'Windows'
 
 if IS_WINDOWS:
     import msvcrt
@@ -26,12 +27,12 @@ else:
     # this module is merely imported under redirected/non-tty stdin (e.g.
     # pytest's default capture, or a service with stdin from /dev/null) —
     # only kbhit()/getwch()/read_arrow_key() actually need a real terminal.
-    def _stdin_fd():
+    def _stdin_fd() -> int:
         return sys.stdin.fileno()
 
 
 @contextlib.contextmanager
-def raw_mode():
+def raw_mode() -> Iterator[None]:
     """Enables kbhit()/getwch() for the duration of the block. No-op on
     Windows (msvcrt already reads the console raw per-call). On POSIX,
     puts stdin into cbreak mode and always restores the original settings
@@ -50,19 +51,28 @@ def raw_mode():
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
 
-def kbhit():
+def kbhit() -> bool:
     """Non-blocking check for whether a key is waiting to be read."""
     if IS_WINDOWS:
-        return msvcrt.kbhit()
+        # typeshed's own msvcrt.pyi gates its entire contents behind a
+        # literal `if sys.platform == "win32":` check, which mypy specially
+        # recognizes to silence "possibly unbound"/"platform-only module"
+        # errors -- but only for that exact literal form, not for a
+        # runtime bool like IS_WINDOWS (see this module's docstring for why
+        # platform.system() is used instead of sys.platform here: no
+        # functional difference, just a naming/readability choice predating
+        # this mypy adoption). Narrow, unavoidable ignore rather than
+        # restructuring this whole module's platform-branching idiom.
+        return msvcrt.kbhit()  # type: ignore[attr-defined, no-any-return]
     dr, _, _ = select.select([_stdin_fd()], [], [], 0)
     return bool(dr)
 
 
-def getwch():
+def getwch() -> str:
     """Blocking read of exactly one raw character. Call only after
     kbhit() returns True (and, on POSIX, within a raw_mode() block)."""
     if IS_WINDOWS:
-        return msvcrt.getwch()
+        return msvcrt.getwch()  # type: ignore[attr-defined, no-any-return]
     return os.read(_stdin_fd(), 1).decode(errors='replace')
 
 
@@ -71,11 +81,11 @@ def getwch():
 # POSIX sends the ANSI escape '\x1b' '[' followed by one letter (three
 # reads). read_arrow_key() normalizes both into the same small set of
 # direction strings so callers don't need platform branches of their own.
-_WINDOWS_ARROW_MAP = {'H': 'UP', 'P': 'DOWN', 'K': 'LEFT', 'M': 'RIGHT'}
-_POSIX_ARROW_MAP = {'A': 'UP', 'B': 'DOWN', 'D': 'LEFT', 'C': 'RIGHT'}
+_WINDOWS_ARROW_MAP: dict[str, str] = {'H': 'UP', 'P': 'DOWN', 'K': 'LEFT', 'M': 'RIGHT'}
+_POSIX_ARROW_MAP: dict[str, str] = {'A': 'UP', 'B': 'DOWN', 'D': 'LEFT', 'C': 'RIGHT'}
 
 
-def read_arrow_key(first_char):
+def read_arrow_key(first_char: str) -> str | None:
     """Given a char just read via getwch() that might be the start of an
     arrow-key sequence, consumes the rest of that sequence (if any) and
     returns 'UP'/'DOWN'/'LEFT'/'RIGHT', or None if first_char wasn't the

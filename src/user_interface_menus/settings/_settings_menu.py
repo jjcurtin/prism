@@ -5,8 +5,9 @@ from user_interface_menus._menu_helper import *
 # underscore), but named explicitly here since this file reads several of
 # its attributes directly in function bodies below.
 from user_interface_menus._menu_helper import ui_state
+from user_interface_menus._types import Interface, MenuOptions
 
-def window_width_settings(self):
+def window_width_settings(self: Interface) -> int | None:
     print("Current PRISM window width:", ui_state.window_width)
     new_width = get_input(self, prompt = "Enter new width between 80 and 200: ")
     if not new_width.isdigit():
@@ -16,8 +17,9 @@ def window_width_settings(self):
         error("Window width cannot exceed 200 characters.")
         return 0
     set_window_width(int(new_width))
+    return None
 
-def window_height_settings(self):
+def window_height_settings(self: Interface) -> int | None:
     print("Current PRISM window height:", ui_state.window_height)
     new_height = get_input(self, prompt = "Enter new height between 5 and 15: ")
     if not new_height.isdigit():
@@ -27,8 +29,9 @@ def window_height_settings(self):
         error("Window height must be between 5 and 15 lines.")
         return 0
     set_window_height(int(new_height))
+    return None
 
-def print_display_params(self):
+def print_display_params(self: Interface) -> None:
     if not self.commands_queue:
         print()
         print(f"PRISM window width: {ui_state.window_width}")
@@ -36,8 +39,8 @@ def print_display_params(self):
         print(f"Color output in terminal: {'enabled' if ui_state.color_on else 'disabled'}")
         exit_menu()
 
-def display_settings(self):
-    menu_options = {
+def display_settings(self: Interface) -> None:
+    menu_options: MenuOptions = {
         'print': {'description': 'Print current system parameters', 'menu_caller': print_display_params},
         'width': {'description': 'Adjust PRISM window width', 'menu_caller': window_width_settings},
         'height': {'description': 'Adjust PRISM window height', 'menu_caller': window_height_settings},
@@ -52,7 +55,7 @@ def display_settings(self):
         if print_menu_options(self, menu_options, submenu = True, recommended_actions = ['color']):
             break
 
-def related_parameter(self):
+def related_parameter(self: Interface) -> int | None:
     print("Current threshold:", ui_state.related_options_threshold)
     new_threshold = get_input(self, prompt = "Enter new threshold (ranges 0.0 to 1.0): ")
     if new_threshold == '':
@@ -65,9 +68,10 @@ def related_parameter(self):
         error("Invalid input. Please try again.")
         return 0
     set_related_options_threshold(float(new_threshold))
+    return None
 
 
-def best_related_parameter(self):
+def best_related_parameter(self: Interface) -> int | None:
     print("Current threshold:", ui_state.best_options_threshold)
     new_threshold = get_input(self, prompt = "Enter new threshold (ranges 0.0 to 1.0): ")
     if new_threshold == '':
@@ -80,8 +84,9 @@ def best_related_parameter(self):
         error("Invalid input. Please try again.")
         return 0
     set_best_options_threshold(float(new_threshold))
+    return None
 
-def menu_delay_parameter(self):
+def menu_delay_parameter(self: Interface) -> int | None:
     print("Current menu delay:", ui_state.menu_delay)
     new_delay = get_input(self, prompt = "Enter new menu delay (must be a positive number): ")
     if new_delay == '':
@@ -94,8 +99,9 @@ def menu_delay_parameter(self):
         error("Invalid input. Please try again.")
         return 0
     set_menu_delay(float(new_delay))
+    return None
 
-def timeout_parameter(self):
+def timeout_parameter(self: Interface) -> int | None:
     print("Current timeout:", ui_state.timeout)
     new_timeout = get_input(self, prompt = "Enter new timeout (must be a positive integer): ")
     if new_timeout == '':
@@ -108,8 +114,9 @@ def timeout_parameter(self):
         error("Invalid input. Please try again.")
         return 0
     set_timeout(int(new_timeout))
+    return None
 
-def param_set_type_speed(self):
+def param_set_type_speed(self: Interface) -> int | None:
     print("Current header type speed:", ui_state.assistant_type_speed)
     new_speed = get_input(self, prompt = "Enter new type speed (must be a positive number recommended 0.015): ")
     print(f"New type speed: {new_speed}")
@@ -123,8 +130,9 @@ def param_set_type_speed(self):
         error("Invalid input. Please try again.")
         return 0
     set_assistant_type_speed(float(new_speed))
+    return None
 
-def print_params(self):
+def print_params(self: Interface) -> None:
     if not self.commands_queue:
         print(f"RELATED_OPTIONS_THRESHOLD: {ui_state.related_options_threshold}")
         print(f"BEST_OPTIONS_THRESHOLD: {ui_state.best_options_threshold}")
@@ -133,8 +141,8 @@ def print_params(self):
         print(f"TIMEOUT: {ui_state.timeout}")
         exit_menu()
 
-def parameter_settings(self):
-    menu_options = {
+def parameter_settings(self: Interface) -> None:
+    menu_options: MenuOptions = {
         'print': {'description': 'Print current system parameters', 'menu_caller': print_params},
         'threshold': {'description': 'Adjust the minimum command prediction similarity tolerance', 'menu_caller': related_parameter},
         'best threshold': {'description': 'Adjust the prioritized "best" command prediction similarity tolerance', 'menu_caller': best_related_parameter},
@@ -149,7 +157,7 @@ def parameter_settings(self):
         if print_menu_options(self, menu_options, submenu = True, recommended_actions = ['print']):
             break
 
-def readme(self):
+def readme(self: Interface) -> None:
     if ui_state.show_readme:
         print("PRISM Readme is currently enabled.")
     else:
@@ -159,8 +167,8 @@ def readme(self):
     set_show_readme(show_on_startup)
     success(f"PRISM Readme on startup {'enabled' if show_on_startup else 'disabled'}.", self)
 
-def system_settings(self):
-    menu_options = {
+def system_settings(self: Interface) -> None:
+    menu_options: MenuOptions = {
         'params': {'description': 'Adjust system parameters', 'menu_caller': parameter_settings},
         'readme set': {'description': 'Toggle display of the PRISM Readme on startup', 'menu_caller': readme},
     }
@@ -172,8 +180,8 @@ def system_settings(self):
         if print_menu_options(self, menu_options, submenu = True):
             break
 
-def settings_menu(self):
-    menu_options = {
+def settings_menu(self: Interface) -> None:
+    menu_options: MenuOptions = {
         'system': {'description': 'System Settings', 'menu_caller': system_settings},
         'display': {'description': 'Manage Display settings', 'menu_caller': display_settings}
     }

@@ -1,12 +1,14 @@
 """menu for managing an individual participant"""
 
 import time
+from typing import Any
 
 from user_interface_menus.utils._menu_display import *
 from user_interface_menus._menu_helper import *
+from user_interface_menus._types import Interface, MenuOptions
 
-def individual_participant_menu(self, participant_id):
-    def remove_participant_menu(self):
+def individual_participant_menu(self: Interface, participant_id: str) -> None:
+    def remove_participant_menu(self: Interface) -> int | None:
         if prompt_confirmation(self, prompt = "Remove participant?"):
             ok, _ = self.api("DELETE", f"participants/remove_participant/{participant_id}")
             if ok:
@@ -15,8 +17,9 @@ def individual_participant_menu(self, participant_id):
             else:
                 error("Failed to remove participant.", self)
                 return 0
+        return None
 
-    def update_field_menu(self, choice):
+    def update_field_menu(self: Interface, choice: str) -> None:
         field_map = {
             '1': 'initials', '2': 'subid', '3': 'unique_id', '4': 'on_study',
             '5': 'phone_number', '6': 'ema_time', '7': 'ema_reminder_time',
@@ -51,7 +54,7 @@ def individual_participant_menu(self, participant_id):
         else:
             error("Failed to update participant.", self)
 
-    def send_one_time_survey_menu(self, participant_id, survey_type):
+    def send_one_time_survey_menu(self: Interface, participant_id: str, survey_type: str) -> None:
         """Sends a single one-off ema/feedback survey to this participant
         right now (POST /participants/send_survey/<id>/<survey_type>, fixed
         to `survey_type` -- no type-prompting). The route sends
@@ -67,7 +70,7 @@ def individual_participant_menu(self, participant_id):
         else:
             error(f"Failed to send {survey_type} survey.", self)
 
-    def send_message_menu(self, participant_id):
+    def send_message_menu(self: Interface, participant_id: str) -> None:
         message = print_twilio_terminal_prompt()
         if not message:
             error("Message cannot be empty.")
@@ -79,14 +82,22 @@ def individual_participant_menu(self, participant_id):
             error("Failed to send message.", self)
 
     ok, data = self.api("GET", f"participants/get_participant/{participant_id}")
-    participant = data.get("participant") if ok and data else None
-    if not participant:
+    # A separate, Optional-typed local for the raw lookup, narrowed into
+    # `participant` (declared non-Optional) right below -- kept as two
+    # names, not one reassigned/narrowed variable, because mypy doesn't
+    # carry flow-sensitive narrowing into the nested closures above (they
+    # close over `participant` by name, not by the value it holds at
+    # closure-definition time), so a narrowed-in-place `participant: X |
+    # None` would still type-check as Optional inside them.
+    fetched_participant: dict[str, Any] | None = data.get("participant") if ok and data else None
+    if not fetched_participant:
         error("Failed to retrieve participant schedule.")
         return
-    
+    participant: dict[str, Any] = fetched_participant
+
     while True:
         # menu options are redefined on each iteration to reflect current participant data
-        menu_options = {
+        menu_options: MenuOptions = {
             '1': {'description': f'initials: {participant.get('initials')}', 'menu_caller': lambda self: update_field_menu(self, '1')},
             '2': {'description': f'subid: {participant.get('subid')}', 'menu_caller': lambda self: update_field_menu(self, '2')},
             '3': {'description': f'unique_id: {participant.get('unique_id')}', 'menu_caller': lambda self: update_field_menu(self, '3')},

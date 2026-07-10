@@ -5,7 +5,7 @@ import os
 from system_tasks._system_task import SystemTask
 
 class CheckSystem(SystemTask):
-    def run(self):
+    def run(self) -> int:
         self.task_type = "CHECK_SYSTEM"
         self.app.add_to_transcript(f"{self.task_type} #{self.task_number} initiated.")
         file_system_check = self.check_file_system()
@@ -16,7 +16,7 @@ class CheckSystem(SystemTask):
             + research_drive_check + participant_check
         )
 
-    def check_file_system(self):
+    def check_file_system(self) -> int:
         self.app.add_to_transcript(f"INFO: Now checking file system...")
         try:
             directories = [
@@ -25,7 +25,7 @@ class CheckSystem(SystemTask):
                 '../logs',
                 'system_tasks'
             ]
-            files = [
+            files: list[list[str]] = [
                 [], # data
                 [], # scripts
                 [], # logs
@@ -67,7 +67,7 @@ class CheckSystem(SystemTask):
 
         return 0
     
-    def check_research_drive(self):
+    def check_research_drive(self) -> int:
         if self.app.mode == "prod":
             self.app.add_to_transcript(f"INFO: Now checking Research Drive connection...")
             drive_mount = getattr(self.app, 'drive_mount', None)
@@ -92,12 +92,12 @@ class CheckSystem(SystemTask):
             self.app.add_to_transcript("INFO: Successfully connected to Research Drive.")
         return 0
     
-    def check_participants(self):
+    def check_participants(self) -> int:
         self.app.add_to_transcript("INFO: Now checking participants...")
-        
+
         # unique id check
         participants = self.app.participant_manager.get_participants()
-        unique_ids = {}
+        unique_ids: dict[str, list[str]] = {}
         for p in participants:
             unique_id = p.get('unique_id')
             if unique_id:

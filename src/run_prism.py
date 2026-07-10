@@ -4,6 +4,8 @@ import os
 import platform
 from datetime import datetime
 from pathlib import Path
+from types import FrameType
+from typing import Any
 from _routes import create_flask_app
 import pandas as pd
 from waitress import serve
@@ -15,11 +17,43 @@ from task_managers._system_task_manager import SystemTaskManager
 from task_managers._participant_manager import ParticipantManager
 
 class PRISM():
-    def __init__(self, mode = "test"):
+    # Attributes populated by load_paths()/load_api_keys() below, rather
+    # than directly in __init__ -- some (participants_path, reminders_path,
+    # r_scripts_dir, and every API_FIELD_DEFAULTS-driven credential/message
+    # field) are set via `setattr(self, attr, value)` with a dynamically
+    # computed attribute name, which mypy can't see as an assignment to a
+    # specific name. Declared here (type only, no value) so every other
+    # module that reads these off an `App`-typed `app`/`app_instance`
+    # (_helper.py, _routes.py, task_managers/, system_tasks/) type-checks
+    # against the real shape of a fully-initialized PRISM instance.
+    repo_root: Path
+    logs_dir: str
+    data_dir: str
+    drive_mount: str
+    environment: str
+    config_base: str
+    participants_path: str
+    reminders_path: str
+    r_scripts_dir: str
+    system_task_schedule_path: str
+    study_coordinators_path: str
+    ema_survey_id: str
+    feedback_survey_id: str
+    ema_message: str
+    ema_reminder_message: str
+    feedback_message: str
+    feedback_reminder_message: str
+    coordinator_alert_message: str
+    twilio_account_sid: str
+    twilio_auth_token: str
+    twilio_from_number: str
+    flask_app: Any  # Flask app instance; see launch_web_app()
+
+    def __init__(self, mode: str = "test") -> None:
         if not os.path.dirname(os.path.abspath(__file__)).endswith('src'):
             self.add_to_transcript("Please run this script from the 'src' directory.", "ERROR")
             exit(1)
-        
+
         clear()
         self.mode = mode
         self.start_time = datetime.now()
@@ -38,7 +72,7 @@ class PRISM():
 
     # system methods
 
-    def _resolve_drive_path(self, raw_path):
+    def _resolve_drive_path(self, raw_path: object) -> str:
         # translates an "S:/..." literal (as written on the drive's own
         # paths.csv, which is authored from Windows) into this platform's
         # real path. Non-drive-letter (relative) values are returned as-is,
@@ -51,7 +85,7 @@ class PRISM():
             return str((Path(self.drive_mount) / raw_path).resolve())
         return raw_path
 
-    def load_paths(self, environment=None):
+    def load_paths(self, environment: str | None = None) -> None:
         # repo root is the parent of this file's directory (src/). Tests can
         # override by setting self.repo_root before calling this method, to
         # point at a fixture tree instead of the real checkout.
@@ -64,7 +98,7 @@ class PRISM():
         # mounts on this platform, which drive subpath this project lives
         # under), as opposed to research-drive-specific paths, which come
         # from the drive's own paths.csv below.
-        repo_paths_defaults = {
+        repo_paths_defaults: dict[str, str] = {
             'logs_dir': 'logs',
             'data_dir': 'data',
             'drive_mount_windows': 'S:',
@@ -73,7 +107,7 @@ class PRISM():
         }
         try:
             df = pd.read_csv(str(repo_root / 'config' / 'repo_paths.csv'), quotechar='"', skipinitialspace=True, dtype=str)
-            repo_paths = {str(row['key']).strip(): str(row['value']).strip() for _, row in df.iterrows()}
+            repo_paths: dict[str, str] = {str(row['key']).strip(): str(row['value']).strip() for _, row in df.iterrows()}
         except Exception:
             repo_paths = {}
         repo_paths = {**repo_paths_defaults, **repo_paths}
@@ -116,7 +150,7 @@ class PRISM():
         paths_csv = self._resolve_drive_path(f"S:/{repo_paths['prism_drive_subpath']}/{self.environment}/config/paths.csv")
         try:
             df = pd.read_csv(paths_csv, quotechar='"', skipinitialspace=True, dtype=str)
-            raw = {str(row['key']).strip(): str(row['path']).strip() for _, row in df.iterrows()}
+            raw: dict[str, str] = {str(row['key']).strip(): str(row['path']).strip() for _, row in df.iterrows()}
         except Exception as e:
             self.add_to_transcript(f"Failed to load paths configuration from {paths_csv}: {e}", "ERROR")
             raw = {}
@@ -149,7 +183,7 @@ class PRISM():
     # existed on the drive) — load_keys only overwrites these if the column
     # is actually present, so one missing column doesn't take down the
     # whole file's worth of fields.
-    API_FIELD_DEFAULTS = {
+    API_FIELD_DEFAULTS: dict[str, str] = {
         'ema_message': "Hello, it's time to take your daily survey.",
         'ema_reminder_message': "Hello, you have not yet completed your daily survey for today.",
         'feedback_message': "Hello, it's time to see your daily recovery message.",
@@ -157,12 +191,12 @@ class PRISM():
         'coordinator_alert_message': "{name}: {task_type} #{task_number} {outcome}. Script was executed at {task_start}.",
     }
 
-    def load_api_keys(self):
+    def load_api_keys(self) -> None:
         api_dir = Path(self.config_base) / 'api'
         for attr, default in self.API_FIELD_DEFAULTS.items():
             setattr(self, attr, default)
 
-        def load_keys(file_name, field_map, label):
+        def load_keys(file_name: str, field_map: dict[str, str], label: str) -> None:
             try:
                 df = pd.read_csv(str(api_dir / file_name), quotechar='"', dtype=str)
             except Exception as e:
@@ -188,7 +222,7 @@ class PRISM():
             'coordinator_alert_message': 'coordinator_alert_message'
         }, "Twilio")
 
-    def add_to_transcript(self, message, message_type = "INFO"):
+    def add_to_transcript(self, message: str, message_type: str = "INFO") -> None:
         transcript_message = f"{message_type} - {message}"
         print(transcript_message)
         current_date = datetime.now().strftime('%Y-%m-%d')
@@ -204,7 +238,9 @@ class PRISM():
             with open(file_path, 'w') as file:
                 file.write(f"{datetime.now().strftime('%H:%M:%S')} - {transcript_message}\n")
 
-    def get_transcript(self, num_lines = 10, target = "transcript"):
+    def get_transcript(
+        self, num_lines: str | int = 10, target: str = "transcript"
+    ) -> tuple[bool, list[dict[str, str]] | None]:
         # Returns an (ok, entries) tuple rather than a bare value: `ok` is
         # True whenever the read itself succeeded, `entries` is a (possibly
         # empty) list of {"timestamp", "message"} dicts in that case. This
@@ -231,17 +267,17 @@ class PRISM():
             self.add_to_transcript(f"Failed to read {target}: {e}", "ERROR")
             return False, None
 
-    def launch_web_app(self):
+    def launch_web_app(self) -> None:
         self.flask_app = create_flask_app(self)
         serve(self.flask_app, host = '127.0.0.1', port = 5000)
 
-    def handle_shutdown(self, signum, frame):
+    def handle_shutdown(self, signum: int, frame: FrameType | None) -> None:
         self.add_to_transcript("Received shutdown signal. Stopping PRISM application...", "INFO")
         self.system_task_manager.stop()
         self.participant_manager.stop()
         os._exit(0)
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         self.handle_shutdown(signal.SIGINT, None)
 
 # application entry point

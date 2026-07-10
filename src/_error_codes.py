@@ -10,7 +10,7 @@ handful of failure paths that actually page a coordinator today
 this is not a blanket code for every 0/1/-1 return value in the codebase.
 """
 
-ERROR_CODES = {
+ERROR_CODES: dict[str, str] = {
     '1001': "system task run failed",
     '2001': "participant SMS send failed",
     '2002': "unexpected error processing participant SMS task",
@@ -19,7 +19,7 @@ ERROR_CODES = {
 }
 
 
-def code_prefix(code):
+def code_prefix(code: str) -> str:
     """Returns "[<code>] " for prepending to a coordinator-facing message
     body. Raises KeyError if `code` isn't registered -- a message should
     never claim a code that doesn't exist in the registry.

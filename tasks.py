@@ -125,6 +125,12 @@ def cmd_test(args):
         )
 
 
+def cmd_typecheck(args):
+    """Run mypy over src/ (see mypy.ini; gradual/non-strict, src/ only --
+    tests/, tests_interface/, tests_integration/ are out of scope)."""
+    subprocess.run([sys.executable, "-m", "mypy", "src"], check=True)
+
+
 def build_parser():
     parser = argparse.ArgumentParser(
         prog="tasks.py",
@@ -173,6 +179,12 @@ def build_parser():
         "all", help="Run server, client, and integration suites, in that order."
     )
     p_test.set_defaults(func=cmd_test)
+
+    p_typecheck = subparsers.add_parser(
+        "typecheck",
+        help="Run mypy over src/ (run with the venv python).",
+    )
+    p_typecheck.set_defaults(func=cmd_typecheck)
 
     return parser
 

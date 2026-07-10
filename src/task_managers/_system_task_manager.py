@@ -2,28 +2,31 @@
 
 import os
 from datetime import datetime
+from typing import Any
 
-from task_managers._task_manager import TaskManager
+from task_managers._task_manager import TaskManager, Task
+from system_tasks._system_task import SystemTask
 from system_tasks._check_system import CheckSystem
 from system_tasks._run_r_script import RunRScript
+from _types import App
 
 # Every system task, statically registered here. Adding a new task type
 # means adding both a new system_tasks/_<name>.py file and a line here --
 # there is no dynamic file-discovery/import mechanism, since PRISM only
 # ever has one author for these files.
-TASK_CLASSES = {
+TASK_CLASSES: dict[str, type[SystemTask]] = {
     'CHECK_SYSTEM': CheckSystem,
     'RUN_R_SCRIPT': RunRScript,
 }
 
 class SystemTaskManager(TaskManager):
-    def __init__(self, app, name = "SystemTaskManager"):
+    def __init__(self, app: App, name: str = "SystemTaskManager") -> None:
         super().__init__(app, name)
         self.task_types = self.get_task_types()
         self.file_path = self.app.system_task_schedule_path
         self.load_task_schedule()
 
-    def get_task_types(self):
+    def get_task_types(self) -> dict[str, str]:
         """task_type -> human-readable label (e.g. RUN_R_SCRIPT ->
         RunRScript), derived from TASK_CLASSES' keys. This dict is
         JSON-serialized over GET /system/get_task_types and displayed to
@@ -35,7 +38,7 @@ class SystemTaskManager(TaskManager):
             for task_type in TASK_CLASSES
         }
 
-    def get_r_script_tasks(self):
+    def get_r_script_tasks(self) -> dict[str, str]:
         try:
             return {
                 (f[:-2]): (f[:-2])
@@ -46,7 +49,7 @@ class SystemTaskManager(TaskManager):
             self.app.add_to_transcript(f"Failed to list R scripts: {e}", "ERROR")
             return {}
     
-    def load_task_schedule(self):
+    def load_task_schedule(self) -> None:
         self.tasks.clear()
         try:
             with open(self.file_path, 'r') as file:
@@ -71,11 +74,11 @@ class SystemTaskManager(TaskManager):
         except Exception as e:
             self.app.add_to_transcript(f"An error occurred while loading the task schedule: {e}", "ERROR")
     
-    def clear_schedule(self):
+    def clear_schedule(self) -> None:
         self.tasks.clear()
         self.save_tasks()
 
-    def get_task_schedule(self):
+    def get_task_schedule(self) -> list[dict[str, Any]]:
         try:
             return [
                 {
@@ -88,25 +91,36 @@ class SystemTaskManager(TaskManager):
         except Exception as e:
             self.app.add_to_transcript(f"Failed to retrieve system task schedule: {e}", "ERROR")
             return []
-        
-    def save_tasks(self):
+
+    def save_tasks(self) -> None:
         self.tasks.sort(key = lambda x: x['task_time'])
         self.save_to_csv(self.tasks, self.file_path)
 
-    def remove_task(self, task_type, task_time = None, participant_id = None, r_script_path = None):
-        task_time = datetime.strptime(task_time, '%H:%M:%S').time()
+    def remove_task(
+        self,
+        task_type: str,
+        task_time: str | None = None,
+        participant_id: str | None = None,
+        r_script_path: str | None = None,
+    ) -> int:
+        # task_time keeps the `= None` default for compatibility with the
+        # original signature, but every current caller (_routes.py's
+        # remove_system_task/remove_r_script_task) always supplies it; a
+        # real None here would already fail inside strptime() at runtime
+        # (TypeError) exactly as before -- this ignore doesn't change that.
+        parsed_task_time = datetime.strptime(task_time, '%H:%M:%S').time()  # type: ignore[arg-type]
         for task in self.tasks:
-            if task['task_type'] == task_type and task['task_time'] == task_time:
+            if task['task_type'] == task_type and task['task_time'] == parsed_task_time:
                 if r_script_path and task.get('r_script_path') != r_script_path:
                     continue
                 self.tasks.remove(task)
                 self.save_tasks()
-                self.app.add_to_transcript(f"Removed system task: {task_type} at {task_time.strftime('%H:%M:%S')}", "INFO")
+                self.app.add_to_transcript(f"Removed system task: {task_type} at {parsed_task_time.strftime('%H:%M:%S')}", "INFO")
                 return 0
-        self.app.add_to_transcript(f"Task {task_type} at {task_time.strftime('%H:%M:%S')} not found.", "ERROR")
+        self.app.add_to_transcript(f"Task {task_type} at {parsed_task_time.strftime('%H:%M:%S')} not found.", "ERROR")
         return 1
 
-    def process_task(self, task):
+    def process_task(self, task: Task) -> int:
         """Looks up the task class directly from the static TASK_CLASSES
         registry -- an unrecognized task_type (e.g. a stale schedule-CSV
         row) just logs and returns -1; it isn't a coordinator-alert-worthy
@@ -114,7 +128,11 @@ class SystemTaskManager(TaskManager):
         type that doesn't exist here can never have run successfully
         before either.
         """
-        task_type = task.get('task_type')
+        # Default to "" (not a valid TASK_CLASSES key) rather than None,
+        # purely so task_type has a concrete `str` type -- the `is None`
+        # check right below behaves identically either way, since "" isn't
+        # a registered task type any more than None is.
+        task_type: str = task.get('task_type', '')
         self.app.add_to_transcript(f"Executing task: {task_type}", "INFO")
         task_class = TASK_CLASSES.get(task_type)
         if task_class is None:
@@ -122,7 +140,14 @@ class SystemTaskManager(TaskManager):
             return -1
         r_script_path = task.get('r_script_path')
         if r_script_path:
-            result = task_class(self.app, r_script_path).execute()
+            # RunRScript.__init__ takes an extra r_script_path argument that
+            # the common SystemTask base class (TASK_CLASSES' declared value
+            # type) doesn't -- this branch only ever runs for the
+            # 'RUN_R_SCRIPT' task_type, whose class is RunRScript, so the
+            # extra argument is always valid at runtime even though the
+            # static type of `task_class` (type[SystemTask]) can't express
+            # per-key constructor signatures.
+            result = task_class(self.app, r_script_path).execute()  # type: ignore[call-arg]
         else:
             result = task_class(self.app).execute()
         return result if result is not None else 0

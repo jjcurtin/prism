@@ -2,13 +2,14 @@
 
 import subprocess, os
 from system_tasks._system_task import SystemTask
+from _types import App
 
 class RunRScript(SystemTask):
-    def __init__(self, app, r_script_path):
+    def __init__(self, app: App, r_script_path: str) -> None:
         super().__init__(app)
         self.r_script_path = r_script_path
 
-    def change_directory(self, new_dir):
+    def change_directory(self, new_dir: str) -> None:
         try:
             os.chdir(new_dir)
             self.app.add_to_transcript(f"Changed working directory to {os.getcwd()}", "INFO")
@@ -16,7 +17,7 @@ class RunRScript(SystemTask):
             self.app.add_to_transcript(f"Failed to change directory to {new_dir}. Error message: {e}", "ERROR")
             raise Exception(f"Failed to change directory to {new_dir}. Error message: {e}")
 
-    def run(self):
+    def run(self) -> int:
         """Refuses to execute if `r_script_path` resolves (via realpath)
         outside `scripts_dir` -- guards against a path-traversal-style script
         path (e.g. "../../etc/whatever") escaping the sandboxed R scripts

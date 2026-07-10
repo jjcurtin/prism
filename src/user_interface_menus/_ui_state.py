@@ -29,6 +29,8 @@ settings/_settings_menu.py) keeps working and refers to this exact same
 object.
 """
 
+from user_interface_menus._types import MenuOptions
+
 class UIState:
     """Mutable interface-wide settings and per-menu navigation state,
     persisted to config/uiconfig.txt via load_params()/save_params().
@@ -38,20 +40,20 @@ class UIState:
     ui_state.some_attr is visible to every holder of the same object
     reference without needing a fresh import per call.
     """
-    def __init__(self):
-        self.window_width = 155
-        self.window_height = 20
-        self.right_align = True
-        self.related_options_threshold = 0.3
-        self.best_options_threshold = 0.7
-        self.assistant_type_speed = 0.015
-        self.show_readme = True
-        self.color_on = True
-        self.recent_commands = []
-        self.menu_delay = 0.5
-        self.timeout = 10
-        self.local_menu_options = {}
-        self.current_menu = None
-        self.menu_options = None
+    def __init__(self) -> None:
+        self.window_width: int = 155
+        self.window_height: int = 20
+        self.right_align: bool = True
+        self.related_options_threshold: float = 0.3
+        self.best_options_threshold: float = 0.7
+        self.assistant_type_speed: float = 0.015
+        self.show_readme: bool = True
+        self.color_on: bool = True
+        self.recent_commands: list[str] = []
+        self.menu_delay: float = 0.5
+        self.timeout: int = 10
+        self.local_menu_options: MenuOptions = {}
+        self.current_menu: str | None = None
+        self.menu_options: MenuOptions | None = None
 
 ui_state = UIState()

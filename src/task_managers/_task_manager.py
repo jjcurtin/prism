@@ -1,23 +1,40 @@
 """base class for task managers"""
 
+from datetime import datetime, time as dt_time
+from typing import Any
 import queue
 import threading
-from datetime import datetime
 
 from _helper import notify_coordinators
 from _error_codes import code_prefix
+from _types import App
+
+# A task is a small, loosely-structured dict (not every key is present on
+# every task -- e.g. `r_script_path`/`participant_id` are only set by the
+# callers that need them; see add_task() below). Kept as `dict[str, Any]`
+# rather than a TypedDict/dataclass, matching this codebase's existing
+# convention of passing plain dicts as tasks throughout task_managers/,
+# system_tasks/, and _routes.py.
+Task = dict[str, Any]
 
 class TaskManager():
-    def __init__(self, app, name):
+    def __init__(self, app: App, name: str) -> None:
         self.app = app
         self.name = name
         self.running = True
-        self.tasks = []
-        self.task_queue = queue.Queue()
+        self.tasks: list[Task] = []
+        self.task_queue: queue.Queue[Task] = queue.Queue()
         self.thread = threading.Thread(target = self.run)
         self.thread.start()
 
-    def add_task(self, task_type, task_time, r_script_path = None, participant_id = None, one_time = False):
+    def add_task(
+        self,
+        task_type: str,
+        task_time: str | dt_time,
+        r_script_path: str | None = None,
+        participant_id: str | None = None,
+        one_time: bool = False,
+    ) -> Task:
         """`r_script_path` accepts the literal string "None" as an
         empty/none value in addition to "". Callers that pass this through a
         URL path segment (e.g. _routes.py's add_system_task route) can't
@@ -39,7 +56,7 @@ class TaskManager():
         one-time 'ema' send and a participant's recurring daily 'ema'
         task).
         """
-        task_dict = {
+        task_dict: Task = {
             'task_type': task_type,
             'task_time': datetime.strptime(task_time, '%H:%M:%S').time() if isinstance(task_time, str) else task_time,
         }
@@ -55,7 +72,7 @@ class TaskManager():
         self.tasks.append(task_dict)
         return task_dict
     
-    def save_to_csv(self, data, file_path):
+    def save_to_csv(self, data: list[Task], file_path: str) -> None:
         try:
             headers = data[0].keys() if data else []
             with open(file_path, 'w') as f:
@@ -65,7 +82,7 @@ class TaskManager():
         except Exception as e:
             self.app.add_to_transcript(f"Failed to save data to CSV at {file_path}: {e}", "ERROR")
 
-    def check_tasks(self):
+    def check_tasks(self) -> None:
         """A task fires once its scheduled time is within 1 second of "now"
         (this runs frequently enough that the window doesn't need to be
         wider), and won't fire again until run_today is reset back to False
@@ -82,10 +99,10 @@ class TaskManager():
                 self.task_queue.put(task)
                 task['run_today'] = True
 
-    def process_task(self, task):
+    def process_task(self, task: Task) -> int:
         raise NotImplementedError("Subclasses must implement this method.")
 
-    def finish_task(self, task):
+    def finish_task(self, task: Task) -> int:
         """Process `task` and, if it's flagged `one_time`, remove it from
         self.tasks immediately afterward -- regardless of whether
         process_task succeeded or failed, and with no retry. This is the
@@ -106,11 +123,11 @@ class TaskManager():
             self.tasks[:] = [t for t in self.tasks if t is not task]
         return result
 
-    def run(self):
+    def run(self) -> None:
         while self.running:
             self.check_tasks()
             try:
-                task = self.task_queue.get(timeout = 1)
+                task: Task = self.task_queue.get(timeout = 1)
                 result = self.finish_task(task)
                 if result != 0:
                     self.app.add_to_transcript(f"Task {task['task_type']} failed with error code {result}.", "ERROR")
@@ -123,6 +140,6 @@ class TaskManager():
                 # note: changed print to add_to_transcript and removed the thing that kills the manager
         self.app.add_to_transcript(f"{self.name} processor stopped.", "INFO")
 
-    def stop(self):
+    def stop(self) -> None:
         self.running = False
         self.thread.join()

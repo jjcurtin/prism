@@ -4,6 +4,7 @@ import random
 from datetime import datetime
 from _helper import notify_coordinators
 from _error_codes import code_prefix
+from _types import App
 
 # kept in sync with run_prism.py's API_FIELD_DEFAULTS default for
 # coordinator_alert_message -- used here too so a FakeApp/test app that
@@ -11,14 +12,25 @@ from _error_codes import code_prefix
 DEFAULT_COORDINATOR_ALERT_MESSAGE = "{name}: {task_type} #{task_number} {outcome}. Script was executed at {task_start}."
 
 class SystemTask:
-    def __init__(self, app):
+    # Set as the first line of run() in every real subclass (CheckSystem,
+    # RunRScript) before execute() below reads it -- declared here (type
+    # only) rather than in __init__ since it genuinely doesn't exist yet at
+    # construction time. execute()'s own except-clause below covers the one
+    # case where run() raises before reaching that first line.
+    task_type: str
+    outcome: str
+
+    def __init__(self, app: App) -> None:
         self.app = app
         self.task_number = str(random.randint(100000, 999999))
         self.task_start = datetime.now()
 
-    def execute(self):
+    def run(self) -> int:
+        raise NotImplementedError("Subclasses must implement this method.")
+
+    def execute(self) -> int:
         try:
-            result = self.run()
+            result: int | None = self.run()
         except Exception as e:
             # self.task_type is normally set as the first line of run() --
             # if run() raised before reaching it, fall back to the class
@@ -35,7 +47,7 @@ class SystemTask:
                 self.app.add_to_transcript(f"Failed to send {sms_result} SMS notifications.", "ERROR")
         return 1 if self.outcome == "FAILURE" else 0
 
-    def notify_via_sms(self):
+    def notify_via_sms(self) -> int:
         alert_template = getattr(self.app, 'coordinator_alert_message', DEFAULT_COORDINATOR_ALERT_MESSAGE)
         task_start_str = self.task_start.strftime('%m/%d/%Y at %I:%M:%S %p')
         # Fill in every field except {name} -- notify_coordinators() fills
