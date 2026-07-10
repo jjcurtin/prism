@@ -444,6 +444,7 @@ def test_home_from_three_levels_deep_returns_to_main_menu_in_one_shot(fake_inter
     menu headers get (re)drawn, in order.
     """
     import user_interface_menus._main_menu as main_menu_module
+    import user_interface_menus.utils._display as _display
     import user_interface_menus.utils._menu_display as _menu_display
     import user_interface_menus.utils._menu_navigation as _menu_navigation
     import user_interface_menus.tasks._add_task_menus as atm
@@ -456,6 +457,11 @@ def test_home_from_three_levels_deep_returns_to_main_menu_in_one_shot(fake_inter
     monkeypatch.setattr(atm, 'print_menu_header', lambda title: headers_shown.append(title))
     monkeypatch.setattr(_menu_navigation, 'assistant_header_write', lambda *a, **k: None)
     monkeypatch.setattr(stm, 'assistant_header_write', lambda *a, **k: None)
+    # print_menu_options() (real, unmocked -- called while rendering each
+    # menu below) goes through display_in_columns() -> get_cursor_position(),
+    # a real terminal ANSI round trip; same fix as
+    # test_display_in_columns_handles_internal_exception_via_error.
+    monkeypatch.setattr(_display, 'get_cursor_position', lambda: (0, 5))
 
     responses = iter(['tasks', 'add', 'home', 'exit'])
     monkeypatch.setattr(_menu_display, 'print_fixed_terminal_prompt', lambda self, submenu: next(responses))
