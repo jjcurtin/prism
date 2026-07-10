@@ -2,9 +2,6 @@
 
 import os
 
-import requests
-from requests.exceptions import RequestException
-
 from system_tasks._system_task import SystemTask
 
 class CheckSystem(SystemTask):
@@ -12,11 +9,10 @@ class CheckSystem(SystemTask):
         self.task_type = "CHECK_SYSTEM"
         self.app.add_to_transcript(f"{self.task_type} #{self.task_number} initiated.")
         file_system_check = self.check_file_system()
-        qualtrics_check = self.check_qualtrics()
         research_drive_check = self.check_research_drive()
         participant_check = self.check_participants()
         return (
-            file_system_check + qualtrics_check
+            file_system_check
             + research_drive_check + participant_check
         )
 
@@ -71,23 +67,6 @@ class CheckSystem(SystemTask):
 
         return 0
     
-    def check_qualtrics(self):
-        self.app.add_to_transcript(f"INFO: Now checking Qualtrics connection...")
-        survey_id = self.app.ema_survey_id
-        data_center = self.app.qualtrics_data_center
-        api_token = self.app.qualtrics_api_token
-        url = f"https://{data_center}.qualtrics.com/API/v3/survey-definitions/{survey_id}/metadata"
-        headers = {"X-API-TOKEN": api_token}
-        try:
-            response = requests.get(url, headers = headers, timeout = 10)
-            if response.status_code == 200:
-                return 0
-            self.app.add_to_transcript(f"Status code: {response.status_code}", "ERROR")
-            return 1
-        except RequestException as e:
-            self.app.add_to_transcript(f"Connection error occurred: {str(e)}", "ERROR")
-            return 1
-
     def check_research_drive(self):
         if self.app.mode == "prod":
             self.app.add_to_transcript(f"INFO: Now checking Research Drive connection...")

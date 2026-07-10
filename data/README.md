@@ -1,19 +1,13 @@
 # Data
 
-Where PRISM writes everything it pulls down from external services while a
-study is running. Nothing here is tracked by git — it's all
-participant/study data, generated automatically, not something you'll
-usually touch by hand. This folder is empty until PRISM actually runs its
-data-pulldown tasks (see `tasks` in the interface, or `src/system_tasks/README.md`).
-
-## qualtrics/
-Survey response data pulled down from Qualtrics.
-
-- `raw/` — the untouched exports as downloaded (`raw_qualtrics_ema_data.csv`,
-  `raw_qualtrics_feedback_data.csv`).
-- `processed/` — the same data after PRISM cleans it up (removes header
-  clutter, drops empty columns, filters already-submitted rows):
-  `filtered_qualtrics_ema_data.csv`, `filtered_qualtrics_feedback_data.csv`.
+Where PRISM would write output pulled down from external services while a
+study is running. Nothing here is tracked by git. Currently unused: the
+data-pulldown tasks that used to write here (Qualtrics survey responses,
+FollowMee location data) were both removed entirely — PRISM does not pull
+down or store any Qualtrics survey response data; surveys are still sent to
+participants, just as a bare link (see root `README.md`). This folder is
+kept in case a future task needs a repo-root-relative data directory again
+(see `run_prism.py`'s `data_dir`).
 
 ## messages/
 Reserved for message/communication logs. Not currently written to by

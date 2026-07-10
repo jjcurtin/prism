@@ -1,5 +1,5 @@
 """This file contains every Flask route for the PRISM application.
-These routes are accessed by the ui or the Qualtrics interface (surveys)"""
+These routes are accessed by the ui."""
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -20,16 +20,12 @@ def create_flask_app(app_instance):
         CORS(flask_app, resources = {
             r"/system/*": {"origins": "localhost:5000"},
             r"/system/get_uptime": {"origins": "*"},
-            r"/participants/*": {"origins": "localhost:5000"},
-            r"/EMA/*": {"origins": "https://uwmadison.co1.qualtrics.com"},
-            r"/feedback_survey/*": {"origins": "https://uwmadison.co1.qualtrics.com"}
+            r"/participants/*": {"origins": "localhost:5000"}
         })
     else:
         CORS(flask_app, resources = {
             r"/system/*": {"origins": "localhost:5000"},
-            r"/participants/*": {"origins": "localhost:5000"},
-            r"/EMA/*": {"origins": "https://uwmadison.co1.qualtrics.com"},
-            r"/feedback_survey/*": {"origins": "https://uwmadison.co1.qualtrics.com"}
+            r"/participants/*": {"origins": "localhost:5000"}
         })
 
     limiter = Limiter(

@@ -174,8 +174,6 @@ class PRISM():
                 elif attr not in self.API_FIELD_DEFAULTS:
                     self.add_to_transcript(f"{label} API file {file_name} missing column '{column}' — {attr} left unset.", "WARNING")
         load_keys('qualtrics.api', {
-            'qualtrics_api_token': 'api_token',
-            'qualtrics_data_center': 'datacenter',
             'ema_survey_id': 'ema_survey_id',
             'feedback_survey_id': 'feedback_survey_id',
             'ema_message': 'ema_message',

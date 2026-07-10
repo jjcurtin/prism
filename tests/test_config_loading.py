@@ -52,8 +52,6 @@ def test_load_api_keys_reads_qualtrics_fields(prism_instance):
     prism_instance.load_paths()
     prism_instance.load_api_keys()
 
-    assert prism_instance.qualtrics_api_token == 'fake_qualtrics_token'
-    assert prism_instance.qualtrics_data_center == 'fake_dc'
     assert prism_instance.ema_survey_id == 'fake_ema_survey'
     assert prism_instance.feedback_survey_id == 'fake_feedback_survey'
     assert prism_instance.ema_message == 'ema msg'
@@ -75,8 +73,8 @@ def test_load_api_keys_reads_all_other_api_files(prism_instance):
 def test_load_api_keys_falls_back_to_message_defaults_when_columns_missing(prism_instance):
     prism_instance.load_paths()
     old_style_qualtrics = (
-        '"api_token","datacenter","ema_survey_id","feedback_survey_id"\n'
-        '"fake_qualtrics_token","fake_dc","fake_ema_survey","fake_feedback_survey"\n'
+        '"ema_survey_id","feedback_survey_id"\n'
+        '"fake_ema_survey","fake_feedback_survey"\n'
     )
     Path(prism_instance.config_base, 'api', 'qualtrics.api').write_text(old_style_qualtrics)
     old_style_twilio = (
@@ -87,7 +85,7 @@ def test_load_api_keys_falls_back_to_message_defaults_when_columns_missing(prism
 
     prism_instance.load_api_keys()
 
-    assert prism_instance.qualtrics_api_token == 'fake_qualtrics_token'
+    assert prism_instance.ema_survey_id == 'fake_ema_survey'
     assert prism_instance.ema_message == "Hello, it's time to take your daily survey."
     assert prism_instance.feedback_reminder_message == (
         "Hello, you have not yet viewed your daily recovery message for today."
@@ -104,4 +102,4 @@ def test_load_api_keys_missing_file_does_not_crash_other_files(prism_instance):
     prism_instance.load_api_keys()
 
     assert not hasattr(prism_instance, 'twilio_account_sid')
-    assert prism_instance.qualtrics_api_token == 'fake_qualtrics_token'
+    assert prism_instance.ema_survey_id == 'fake_ema_survey'

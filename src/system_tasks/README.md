@@ -8,8 +8,8 @@ menus (see `src/user_interface_menus/tasks/README.md`).
 ## What each task type does
 
 - **`CHECK_SYSTEM`** — the "run diagnostics" task behind the `check` menu.
-  Verifies the folder layout, connectivity to Qualtrics, the
-  research-drive connection, and the participant roster (duplicate IDs).
+  Verifies the folder layout, the research-drive connection, and the
+  participant roster (duplicate IDs).
 - **`RUN_R_SCRIPT`** — runs a single R script. Any script placed in the
   repo's `scripts/` folder is automatically picked up and offered as a
   choice in the `tasks add rscript` menu — you don't need to register it

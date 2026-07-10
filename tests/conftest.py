@@ -8,9 +8,9 @@ if str(SRC_DIR) not in sys.path:
 import pytest
 
 QUALTRICS_API = (
-    '"api_token","datacenter","ema_survey_id","feedback_survey_id",'
+    '"ema_survey_id","feedback_survey_id",'
     '"ema_message","ema_reminder_message","feedback_message","feedback_reminder_message"\n'
-    '"fake_qualtrics_token","fake_dc","fake_ema_survey","fake_feedback_survey",'
+    '"fake_ema_survey","fake_feedback_survey",'
     '"ema msg","ema reminder msg","feedback msg","feedback reminder msg"\n'
 )
 TWILIO_API = (

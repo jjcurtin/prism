@@ -43,7 +43,7 @@ ENVIRONMENTS = ["dev", "prod"]
 # a REPLACE_WITH_-prefixed credential is. Keep in sync with
 # run_prism.py::load_api_keys() if its field_maps change.
 REQUIRED_API_FIELDS = {
-    'qualtrics.api': ['qualtrics_api_token', 'qualtrics_data_center', 'ema_survey_id', 'feedback_survey_id'],
+    'qualtrics.api': ['ema_survey_id', 'feedback_survey_id'],
     'twilio.api': ['twilio_account_sid', 'twilio_auth_token', 'twilio_from_number'],
 }
 
