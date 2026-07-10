@@ -32,6 +32,17 @@ def send_sms(app: App, receiver_numbers: list[str], messages: list[str], is_coor
     built) -- not a bool. notify_coordinators() re-uses this same contract
     when it delegates here (passing `is_coordinator_message=True`).
 
+    Every per-recipient transcript line (success or failure) is labeled
+    "Participant SMS"/"Coordinator SMS" so a mixed transcript reads
+    unambiguously. A coordinator send's success line also includes the
+    full message body as its "reason" -- coordinator alerts exist
+    specifically to page someone about something, and the why (including
+    the `[XXXX]` error code from `_error_codes.py`, when there is one) is
+    already baked into that body by the caller; a participant send's
+    survey-type/reason context, if any, is logged separately by its own
+    caller (e.g. `_participant_manager.py::process_task`'s "Processing SMS
+    task: ..." line) before it ever reaches here.
+
     Prepends an environment marker to the outbound message body (not the
     transcript log line, which is already environment-scoped by which
     machine's logs it lands in): "DEV: " for every message when
@@ -72,16 +83,33 @@ def send_sms(app: App, receiver_numbers: list[str], messages: list[str], is_coor
         return len(receiver_numbers)
 
     result = 0
+    recipient_kind = "Coordinator" if is_coordinator_message else "Participant"
 
     for index, (to_number, message_body) in enumerate(zip(receiver_numbers, messages), start = 1):
         try:
             message = client.messages.create(body = message_body, from_ = from_number, to = to_number)
-            app.add_to_transcript(f"SMS {index} sent to {to_number}. Message SID: {message.sid}", "INFO")
+            if is_coordinator_message:
+                # Coordinator alerts exist specifically to page someone about
+                # something -- the "why" (including the [XXXX] error code
+                # from _error_codes.py, when there is one) is already baked
+                # into message_body by the caller (SystemTask.notify_via_sms/
+                # notify_coordinators), so surface it here rather than
+                # leaving the transcript saying only that *a* text went out.
+                app.add_to_transcript(
+                    f"Coordinator SMS {index} sent to {to_number} -- reason: {message_body}. Message SID: {message.sid}",
+                    "INFO",
+                )
+            else:
+                app.add_to_transcript(f"Participant SMS {index} sent to {to_number}. Message SID: {message.sid}", "INFO")
         except TwilioRestException as e:
-            app.add_to_transcript(f"Failed to send SMS {index} to {to_number}. Twilio error {e.code}: {e.msg}", "ERROR")
+            app.add_to_transcript(
+                f"Failed to send {recipient_kind} SMS {index} to {to_number}. Twilio error {e.code}: {e.msg}", "ERROR"
+            )
             result += 1
         except Exception as e:
-            app.add_to_transcript(f"Failed to send SMS {index} to {to_number}. Error message: {e}", "ERROR")
+            app.add_to_transcript(
+                f"Failed to send {recipient_kind} SMS {index} to {to_number}. Error message: {e}", "ERROR"
+            )
             result += 1
 
     return result

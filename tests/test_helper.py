@@ -77,6 +77,47 @@ def test_send_sms_transcript_log_line_has_no_prefix(fake_app, mocker):
     assert any('SMS 1 sent to 5555550100' in msg and 'DEV:' not in msg for msg in log_messages)
 
 
+def test_send_sms_participant_transcript_labeled_participant(fake_app, mocker):
+    """Regression test: a mixed transcript must be able to tell a
+    participant send apart from a coordinator alert at a glance."""
+    fake_app.environment = 'prod'
+    _mock_twilio_client(mocker, fake_app)
+
+    send_sms(fake_app, ['5555550100'], ['Time for your survey.'])
+
+    log_messages = [msg for _, msg in fake_app.transcript]
+    assert any('Participant SMS 1 sent to 5555550100' in msg for msg in log_messages)
+    assert not any('Coordinator' in msg for msg in log_messages)
+
+
+def test_send_sms_coordinator_transcript_labeled_with_reason(fake_app, mocker):
+    """Regression test: a coordinator alert's transcript line must say why
+    it was sent, including the [XXXX] error code embedded in the message
+    body by the caller -- not just that some SMS went out."""
+    fake_app.environment = 'prod'
+    _mock_twilio_client(mocker, fake_app)
+
+    send_sms(fake_app, ['5555550100'], ['[1001] Alice: CHECK_SYSTEM #123 FAILURE.'], is_coordinator_message=True)
+
+    log_messages = [msg for _, msg in fake_app.transcript]
+    assert any(
+        'Coordinator SMS 1 sent to 5555550100' in msg
+        and '[1001] Alice: CHECK_SYSTEM #123 FAILURE' in msg
+        for msg in log_messages
+    )
+
+
+def test_send_sms_failure_transcript_labeled_by_recipient_kind(fake_app, mocker):
+    fake_app.environment = 'prod'
+    client = _mock_twilio_client(mocker, fake_app)
+    client.messages.create.side_effect = Exception('boom')
+
+    send_sms(fake_app, ['5555550100'], ['A task failed.'], is_coordinator_message=True)
+
+    log_messages = [msg for _, msg in fake_app.transcript]
+    assert any('Failed to send Coordinator SMS 1 to 5555550100' in msg for msg in log_messages)
+
+
 def test_notify_coordinators_noop_when_not_prod(tmp_path, fake_app, mocker):
     fake_app.mode = 'test'
     coordinators_file = tmp_path / 'study_coordinators.csv'
