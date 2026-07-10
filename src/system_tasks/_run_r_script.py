@@ -32,6 +32,12 @@ class RunRScript(SystemTask):
             self.app.add_to_transcript(f"R script {self.r_script_path} does not exist in {scripts_dir}. Please check the path.", "ERROR")
             self.change_directory(initial_dir)
             return 1
+        resolved_script = os.path.realpath(self.r_script_path)
+        resolved_scripts_dir = os.path.realpath(scripts_dir)
+        if os.path.commonpath([resolved_script, resolved_scripts_dir]) != resolved_scripts_dir:
+            self.app.add_to_transcript(f"R script path {self.r_script_path} escapes the scripts directory {scripts_dir}. Refusing to run.", "ERROR")
+            self.change_directory(initial_dir)
+            return 1
         try:
             result = subprocess.run(['Rscript', self.r_script_path], capture_output=True, text=True)
             if result.returncode != 0:

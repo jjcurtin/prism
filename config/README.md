@@ -11,7 +11,11 @@ study-specific: the `api/` folder (Qualtrics/FollowMee/Twilio/etc. credentials
 `data_raw/participants/` path on the same drive (`dev_`-prefixed for the dev
 environment), per that environment's `paths.csv`. On Linux, the drive mounts
 at `/mnt/research_drive` (WiscVPN + CIFS — see `research-drive-map`/
-`wisc-connect` aliases); on Windows it's the mapped `S:` drive directly.
+`wisc-connect` aliases); on Windows the research drive is **always** mapped
+to `S:` (a fixed lab convention, not a per-machine setting) — that's why
+`repo_paths.csv`'s `drive_mount_windows` value and the `S:/...` literals
+baked directly into `run_prism.py` are the same constant; there's no
+per-machine Windows drive-letter substitution to worry about.
 
 This folder now only holds two things:
 - `repo_paths.csv` — **tracked**, unlike everything else here. Internal
@@ -27,10 +31,16 @@ This folder now only holds two things:
 ## Current known schema (from the real files on the drive)
 
 `study_participants.csv`: `initials,subid,unique_id,on_study,phone_number,ema_time,ema_reminder_time,feedback_time,feedback_reminder_time`.
-Note `_participant_manager.py` has an unfinished migration to this schema —
-see the code comment near its CSV-parsing logic — flagged, not yet fixed.
+`_participant_manager.py`'s CSV parsing matches this schema (fixed 2026-07-09,
+commit `271b865`).
 
 `reminders.csv`: `subid,unique_id,on_study,remind_ema,remind_feedback`.
+`remind_ema`/`remind_feedback` are `"yes"`/`"no"` flags meaning "has this
+participant already opened today's EMA/feedback survey" — `"yes"` means
+`process_task()` skips that reminder send. Nothing in PRISM's own codebase
+writes this file; it's populated by an external process (fixed 2026-07-10,
+was previously read via wrong column names — see
+`src/task_managers/CLAUDE.md`).
 
 `study_coordinators.csv`: `name,phone_number` (10 digits) — who gets texted
 if a background task or system check fails.

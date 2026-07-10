@@ -214,18 +214,21 @@ class ParticipantManager(TaskManager):
             if not participant_id:
                 self.app.add_to_transcript("Participant ID is missing in SMS task.", "ERROR")
                 return -1
-            try:
-                participant = self.get_participant(participant_id)
-            except Exception as e:
-                self.app.add_to_transcript(f"Error accessing participant {e}")
+            participant = self.get_participant(participant_id)
+            if participant is None:
+                self.app.add_to_transcript(f"Participant {participant_id} not found; skipping SMS task.", "ERROR")
+                return -1
             if participant['on_study'] is False:
                 return 0
             task_type = task.get('task_type')
-            
-            # reminder checking logic
+
+            # reminder checking logic -- remind_ema/remind_feedback ("yes"/"no",
+            # config/README.md's reminders.csv schema) record whether this
+            # participant has already opened that survey today; "yes" means
+            # skip the reminder.
             task_column_map = {
-                "ema_reminder": "ema_opened",
-                "feedback_reminder": "feedback_opened"
+                "ema_reminder": "remind_ema",
+                "feedback_reminder": "remind_feedback"
             }
 
             column_name = task_column_map.get(task_type)
@@ -235,23 +238,28 @@ class ParticipantManager(TaskManager):
                     reader = csv.DictReader(file)
                     for row in reader:
                         if row["unique_id"] == str(participant_id):
-                            if row[column_name].strip() == "yes":
+                            if row.get(column_name, "").strip().lower() == "yes":
                                 return 0  # Already opened
                             break
 
             participant_phone_number = participant['phone_number']
             self.app.add_to_transcript(f"Processing SMS task: {task_type} for participant {participant_id}", "INFO")
-            task_map = {
-                'ema': (self.app.ema_survey_id, self.app.ema_message),
-                'ema_reminder': (self.app.ema_survey_id, self.app.ema_reminder_message),
-                'feedback': (self.app.feedback_survey_id, self.app.feedback_message),
-                'feedback_reminder': (self.app.feedback_survey_id, self.app.feedback_reminder_message)
+            # attribute names, not values -- looked up lazily below so an app
+            # only configured for the task_type actually being processed
+            # doesn't fail on an unrelated survey type's unset attribute.
+            task_attr_map = {
+                'ema': ('ema_survey_id', 'ema_message'),
+                'ema_reminder': ('ema_survey_id', 'ema_reminder_message'),
+                'feedback': ('feedback_survey_id', 'feedback_message'),
+                'feedback_reminder': ('feedback_survey_id', 'feedback_reminder_message')
             }
-            if task_type not in task_map:
+            if task_type not in task_attr_map:
                 self.app.add_to_transcript(f"Unknown SMS task type: {task_type}", "ERROR")
                 return -1
             try:
-                survey_id, message = task_map[task_type]
+                survey_id_attr, message_attr = task_attr_map[task_type]
+                survey_id = getattr(self.app, survey_id_attr)
+                message = getattr(self.app, message_attr)
                 survey_link = f"https://uwmadison.co1.qualtrics.com/jfe/form/{survey_id}?Q_ExternalData={participant_id}"
                 body = f"{message} {survey_link}"
             except Exception as e:

@@ -49,15 +49,12 @@ class CheckSystem(SystemTask):
         self.app.add_to_transcript(f"INFO: Now checking file system...")
         try:
             directories = [
-                '../config',
                 '../data',
                 '../scripts',
                 '../logs',
                 'system_tasks'
             ]
             files = [
-                ['system_task_schedule.csv', 'study_coordinators.csv',
-                 'script_pipeline.csv', 'study_participants.csv'], # config
                 [], # data
                 [], # scripts
                 [], # logs
@@ -78,6 +75,19 @@ class CheckSystem(SystemTask):
                     if not os.path.isfile(file_path):
                         self.app.add_to_transcript(f"The file '{file_path}' is missing.", "ERROR")
                         all_present = False
+
+            # these live on the drive-sourced config_base, not locally under
+            # ../config (config/README.md, 2026-07-09 migration) -- check the
+            # paths PRISM itself already resolved rather than a local guess.
+            drive_sourced_paths = [
+                'system_task_schedule_path', 'study_coordinators_path',
+                'script_pipeline_path', 'participants_path'
+            ]
+            for attr in drive_sourced_paths:
+                path = getattr(self.app, attr, None)
+                if not path or not os.path.isfile(path):
+                    self.app.add_to_transcript(f"The file for '{attr}' ({path}) is missing.", "ERROR")
+                    all_present = False
 
             if not all_present:
                 return 1

@@ -296,6 +296,103 @@ def test_load_participants_on_study_parses_yes_no(tmp_path, fake_app):
     assert pm.participants[1]['on_study'] is False
 
 
+# --- process_task ----------------------------------------------------------
+
+def test_process_task_missing_participant_id_returns_neg1(fake_app):
+    pm = make_manager(fake_app)
+
+    result = pm.process_task({'task_type': 'ema'})
+
+    assert result == -1
+    assert any('missing' in msg.lower() for _, msg in fake_app.transcript)
+
+
+def test_process_task_unknown_participant_returns_neg1_no_crash(fake_app):
+    """Regression test for a fixed bug: process_task used to reference
+    `participant` after a failed get_participant() call raised/returned None
+    from inside a try/except that only logged (never re-raised or returned),
+    so an unknown/removed participant crashed with an unhandled
+    NameError/TypeError instead of failing gracefully.
+    """
+    pm = make_manager(fake_app)
+    pm.participants = []
+
+    result = pm.process_task({'task_type': 'ema', 'participant_id': '000000000'})
+
+    assert result == -1
+
+
+def test_process_task_off_study_returns_0_no_sms(fake_app, mocker):
+    pm = make_manager(fake_app)
+    participant = dict(PARTICIPANT, on_study=False)
+    pm.participants = [participant]
+    send_sms = mocker.patch('task_managers._participant_manager.send_sms')
+
+    result = pm.process_task({'task_type': 'ema', 'participant_id': '000000000'})
+
+    assert result == 0
+    send_sms.assert_not_called()
+
+
+def test_process_task_sends_ema_sms_in_prod_mode(fake_app, mocker):
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+    fake_app.mode = 'prod'
+    fake_app.ema_survey_id = 'fake_survey'
+    fake_app.ema_message = "Hello, it's time to take your daily survey."
+    send_sms = mocker.patch('task_managers._participant_manager.send_sms')
+
+    result = pm.process_task({'task_type': 'ema', 'participant_id': '000000000'})
+
+    assert result == 0
+    send_sms.assert_called_once_with(fake_app, ['5555550100'], mocker.ANY)
+
+
+def test_process_task_ema_reminder_skipped_when_already_opened(tmp_path, fake_app, mocker):
+    """Regression test for a fixed bug: process_task used to check
+    ema_opened/feedback_opened columns that don't exist in the real
+    reminders.csv schema (config/README.md: remind_ema/remind_feedback),
+    so a KeyError was silently swallowed and every reminder fired regardless
+    of whether the participant had already opened that survey today.
+    remind_ema/remind_feedback == "yes" means already opened -- skip.
+    """
+    reminders_file = tmp_path / 'reminders.csv'
+    reminders_file.write_text(
+        'subid,unique_id,on_study,remind_ema,remind_feedback\n'
+        '3000,000000000,yes,yes,no\n'
+    )
+    fake_app.reminders_path = str(reminders_file)
+    fake_app.mode = 'prod'
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+    send_sms = mocker.patch('task_managers._participant_manager.send_sms')
+
+    result = pm.process_task({'task_type': 'ema_reminder', 'participant_id': '000000000'})
+
+    assert result == 0
+    send_sms.assert_not_called()
+
+
+def test_process_task_ema_reminder_sent_when_not_yet_opened(tmp_path, fake_app, mocker):
+    reminders_file = tmp_path / 'reminders.csv'
+    reminders_file.write_text(
+        'subid,unique_id,on_study,remind_ema,remind_feedback\n'
+        '3000,000000000,yes,no,yes\n'
+    )
+    fake_app.reminders_path = str(reminders_file)
+    fake_app.mode = 'prod'
+    fake_app.ema_survey_id = 'fake_survey'
+    fake_app.ema_reminder_message = "Hello, you have not yet completed your daily survey for today."
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+    send_sms = mocker.patch('task_managers._participant_manager.send_sms')
+
+    result = pm.process_task({'task_type': 'ema_reminder', 'participant_id': '000000000'})
+
+    assert result == 0
+    send_sms.assert_called_once_with(fake_app, ['5555550100'], mocker.ANY)
+
+
 def test_save_participants_round_trips_through_load(tmp_path, fake_app):
     csv_file = tmp_path / 'study_participants.csv'
     fake_app.participants_path = str(csv_file)
