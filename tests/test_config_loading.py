@@ -27,6 +27,26 @@ def test_load_paths_defaults_to_dev_when_environment_file_missing(prism_instance
     assert prism_instance.environment == 'dev'
 
 
+def test_load_paths_creates_environment_file_when_missing(prism_instance, fake_prism_env):
+    env_file = fake_prism_env / 'environment'
+    env_file.unlink()
+
+    prism_instance.load_paths()
+
+    assert env_file.exists()
+    assert env_file.read_text() == 'dev'
+
+
+def test_load_paths_does_not_overwrite_existing_environment_file(prism_instance, fake_prism_env):
+    env_file = fake_prism_env / 'environment'
+    env_file.write_text('prod')
+
+    prism_instance.load_paths()
+
+    assert prism_instance.environment == 'prod'
+    assert env_file.read_text() == 'prod'
+
+
 def test_load_paths_respects_prod_environment_marker(prism_instance, fake_prism_env):
     drive_root = fake_prism_env / 'config' / 'repo_paths.csv'
     drive_mount = [

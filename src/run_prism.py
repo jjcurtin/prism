@@ -133,11 +133,13 @@ class PRISM():
         # everything under its config_base) this checkout loads from. This
         # stays gitignored (unlike repo_paths.csv above) because it's a
         # per-deployment choice, not something every checkout should share.
-        # Defaults to "dev" (the safer default) if missing. Callers that
-        # need to resolve a specific environment regardless of the marker
-        # (e.g. tests_integration/test_environment_files.py, which checks
-        # both "dev" and "prod" in the same run) can pass `environment`
-        # directly instead.
+        # Defaults to "dev" (the safer default) if missing, and creates the
+        # file so the choice is explicit and persisted for next time rather
+        # than silently re-defaulting on every startup. Callers that need to
+        # resolve a specific environment regardless of the marker (e.g.
+        # tests_integration/test_environment_files.py, which checks both
+        # "dev" and "prod" in the same run) can pass `environment` directly
+        # instead.
         if environment:
             self.environment = environment
         else:
@@ -145,8 +147,11 @@ class PRISM():
             self.environment = 'dev'
             if env_file.exists() and env_file.read_text().strip():
                 self.environment = env_file.read_text().strip()
+            elif env_file.exists():
+                self.add_to_transcript(f"Environment file at {env_file} is empty — defaulting to 'dev'.", "WARNING")
             else:
-                self.add_to_transcript(f"No environment file at {env_file} (or it's empty) — defaulting to 'dev'.", "WARNING")
+                env_file.write_text('dev')
+                self.add_to_transcript(f"No environment file at {env_file} — created it and set to 'dev'.", "WARNING")
 
         paths_csv = self._resolve_drive_path(f"S:/{repo_paths['prism_drive_subpath']}/{self.environment}/config/paths.csv")
         try:
