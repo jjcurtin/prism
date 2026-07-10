@@ -13,10 +13,29 @@ def test_load_paths_resolves_everything_under_the_fake_drive(prism_instance, fak
     assert prism_instance.data_dir == str((fake_prism_env / 'data').resolve())
     assert Path(prism_instance.participants_path).name == 'dev_study_participants.csv'
     assert Path(prism_instance.reminders_path).name == 'dev_reminders.csv'
-    assert Path(prism_instance.r_scripts_dir).name == 'dev_automation'
+    # r_scripts_dir ('scripts' key in the drive's paths.csv) resolves
+    # locally against the repo checkout, NOT against config_base/the drive
+    # -- unlike participants_path/reminders_path above.
+    assert prism_instance.r_scripts_dir == str((fake_prism_env / '..' / 'automation_scripts').resolve())
     assert Path(prism_instance.r_scripts_dir).is_dir()
     assert Path(prism_instance.system_task_schedule_path) == drive_config_base / 'config' / 'system_task_schedule.csv'
     assert Path(prism_instance.study_coordinators_path) == drive_config_base / 'config' / 'study_coordinators.csv'
+
+
+def test_load_paths_scripts_dir_not_resolved_relative_to_config_base(prism_instance, fake_prism_env):
+    """r_scripts_dir is still configured per-environment via the drive's
+    paths.csv 'scripts' key (it's not a prism-specific folder, so it can't
+    just be a fixed repo-relative default the way logs_dir/data_dir are),
+    but unlike participants_path/reminders_path, its value must resolve
+    against the local repo checkout, not against config_base -- regression
+    test for accidentally routing it back through the drive-relative branch.
+    """
+    prism_instance.load_paths()
+
+    config_base = Path(prism_instance.config_base)
+    r_scripts_dir = Path(prism_instance.r_scripts_dir)
+    assert config_base not in r_scripts_dir.parents
+    assert r_scripts_dir == (fake_prism_env / '..' / 'automation_scripts').resolve()
 
 
 def test_load_paths_defaults_to_dev_when_environment_file_missing(prism_instance, fake_prism_env):

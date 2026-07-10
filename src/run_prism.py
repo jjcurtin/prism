@@ -173,9 +173,22 @@ class PRISM():
             if value is None:
                 self.add_to_transcript(f"paths.csv missing key '{key}' — {attr} left unset.", "WARNING")
                 continue
-            resolved = self._resolve_drive_path(value)
-            if not Path(resolved).is_absolute():
-                resolved = str((Path(self.config_base) / resolved).resolve())
+            if key == 'scripts':
+                # Unlike participants/reminders, the scripts folder isn't a
+                # prism-specific, drive-hosted resource -- still configured
+                # per-environment via the drive's paths.csv (so it can point
+                # wherever that RA/machine's scripts actually live), but the
+                # value itself is a local filesystem path and must NOT be
+                # routed through _resolve_drive_path's "X:" substitution or
+                # resolved relative to config_base (which lives on the
+                # drive). A relative value resolves against the repo
+                # checkout instead, the same local anchor logs_dir/data_dir
+                # already use.
+                resolved = value if Path(value).is_absolute() else str((repo_root / value).resolve())
+            else:
+                resolved = self._resolve_drive_path(value)
+                if not Path(resolved).is_absolute():
+                    resolved = str((Path(self.config_base) / resolved).resolve())
             setattr(self, attr, resolved)
 
         # These used to be separate paths.csv/paths.api entries; they now

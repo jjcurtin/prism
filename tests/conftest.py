@@ -56,7 +56,7 @@ def fake_prism_env(tmp_path):
         '"config_base","S:/optimize/prism/dev/"\n'
         '"participants","S:/optimize/data_raw/participants/dev_study_participants.csv"\n'
         '"reminders","S:/optimize/data_raw/participants/dev_reminders.csv"\n'
-        '"scripts","../../proj_optimize/dev_automation/"\n'
+        '"scripts","../automation_scripts"\n'
     )
     (config_base / 'api' / 'qualtrics.api').write_text(QUALTRICS_API)
     (config_base / 'api' / 'twilio.api').write_text(TWILIO_API)
@@ -68,7 +68,11 @@ def fake_prism_env(tmp_path):
     (participants_dir / 'dev_study_participants.csv').write_text(STUDY_PARTICIPANTS_CSV)
     (participants_dir / 'dev_reminders.csv').write_text(REMINDERS_CSV)
 
-    (drive_root / 'optimize' / 'proj_optimize' / 'dev_automation').mkdir(parents=True)
+    # r_scripts_dir ('scripts' key above) is still drive-configured (per-
+    # environment, since it's not a prism-specific folder) but resolves
+    # locally against the repo checkout, not against config_base/the drive
+    # -- a sibling directory to repo_root here, matching "../automation_scripts".
+    (tmp_path / 'automation_scripts').mkdir(parents=True)
 
     return repo_root
 
