@@ -24,10 +24,21 @@ def test_shutdown_cancelled_on_no_confirmation(fake_interface, capsys):
 
 
 def test_shutdown_confirmed_success(fake_interface, monkeypatch, capsys):
-    fake_interface.api = MagicMock(return_value=(True, {"uptime": "1h"}))
+    """The shutdown server handler calls os._exit(0) from inside the request
+    handler, so the POST /system/shutdown call itself almost never gets a
+    real HTTP response back -- its own (ok, data) is not trustworthy.
+    Success is instead determined by re-probing reachability afterward: if
+    the server is now unreachable, the shutdown worked.
+    """
+    fake_interface.api = MagicMock(side_effect=[
+        (True, {"uptime": "1h"}),   # initial reachability check
+        (False, None),              # the shutdown POST itself -- connection dropped
+        (False, None),               # follow-up reachability check: now unreachable
+    ])
     fake_interface.inputs_queue.put('y')
     exit_calls = []
     monkeypatch.setattr('builtins.exit', lambda code=0: exit_calls.append(code))
+    monkeypatch.setattr('user_interface_menus._shutdown_menu.time.sleep', lambda *a: None)
 
     _shutdown_menu.shutdown_menu(fake_interface)
 
@@ -37,19 +48,26 @@ def test_shutdown_confirmed_success(fake_interface, monkeypatch, capsys):
     assert fake_interface.api.call_args_list == [
         (("GET", "system/uptime"),),
         (("POST", "system/shutdown"),),
+        (("GET", "system/uptime"),),
     ]
 
 
 def test_shutdown_confirmed_failure_response_is_reported(fake_interface, monkeypatch, capsys):
-    """Regression test for a fixed bug: the shutdown POST's return value used
-    to be discarded, so a failed/unreachable shutdown request (self.api()
-    returning None) still unconditionally printed "PRISM shut down." Now the
-    return value is checked and a failure is reported instead.
+    """Regression test: if the server is still reachable after the shutdown
+    POST (and a brief grace period), the shutdown genuinely failed and must
+    be reported as such -- even though the POST call itself might report
+    ok=True (e.g. some other 200 response) or ok=False; only the follow-up
+    reachability check decides the outcome.
     """
-    fake_interface.api = MagicMock(side_effect=[(True, {"uptime": "1h"}), (False, None)])
+    fake_interface.api = MagicMock(side_effect=[
+        (True, {"uptime": "1h"}),   # initial reachability check
+        (False, None),               # the shutdown POST itself
+        (True, {"uptime": "1h"}),   # follow-up check: still reachable -- shutdown failed
+    ])
     fake_interface.inputs_queue.put('y')
     exit_calls = []
     monkeypatch.setattr('builtins.exit', lambda code=0: exit_calls.append(code))
+    monkeypatch.setattr('user_interface_menus._shutdown_menu.time.sleep', lambda *a: None)
 
     _shutdown_menu.shutdown_menu(fake_interface)
 

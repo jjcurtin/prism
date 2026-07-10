@@ -61,6 +61,27 @@ def test_add_task_participant_id_absent_when_not_given(fake_app):
     assert 'participant_id' not in tm.tasks[0]
 
 
+def test_add_task_one_time_defaults_to_false(fake_app):
+    """Existing callers that don't pass `one_time` must keep getting a
+    permanent, recurring task -- this is the default the whole rest of the
+    engine (check_tasks/run) relies on for every pre-existing task type."""
+    tm = make_manager(fake_app)
+    tm.add_task('CHECK_SYSTEM', '03:00:00')
+    assert tm.tasks[0]['one_time'] is False
+
+
+def test_add_task_one_time_true_when_requested(fake_app):
+    tm = make_manager(fake_app)
+    tm.add_task('ema', '09:00:00', participant_id='000000000', one_time=True)
+    assert tm.tasks[0]['one_time'] is True
+
+
+def test_add_task_returns_the_created_task_dict(fake_app):
+    tm = make_manager(fake_app)
+    task = tm.add_task('ema', '09:00:00', participant_id='000000000', one_time=True)
+    assert task is tm.tasks[0]
+
+
 def test_check_tasks_queues_a_due_task(fake_app):
     tm = make_manager(fake_app)
     now = datetime.now().time()
@@ -127,6 +148,99 @@ def test_process_task_not_implemented_by_base_class(fake_app):
     tm = make_manager(fake_app)
     with pytest.raises(NotImplementedError):
         tm.process_task({})
+
+
+# ------------------------------------------------------------
+# finish_task / one_time cleanup
+# ------------------------------------------------------------
+
+def test_finish_task_removes_one_time_task_after_success(fake_app):
+    tm = make_manager(fake_app)
+    tm.process_task = lambda task: 0
+    task = tm.add_task('ema', '09:00:00', participant_id='000000000', one_time=True)
+
+    result = tm.finish_task(task)
+
+    assert result == 0
+    assert tm.tasks == []
+
+
+def test_finish_task_removes_one_time_task_after_failure_no_retry(fake_app):
+    """A failed one-time task must still be removed immediately -- decision
+    is "no retry", not "retry until it succeeds"."""
+    tm = make_manager(fake_app)
+    tm.process_task = lambda task: -1
+    task = tm.add_task('ema', '09:00:00', participant_id='000000000', one_time=True)
+
+    result = tm.finish_task(task)
+
+    assert result == -1
+    assert tm.tasks == []
+
+
+def test_finish_task_leaves_recurring_task_in_place(fake_app):
+    """The default (one_time=False) behavior -- used by every pre-existing
+    recurring task type (ema/ema_reminder/feedback/feedback_reminder/system
+    tasks) -- must be completely unaffected: the task stays scheduled after
+    processing, exactly like before finish_task existed."""
+    tm = make_manager(fake_app)
+    tm.process_task = lambda task: 0
+    task = tm.add_task('ema_reminder', '10:00:00', participant_id='000000000')
+
+    tm.finish_task(task)
+
+    assert tm.tasks == [task]
+
+
+def test_finish_task_only_removes_the_matching_task_by_identity(fake_app):
+    """A one-time 'ema' send for a participant must not remove that same
+    participant's unrelated permanent recurring 'ema' task, even though
+    both share task_type + participant_id -- removal is by object identity,
+    not by field matching."""
+    tm = make_manager(fake_app)
+    tm.process_task = lambda task: 0
+    recurring = tm.add_task('ema', '09:00:00', participant_id='000000000')
+    one_time = tm.add_task('ema', '09:00:05', participant_id='000000000', one_time=True)
+
+    tm.finish_task(one_time)
+
+    assert tm.tasks == [recurring]
+
+
+def test_run_calls_finish_task_and_removes_one_time_task(fake_app):
+    """The polling run() loop must route every task through finish_task
+    (not process_task directly) so one-time cleanup applies there too, not
+    just to direct/manual invocations."""
+    tm = make_manager(fake_app)
+    tm.running = True
+    tm.process_task = lambda task: 0
+    task = tm.add_task('ema', '09:00:00', participant_id='000000000', one_time=True)
+
+    def stop_after_one(t):
+        tm.running = False
+        return 0
+    tm.process_task = stop_after_one
+    tm.task_queue.put(task)
+
+    tm.run()
+
+    assert tm.tasks == []
+
+
+def test_run_leaves_non_one_time_task_scheduled(fake_app):
+    tm = make_manager(fake_app)
+    tm.running = True
+    task = tm.add_task('CHECK_SYSTEM', '03:00:00')
+
+    def stop_after_one(t):
+        tm.running = False
+        return 0
+    tm.process_task = stop_after_one
+    tm.task_queue.put(task)
+
+    tm.run()
+
+    assert tm.tasks == [task]
 
 
 def test_run_outer_catch_all_notifies_coordinators(fake_app, mocker):

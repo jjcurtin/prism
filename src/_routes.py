@@ -8,7 +8,6 @@ from flask_limiter.util import get_remote_address
 from werkzeug.exceptions import HTTPException
 import time
 from datetime import datetime
-from datetime import timedelta
 
 from _helper import send_sms, notify_coordinators
 from _error_codes import code_prefix
@@ -215,11 +214,23 @@ def create_flask_app(app_instance):
     
     @flask_app.route('/participants/send_survey/<unique_id>/<survey_type>', methods = ['POST'])
     def send_survey(unique_id, survey_type):
+        """Sends a single, one-off ema/feedback survey to one participant
+        right now, synchronously -- distinct from the permanent recurring
+        ema/ema_reminder/feedback/feedback_reminder tasks
+        `schedule_participant_tasks` sets up for every participant. The
+        task is added with `one_time=True` and processed immediately via
+        `finish_task` (which removes it from the task list right after,
+        success or failure) instead of being queued for the polling loop to
+        pick up ~10 seconds later and optimistically reporting success
+        before the send is known to have worked.
+        """
         if survey_type not in ['ema', 'feedback']:
             return jsonify({"error": "Invalid survey type"}), 400
         elif not app_instance.participant_manager.get_participant(unique_id):
             return jsonify({"error": "Participant not found"}), 404
-        app_instance.participant_manager.add_task(survey_type, (datetime.now() + timedelta(seconds = 10)).strftime('%H:%M:%S'), participant_id = unique_id)
+        task = app_instance.participant_manager.add_task(survey_type, datetime.now().strftime('%H:%M:%S'), participant_id = unique_id, one_time = True)
+        if app_instance.participant_manager.finish_task(task) != 0:
+            return jsonify({"error": f"Failed to send {survey_type} survey to participant {unique_id}"}), 502
         return jsonify({"message": f"{survey_type.capitalize()} survey sent to participant {unique_id}"}), 200
 
     @flask_app.route('/participants/send_custom_sms/<unique_id>', methods = ['POST'])

@@ -367,6 +367,48 @@ def test_process_task_sends_ema_sms_in_prod_mode(fake_app, mocker):
     send_sms.assert_called_once_with(fake_app, ['5555550100'], mocker.ANY)
 
 
+# ------------------------------------------------------------
+# finish_task / one-time survey send (send_survey route's underlying flow)
+# ------------------------------------------------------------
+
+def test_finish_task_one_time_survey_send_removes_only_the_one_time_task(fake_app, mocker):
+    """Reproduces the exact scenario the send_survey route relies on: a
+    participant already has a permanent recurring 'ema' task (from
+    schedule_participant_tasks) and a coordinator triggers an ad hoc
+    one-time 'ema' send on top of it. Both tasks share task_type +
+    participant_id, so finishing the one-time task must not disturb the
+    recurring one.
+    """
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+    fake_app.ema_survey_id = 'fake_survey'
+    fake_app.ema_message = "Hello, it's time to take your daily survey."
+    mocker.patch('task_managers._participant_manager.send_sms')
+    recurring_task = pm.add_task('ema', '09:00:00', participant_id='000000000')
+
+    one_time_task = pm.add_task('ema', '09:05:00', participant_id='000000000', one_time=True)
+    result = pm.finish_task(one_time_task)
+
+    assert result == 0
+    assert pm.tasks == [recurring_task]
+
+
+def test_finish_task_one_time_survey_send_removed_even_on_failure(fake_app, mocker):
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+    fake_app.mode = 'prod'
+    fake_app.ema_survey_id = 'fake_survey'
+    fake_app.ema_message = "Hello, it's time to take your daily survey."
+    mocker.patch('task_managers._participant_manager.send_sms', side_effect=Exception('boom'))
+    mocker.patch('task_managers._participant_manager.notify_coordinators')
+
+    one_time_task = pm.add_task('ema', '09:05:00', participant_id='000000000', one_time=True)
+    result = pm.finish_task(one_time_task)
+
+    assert result == -1
+    assert pm.tasks == []
+
+
 def test_process_task_ema_reminder_skipped_when_already_opened(tmp_path, fake_app, mocker):
     """Regression test for a fixed bug: process_task used to check
     ema_opened/feedback_opened columns that don't exist in the real

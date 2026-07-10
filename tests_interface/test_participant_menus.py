@@ -642,7 +642,7 @@ def test_individual_participant_menu_builds_field_options(fake_interface, monkey
     menu_options = _open_individual_menu(fake_interface, monkeypatch, participant)
     assert menu_options['1']['description'] == 'initials: Alice'
     assert menu_options['4']['description'] == 'on_study: True'
-    assert set(menu_options.keys()) >= {'1', '2', '3', '4', '5', '6', '7', '8', '9', 'remove', 'survey', 'message'}
+    assert set(menu_options.keys()) >= {'1', '2', '3', '4', '5', '6', '7', '8', '9', 'remove', 'ema', 'feedback', 'message'}
 
 
 def test_individual_participant_menu_update_field_text_success(fake_interface, monkeypatch, capsys):
@@ -745,32 +745,75 @@ def test_individual_participant_menu_update_time_field_invalid_format(fake_inter
     assert 'Invalid time format for ema_time' in capsys.readouterr().out
 
 
-def test_individual_participant_menu_send_survey_valid(fake_interface, monkeypatch, capsys):
+def test_individual_participant_menu_send_ema_survey_confirmed_success(fake_interface, monkeypatch, capsys):
     participant = {'unique_id': '1', 'initials': 'Alice', 'subid': '3000', 'on_study': False,
                     'phone_number': '555', 'ema_time': '16:00:00', 'ema_reminder_time': '19:00:00',
                     'feedback_time': '07:00:00', 'feedback_reminder_time': '12:00:00'}
     menu_options = _open_individual_menu(fake_interface, monkeypatch, participant)
 
-    fake_interface.inputs_queue.put('ema')
+    fake_interface.inputs_queue.put('y')
     fake_interface.api = MagicMock(return_value=(True, True))
-    menu_options['survey']['menu_caller'](fake_interface)
+    menu_options['ema']['menu_caller'](fake_interface)
 
     fake_interface.api.assert_called_once_with('POST', 'participants/send_survey/1/ema')
     assert 'Ema survey sent.' in capsys.readouterr().out
 
 
-def test_individual_participant_menu_send_survey_invalid_type(fake_interface, monkeypatch, capsys):
+def test_individual_participant_menu_send_ema_survey_confirmed_failure(fake_interface, monkeypatch, capsys):
+    """The route now sends synchronously and reports the real outcome, so a
+    502 from the backend must surface here as a failure, not an optimistic
+    success."""
     participant = {'unique_id': '1', 'initials': 'Alice', 'subid': '3000', 'on_study': False,
                     'phone_number': '555', 'ema_time': '16:00:00', 'ema_reminder_time': '19:00:00',
                     'feedback_time': '07:00:00', 'feedback_reminder_time': '12:00:00'}
     menu_options = _open_individual_menu(fake_interface, monkeypatch, participant)
 
-    fake_interface.inputs_queue.put('bogus')
+    fake_interface.inputs_queue.put('y')
+    fake_interface.api = MagicMock(return_value=(False, None))
+    menu_options['ema']['menu_caller'](fake_interface)
+
+    fake_interface.api.assert_called_once_with('POST', 'participants/send_survey/1/ema')
+    assert 'Failed to send ema survey.' in capsys.readouterr().out
+
+
+def test_individual_participant_menu_send_ema_survey_not_confirmed_no_api_call(fake_interface, monkeypatch, capsys):
+    participant = {'unique_id': '1', 'initials': 'Alice', 'subid': '3000', 'on_study': False,
+                    'phone_number': '555', 'ema_time': '16:00:00', 'ema_reminder_time': '19:00:00',
+                    'feedback_time': '07:00:00', 'feedback_reminder_time': '12:00:00'}
+    menu_options = _open_individual_menu(fake_interface, monkeypatch, participant)
+
+    fake_interface.inputs_queue.put('n')
     fake_interface.api = MagicMock()
-    menu_options['survey']['menu_caller'](fake_interface)
+    menu_options['ema']['menu_caller'](fake_interface)
 
     fake_interface.api.assert_not_called()
-    assert 'Invalid survey type.' in capsys.readouterr().out
+
+
+def test_individual_participant_menu_send_feedback_survey_confirmed_success(fake_interface, monkeypatch, capsys):
+    participant = {'unique_id': '1', 'initials': 'Alice', 'subid': '3000', 'on_study': False,
+                    'phone_number': '555', 'ema_time': '16:00:00', 'ema_reminder_time': '19:00:00',
+                    'feedback_time': '07:00:00', 'feedback_reminder_time': '12:00:00'}
+    menu_options = _open_individual_menu(fake_interface, monkeypatch, participant)
+
+    fake_interface.inputs_queue.put('y')
+    fake_interface.api = MagicMock(return_value=(True, True))
+    menu_options['feedback']['menu_caller'](fake_interface)
+
+    fake_interface.api.assert_called_once_with('POST', 'participants/send_survey/1/feedback')
+    assert 'Feedback survey sent.' in capsys.readouterr().out
+
+
+def test_individual_participant_menu_send_feedback_survey_not_confirmed_no_api_call(fake_interface, monkeypatch, capsys):
+    participant = {'unique_id': '1', 'initials': 'Alice', 'subid': '3000', 'on_study': False,
+                    'phone_number': '555', 'ema_time': '16:00:00', 'ema_reminder_time': '19:00:00',
+                    'feedback_time': '07:00:00', 'feedback_reminder_time': '12:00:00'}
+    menu_options = _open_individual_menu(fake_interface, monkeypatch, participant)
+
+    fake_interface.inputs_queue.put('n')
+    fake_interface.api = MagicMock()
+    menu_options['feedback']['menu_caller'](fake_interface)
+
+    fake_interface.api.assert_not_called()
 
 
 def test_individual_participant_menu_send_message_success(fake_interface, monkeypatch, capsys):

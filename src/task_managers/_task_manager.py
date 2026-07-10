@@ -17,12 +17,27 @@ class TaskManager():
         self.thread = threading.Thread(target = self.run)
         self.thread.start()
 
-    def add_task(self, task_type, task_time, r_script_path = None, participant_id = None):
+    def add_task(self, task_type, task_time, r_script_path = None, participant_id = None, one_time = False):
         """`r_script_path` accepts the literal string "None" as an
         empty/none value in addition to "". Callers that pass this through a
         URL path segment (e.g. _routes.py's add_system_task route) can't
         encode a truly empty string there, so they send the literal "None"
         instead.
+
+        `one_time` marks a task for automatic removal (via `finish_task`)
+        immediately after it finishes processing once -- success or
+        failure, no retry -- instead of persisting indefinitely like every
+        other task this engine manages. Defaults to False so every existing
+        caller/task keeps its current permanent, recurring behavior
+        unchanged.
+
+        Returns the created task dict so a caller that needs to process it
+        synchronously (see `finish_task`) can reference this exact task
+        instance later, rather than re-looking it up by task_type +
+        participant_id -- which could otherwise ambiguously match a
+        different, unrelated task sharing the same type/participant (e.g. a
+        one-time 'ema' send and a participant's recurring daily 'ema'
+        task).
         """
         task_dict = {
             'task_type': task_type,
@@ -34,9 +49,11 @@ class TaskManager():
             else:
                 task_dict['r_script_path'] = r_script_path
         task_dict['run_today'] = False
+        task_dict['one_time'] = one_time
         if participant_id is not None:
             task_dict['participant_id'] = participant_id
-        self.tasks.append(task_dict)  
+        self.tasks.append(task_dict)
+        return task_dict
     
     def save_to_csv(self, data, file_path):
         try:
@@ -67,13 +84,34 @@ class TaskManager():
 
     def process_task(self, task):
         raise NotImplementedError("Subclasses must implement this method.")
-    
+
+    def finish_task(self, task):
+        """Process `task` and, if it's flagged `one_time`, remove it from
+        self.tasks immediately afterward -- regardless of whether
+        process_task succeeded or failed, and with no retry. This is the
+        single place one-time cleanup happens, shared by both the normal
+        polling loop below (`run()`) and any direct/manual invocation (e.g.
+        a route that needs a synchronous result right now instead of
+        waiting for the next `check_tasks` tick) -- so a one-time task's
+        lifecycle is identical no matter which path finishes it.
+
+        Removal matches by object identity (`is`), not by task_type/
+        participant_id/value equality, so it can never remove a different
+        task that merely looks similar (e.g. a participant's permanent
+        recurring 'ema' task sitting alongside a one-time 'ema' send for
+        that same participant).
+        """
+        result = self.process_task(task)
+        if task.get('one_time'):
+            self.tasks[:] = [t for t in self.tasks if t is not task]
+        return result
+
     def run(self):
         while self.running:
             self.check_tasks()
             try:
                 task = self.task_queue.get(timeout = 1)
-                result = self.process_task(task)
+                result = self.finish_task(task)
                 if result != 0:
                     self.app.add_to_transcript(f"Task {task['task_type']} failed with error code {result}.", "ERROR")
             except queue.Empty:

@@ -90,12 +90,18 @@ def cmd_setup(args):
 def cmd_run(args):
     """Stop any running server, then start run_prism.py in the given mode."""
     subprocess.run([sys.executable, "stop_server.py"], check=True)
-    subprocess.run([sys.executable, "run_prism.py", "-mode", args.mode], cwd="src", check=True)
+    try:
+        subprocess.run([sys.executable, "run_prism.py", "-mode", args.mode], cwd="src", check=True)
+    except KeyboardInterrupt:
+        print("\nPRISM server stopped.")
 
 
 def cmd_interface(args):
     """Launch the RA terminal interface (src/prism_interface.py)."""
-    subprocess.run([sys.executable, "prism_interface.py"], cwd="src", check=True)
+    try:
+        subprocess.run([sys.executable, "prism_interface.py"], cwd="src", check=True)
+    except KeyboardInterrupt:
+        print("\nInterface closed.")
 
 
 _TEST_TARGETS = {

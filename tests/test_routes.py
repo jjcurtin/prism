@@ -320,11 +320,24 @@ def test_update_participant_not_found(routes_client, routes_app_instance):
     assert resp.status_code == 404
 
 
-def test_send_survey_success(routes_client, routes_app_instance):
+def test_send_survey_success(routes_client, routes_app_instance, mocker):
+    """The route now sends synchronously: it adds a one_time task and
+    processes it immediately via finish_task, returning the real outcome
+    instead of optimistically reporting success ~10 seconds before the
+    polling loop would even attempt the send.
+    """
     routes_app_instance.participant_manager.get_participant.return_value = {'unique_id': '1'}
+    fake_task = {'task_type': 'ema', 'participant_id': '1', 'one_time': True}
+    routes_app_instance.participant_manager.add_task.return_value = fake_task
+    routes_app_instance.participant_manager.finish_task.return_value = 0
+
     resp = routes_client.post('/participants/send_survey/1/ema')
+
     assert resp.status_code == 200
-    routes_app_instance.participant_manager.add_task.assert_called_once()
+    routes_app_instance.participant_manager.add_task.assert_called_once_with(
+        'ema', mocker.ANY, participant_id='1', one_time=True
+    )
+    routes_app_instance.participant_manager.finish_task.assert_called_once_with(fake_task)
 
 
 def test_send_survey_invalid_type(routes_client):
@@ -336,6 +349,38 @@ def test_send_survey_participant_not_found(routes_client, routes_app_instance):
     routes_app_instance.participant_manager.get_participant.return_value = None
     resp = routes_client.post('/participants/send_survey/1/ema')
     assert resp.status_code == 404
+    routes_app_instance.participant_manager.add_task.assert_not_called()
+
+
+def test_send_survey_send_failure_is_502(routes_client, routes_app_instance):
+    """Regression test for the fixed bug: this route used to queue the
+    survey for the polling loop ~10 seconds later and always return 200
+    immediately, regardless of whether the SMS actually sent. It must now
+    mirror send_custom_sms's synchronous 502-on-failure contract.
+    """
+    routes_app_instance.participant_manager.get_participant.return_value = {'unique_id': '1'}
+    fake_task = {'task_type': 'ema', 'participant_id': '1', 'one_time': True}
+    routes_app_instance.participant_manager.add_task.return_value = fake_task
+    routes_app_instance.participant_manager.finish_task.return_value = -1
+
+    resp = routes_client.post('/participants/send_survey/1/ema')
+
+    assert resp.status_code == 502
+    routes_app_instance.participant_manager.finish_task.assert_called_once_with(fake_task)
+
+
+def test_send_survey_feedback_type_success(routes_client, routes_app_instance):
+    routes_app_instance.participant_manager.get_participant.return_value = {'unique_id': '1'}
+    fake_task = {'task_type': 'feedback', 'participant_id': '1', 'one_time': True}
+    routes_app_instance.participant_manager.add_task.return_value = fake_task
+    routes_app_instance.participant_manager.finish_task.return_value = 0
+
+    resp = routes_client.post('/participants/send_survey/1/feedback')
+
+    assert resp.status_code == 200
+    args, kwargs = routes_app_instance.participant_manager.add_task.call_args
+    assert args[0] == 'feedback'
+    assert kwargs == {'participant_id': '1', 'one_time': True}
 
 
 def test_send_custom_sms_missing_message(routes_client, routes_app_instance):

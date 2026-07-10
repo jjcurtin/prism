@@ -51,16 +51,21 @@ def individual_participant_menu(self, participant_id):
         else:
             error("Failed to update participant.", self)
 
-    def send_survey_menu(self, participant_id):
-        survey_type = get_input(self, prompt = "Enter survey type (ema/feedback): ").lower()
-        if survey_type in ['ema', 'feedback']:
-            ok, _ = self.api("POST", f"participants/send_survey/{participant_id}/{survey_type}")
-            if ok:
-                success(f"{survey_type.capitalize()} survey sent.", self)
-            else:
-                error(f"Failed to send {survey_type} survey.", self)
+    def send_one_time_survey_menu(self, participant_id, survey_type):
+        """Sends a single one-off ema/feedback survey to this participant
+        right now (POST /participants/send_survey/<id>/<survey_type>, fixed
+        to `survey_type` -- no type-prompting). The route sends
+        synchronously and returns the real outcome, so `ok` here reflects
+        whether the SMS actually went out, not just whether a task was
+        queued.
+        """
+        if not prompt_confirmation(self, prompt = f"Send a one-time {survey_type} survey now?"):
+            return
+        ok, _ = self.api("POST", f"participants/send_survey/{participant_id}/{survey_type}")
+        if ok:
+            success(f"{survey_type.capitalize()} survey sent.", self)
         else:
-            error("Invalid survey type.", self)
+            error(f"Failed to send {survey_type} survey.", self)
 
     def send_message_menu(self, participant_id):
         message = print_twilio_terminal_prompt()
@@ -92,7 +97,8 @@ def individual_participant_menu(self, participant_id):
             '8': {'description': f'feedback_time: {participant.get('feedback_time')}', 'menu_caller': lambda self: update_field_menu(self, '8')},
             '9': {'description': f'feedback_reminder_time: {participant.get('feedback_reminder_time')}', 'menu_caller': lambda self: update_field_menu(self, '9')},
             'remove': {'description': 'Remove Participant', 'menu_caller': lambda self: remove_participant_menu(self)},
-            'survey': {'description': 'Send Survey', 'menu_caller': lambda self: send_survey_menu(self, participant_id)},
+            'ema': {'description': 'Send One-Time EMA Survey', 'menu_caller': lambda self: send_one_time_survey_menu(self, participant_id, 'ema')},
+            'feedback': {'description': 'Send One-Time Feedback Survey', 'menu_caller': lambda self: send_one_time_survey_menu(self, participant_id, 'feedback')},
             'message': {'description': 'Send Message', 'menu_caller': lambda self: send_message_menu(self, participant_id)}
         }
         if not self.commands_queue:
