@@ -21,7 +21,6 @@ TWILIO_API = (
 
 STUDY_COORDINATORS_CSV = '"name","phone_number"\n"Test Coordinator","5555550100"\n'
 SYSTEM_TASK_SCHEDULE_CSV = '"task_type","task_time","r_script_path","run_today"\n"CHECK_SYSTEM","03:00:00","","no"\n'
-SCRIPT_PIPELINE_CSV = '"script_path","arguments","enabled"\n'
 FOLLOWMEE_COORDS_CSV = (
     'DeviceName,DeviceID,Date,Latitude,Longitude,Type,Speed(mph),Speed(km/h),'
     'Direction,Altitude(ft),Altitude(m),Accuracy,Battery\n'
@@ -69,7 +68,6 @@ def fake_prism_env(tmp_path):
     (config_base / 'api' / 'twilio.api').write_text(TWILIO_API)
     (config_base / 'config' / 'study_coordinators.csv').write_text(STUDY_COORDINATORS_CSV)
     (config_base / 'config' / 'system_task_schedule.csv').write_text(SYSTEM_TASK_SCHEDULE_CSV)
-    (config_base / 'config' / 'script_pipeline.csv').write_text(SCRIPT_PIPELINE_CSV)
     (config_base / 'config' / 'followmee_coords.csv').write_text(FOLLOWMEE_COORDS_CSV)
 
     participants_dir = drive_root / 'optimize' / 'data_raw' / 'participants'

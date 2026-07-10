@@ -47,7 +47,7 @@ class PulldownFollowmeeData(SystemTask):
                     return None
                 else:
                     self.app.add_to_transcript(f"Retrieved {len(devices)} devices.", "INFO")
-                    file_path = f"../data/followmee/raw/followmee_device_list.json"
+                    file_path = os.path.join(self.app.data_dir, 'followmee', 'raw', 'followmee_device_list.json')
                     os.makedirs(os.path.dirname(file_path), exist_ok = True)
                     with open(file_path, "w") as file:
                         json.dump(devices, file, indent = 4)
@@ -91,7 +91,7 @@ class PulldownFollowmeeData(SystemTask):
                     self.app.add_to_transcript(f"Unexpected response shape from FollowMee: {e}", "ERROR")
                     return 1
 
-                filepath = f"../data/followmee/raw/{raw_file_name}"
+                filepath = os.path.join(self.app.data_dir, 'followmee', 'raw', raw_file_name)
                 os.makedirs(os.path.dirname(filepath), exist_ok = True)
                 with open(filepath, "w") as file:
                     json.dump(data, file, indent=4)
@@ -112,7 +112,7 @@ class PulldownFollowmeeData(SystemTask):
         
     def process_followmee_data(self, raw_file_name, processed_file_name):
         try:
-            filepath = f"../data/followmee/raw/{raw_file_name}"
+            filepath = os.path.join(self.app.data_dir, 'followmee', 'raw', raw_file_name)
             with open(filepath, "r") as file:
                 new_data = json.load(file)
             new_grouped_data = defaultdict(list)
@@ -120,7 +120,7 @@ class PulldownFollowmeeData(SystemTask):
                 device_id = entry['DeviceID']
                 new_grouped_data[device_id].append(entry)
             for device_id, entries in new_grouped_data.items():
-                device_processed_file = f"../data/followmee/processed/{device_id}_{processed_file_name}"
+                device_processed_file = os.path.join(self.app.data_dir, 'followmee', 'processed', f"{device_id}_{processed_file_name}")
                 if os.path.exists(device_processed_file):
                     existing_data = pd.read_csv(device_processed_file)
                 else:

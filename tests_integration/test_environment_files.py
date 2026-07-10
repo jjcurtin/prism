@@ -48,11 +48,6 @@ REQUIRED_API_FIELDS = {
     'twilio.api': ['twilio_account_sid', 'twilio_auth_token', 'twilio_from_number'],
 }
 
-# script_pipeline.csv is exempt from the "has data rows" check -- it's a
-# documented-deprecated mechanism (config/README.md: "Prefer dropping
-# scripts where r_scripts_dir points, which PRISM auto-detects."), so an
-# empty script_pipeline.csv is the expected, healthy state for an
-# environment that doesn't use it, not a sign of an unfilled template.
 CSV_MUST_HAVE_DATA_ROWS = [
     'config/followmee_coords.csv',
     'config/system_task_schedule.csv',
@@ -86,7 +81,6 @@ def _required_files(app):
         'config/followmee_coords.csv': config_dir / 'followmee_coords.csv',
         'config/system_task_schedule.csv': config_dir / 'system_task_schedule.csv',
         'config/study_coordinators.csv': config_dir / 'study_coordinators.csv',
-        'config/script_pipeline.csv': config_dir / 'script_pipeline.csv',
     }
 
 
@@ -158,8 +152,7 @@ def test_environment_files_exist_and_are_populated(environment):
         f"placeholder value (REPLACE_WITH_...) or empty:\n  " + "\n  ".join(placeholder_fields)
     )
 
-    # 3. The CSVs must contain at least one data row beyond the header
-    # (script_pipeline.csv is exempt -- see CSV_MUST_HAVE_DATA_ROWS comment).
+    # 3. The CSVs must contain at least one data row beyond the header.
     csv_files_to_check = {label: required_files[label] for label in CSV_MUST_HAVE_DATA_ROWS}
     if getattr(app, 'participants_path', None):
         csv_files_to_check['study_participants.csv'] = Path(app.participants_path)

@@ -121,7 +121,7 @@ class PulldownQualtricsData(SystemTask):
             response = requests.get(url, headers=headers, timeout=10)
             if response.status_code == 200:
                 data = response.text
-                filepath = f"../data/qualtrics/raw/{raw_file_name}"
+                filepath = os.path.join(self.app.data_dir, 'qualtrics', 'raw', raw_file_name)
                 try:
                     os.makedirs(os.path.dirname(filepath), exist_ok=True)
                     with open(filepath, "w") as file:
@@ -141,7 +141,7 @@ class PulldownQualtricsData(SystemTask):
 
     def process_qualtrics_responses(self, raw_file_name, processed_file_name, data_type):
         try:
-            filepath = f"../data/qualtrics/raw/{raw_file_name}"
+            filepath = os.path.join(self.app.data_dir, 'qualtrics', 'raw', raw_file_name)
             df = pd.read_csv(filepath, encoding = 'ISO-8859-1', skip_blank_lines = True)
             start_row = df[df['StartDate'].notnull()].index[0]
             df = df.iloc[start_row:]
@@ -154,7 +154,7 @@ class PulldownQualtricsData(SystemTask):
             df = df.dropna(how='all', axis = 1)
             unwanted_string = "(already submitted feedback)"
             df = df[~df.apply(lambda row: row.astype(str).str.contains(unwanted_string, regex = False).any(), axis = 1)]
-            processed_filepath = f"../data/qualtrics/processed/{processed_file_name}"
+            processed_filepath = os.path.join(self.app.data_dir, 'qualtrics', 'processed', processed_file_name)
             os.makedirs(os.path.dirname(processed_filepath), exist_ok = True)
             df.to_csv(processed_filepath, index = False)
             if data_type == "ema":

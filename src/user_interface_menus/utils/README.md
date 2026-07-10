@@ -46,20 +46,13 @@ If you find yourself typing the same chain repeatedly, save it:
 A few shortcuts already come built in — for example, typing `sort_name`,
 `sort_id`, or `sort_on_study` re-sorts the participant list without having
 to go into `participants/sort` yourself. There's also a `test_all` chain
-that walks through participants, tasks, and the help menus back-to-back —
+that walks through participants, tasks, and settings menus back-to-back —
 useful as a quick tour of the app or as a smoke test after a PRISM update.
 
-## The four prompts
+## The three prompts
 
 PRISM shows a different prompt depending on what it expects from you:
 
 - `prism>` — the normal prompt; runs any command
-- `assistant>` — talking to the PRISM Assistant in plain English (see
-  `assistant/README.md`)
 - `twilio>` — whatever you type here is sent as an SMS to participant(s)
 - `ENTER to Continue>` — just press Enter; no commands work here
-
-## Related documentation
-
-The in-app `help ra navigation` and `help ra navigation advanced` pages
-cover this same material, if you'd rather read it there.

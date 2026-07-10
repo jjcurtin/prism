@@ -617,12 +617,12 @@ def test_syntax_highlight_string_none_items_is_noop(fake_self, capsys):
 
 
 # ------------------------------------------------------------
-# assistant_header_write / assistant_header_shift_write / assistant_write
-# smoke tests -- typewriter effect with real time.sleep() calls normally;
-# these monkeypatch time.sleep to a no-op and kbhit to never-interrupt, and
-# confirm the functions run to completion without raising. clear_column
-# (called internally) needs get_cursor_position mocked too, or its inner
-# ANSI-query wait loop spins forever once kbhit() is pinned to a constant.
+# assistant_header_write smoke tests -- typewriter effect with real
+# time.sleep() calls normally; these monkeypatch time.sleep to a no-op and
+# kbhit to never-interrupt, and confirm the function runs to completion
+# without raising. clear_column (called internally) needs
+# get_cursor_position mocked too, or its inner ANSI-query wait loop spins
+# forever once kbhit() is pinned to a constant.
 # ------------------------------------------------------------
 
 @pytest.fixture
@@ -656,27 +656,3 @@ def test_assistant_header_write_enter_interrupts_early(patched_terminal, fake_se
     # only the initial clear_column blank + cursor show/restore happened;
     # none of the message body characters got written.
     assert "a much longer line" not in out
-
-
-def test_assistant_header_shift_write_smoke(patched_terminal, fake_self):
-    patched_terminal.setattr(display, 'kbhit', lambda: False)
-    menu_helper.WINDOW_WIDTH = 10
-    display.assistant_header_shift_write(fake_self, ["hi"])
-
-
-def test_assistant_write_smoke(patched_terminal):
-    patched_terminal.setattr(display, 'kbhit', lambda: False)
-    fake = types.SimpleNamespace(debug=False, window_0_x=0, window_0_y=3, column_width=20, window_height=2)
-    display.assistant_write(fake, ["hi", "there"], 0, 3, 20, 2)
-
-
-# ------------------------------------------------------------
-# clear_assistant_area()
-# ------------------------------------------------------------
-
-def test_clear_assistant_area_delegates_to_clear_column(monkeypatch):
-    calls = []
-    monkeypatch.setattr(display, 'clear_column', lambda self, x, y, w, h: calls.append((x, y, w, h)))
-    fake = types.SimpleNamespace(window_0_x=1, window_0_y=2, column_width=30, window_height=4)
-    display.clear_assistant_area(fake)
-    assert calls == [(1, 2, 30, 4)]

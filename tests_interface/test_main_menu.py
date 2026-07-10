@@ -27,11 +27,11 @@ def test_main_menu_options_structure(fake_interface, monkeypatch):
     self_arg, menu_options = args[0], args[1]
     assert self_arg is fake_interface
     assert set(menu_options) == {
-        'help', 'command', 'assistant', 'check', 'tasks', 'participants',
+        'command', 'check', 'tasks', 'participants',
         'logs', 'settings', 'shutdown', 'exit',
     }
     for key, option in menu_options.items():
         assert callable(option['menu_caller']), f"{key} menu_caller not callable"
         assert option['description']
     assert kwargs['submenu'] is False
-    assert kwargs['recommended_actions'] == ['help', 'participants', 'tasks']
+    assert kwargs['recommended_actions'] == ['participants', 'tasks']

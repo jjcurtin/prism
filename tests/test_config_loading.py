@@ -10,6 +10,7 @@ def test_load_paths_resolves_everything_under_the_fake_drive(prism_instance, fak
 
     assert prism_instance.environment == 'dev'
     assert prism_instance.logs_dir == str((fake_prism_env / 'logs').resolve())
+    assert prism_instance.data_dir == str((fake_prism_env / 'data').resolve())
     assert Path(prism_instance.participants_path).name == 'dev_study_participants.csv'
     assert Path(prism_instance.reminders_path).name == 'dev_reminders.csv'
     assert Path(prism_instance.r_scripts_dir).name == 'dev_automation'
@@ -17,7 +18,6 @@ def test_load_paths_resolves_everything_under_the_fake_drive(prism_instance, fak
     assert Path(prism_instance.followmee_coords_path) == drive_config_base / 'config' / 'followmee_coords.csv'
     assert Path(prism_instance.system_task_schedule_path) == drive_config_base / 'config' / 'system_task_schedule.csv'
     assert Path(prism_instance.study_coordinators_path) == drive_config_base / 'config' / 'study_coordinators.csv'
-    assert Path(prism_instance.script_pipeline_path) == drive_config_base / 'config' / 'script_pipeline.csv'
 
 
 def test_load_paths_defaults_to_dev_when_environment_file_missing(prism_instance, fake_prism_env):

@@ -66,6 +66,7 @@ class PRISM():
         # from the drive's own paths.csv below.
         repo_paths_defaults = {
             'logs_dir': 'logs',
+            'data_dir': 'data',
             'drive_mount_windows': 'S:',
             'drive_mount_posix': '/mnt/research_drive',
             'prism_drive_subpath': 'optimize/prism',
@@ -81,6 +82,12 @@ class PRISM():
         # not shared study config) — set first so add_to_transcript (called
         # right after this) always has somewhere to write.
         self.logs_dir = str((repo_root / repo_paths['logs_dir']).resolve())
+        # data_dir: where the pulldown tasks (PulldownQualtricsData,
+        # PulldownFollowmeeData) write raw/processed output -- resolved the
+        # same way as logs_dir (repo-root-relative, not cwd-relative), so
+        # callers no longer need to assume a cwd of src/ (see
+        # tests_integration/conftest.py's real_app fixture).
+        self.data_dir = str((repo_root / repo_paths['data_dir']).resolve())
         self.drive_mount = repo_paths['drive_mount_windows'] if platform.system() == 'Windows' else repo_paths['drive_mount_posix']
 
         # environment marker: a git-ignored, single-line file at the repo
@@ -134,7 +141,6 @@ class PRISM():
         self.followmee_coords_path = str(config_dir / 'followmee_coords.csv')
         self.system_task_schedule_path = str(config_dir / 'system_task_schedule.csv')
         self.study_coordinators_path = str(config_dir / 'study_coordinators.csv')
-        self.script_pipeline_path = str(config_dir / 'script_pipeline.csv')
 
     # sane defaults for fields that may not exist yet in an older api CSV
     # (e.g. the message columns, added after qualtrics.api files already

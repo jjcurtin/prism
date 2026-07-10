@@ -214,16 +214,6 @@ def test_set_best_options_threshold(fake_repo):
     assert menu_helper.BEST_OPTIONS_THRESHOLD == 0.9
 
 
-def test_set_assistant_temperature(fake_repo):
-    menu_helper.set_assistant_temperature(0.2)
-    assert menu_helper.ASSISTANT_TEMPERATURE == 0.2
-
-
-def test_set_assistant_tokens(fake_repo):
-    menu_helper.set_assistant_tokens(1200)
-    assert menu_helper.ASSISTANT_TOKENS == 1200
-
-
 def test_set_assistant_type_speed_valid(fake_repo, capsys):
     menu_helper.set_assistant_type_speed(0.03)
     assert menu_helper.ASSISTANT_TYPE_SPEED == 0.03
@@ -267,8 +257,6 @@ def test_save_params_writes_expected_format(fake_repo):
     menu_helper.RIGHT_ALIGN = True
     menu_helper.RELATED_OPTIONS_THRESHOLD = 0.3
     menu_helper.BEST_OPTIONS_THRESHOLD = 0.7
-    menu_helper.ASSISTANT_TEMPERATURE = 0.7
-    menu_helper.ASSISTANT_TOKENS = 600
     menu_helper.ASSISTANT_TYPE_SPEED = 0.015
     menu_helper.SHOW_README = True
     menu_helper.COLOR_ON = True
@@ -290,10 +278,8 @@ def test_load_params_applies_valid_values(fake_repo):
         "WINDOW_HEIGHT=25\n"
         "RELATED_OPTIONS_THRESHOLD=0.4\n"
         "BEST_OPTIONS_THRESHOLD=0.8\n"
-        "ASSISTANT_TEMPERATURE=0.5\n"
         "SHOW_README=False\n"
         "COLOR_ON=False\n"
-        "ASSISTANT_TOKENS=500\n"
         "MENU_DELAY=0.1\n"
         "TIMEOUT=5\n"
         "ASSISTANT_TYPE_SPEED=0.02\n"
@@ -303,10 +289,8 @@ def test_load_params_applies_valid_values(fake_repo):
     assert menu_helper.WINDOW_HEIGHT == 25
     assert menu_helper.RELATED_OPTIONS_THRESHOLD == 0.4
     assert menu_helper.BEST_OPTIONS_THRESHOLD == 0.8
-    assert menu_helper.ASSISTANT_TEMPERATURE == 0.5
     assert menu_helper.SHOW_README is False
     assert menu_helper.COLOR_ON is False
-    assert menu_helper.ASSISTANT_TOKENS == 500
     assert menu_helper.MENU_DELAY == 0.1
     assert menu_helper.TIMEOUT == 5
     assert menu_helper.ASSISTANT_TYPE_SPEED == 0.02
@@ -512,3 +496,22 @@ def test_load_menus_calls_init_commands(fake_repo, monkeypatch):
     )
     menu_helper.load_menus()
     assert menu_helper._menu_options == sentinel
+
+
+# ------------------------------------------------------------
+# read_me / README -- relocated here (2026-07-10) from the now-removed
+# help/_help_menu.py: prism_interface.py imports README directly to show it
+# on startup when SHOW_README is True, so this content isn't part of the
+# help-menu navigation tree that was removed.
+
+
+def test_read_me_prints_lines(fake_interface, capsys):
+    menu_helper.read_me(fake_interface)
+    out = capsys.readouterr().out
+    assert "command" in out
+
+
+def test_read_me_skipped_when_commands_queue_active(fake_interface, capsys):
+    fake_interface.commands_queue.append('pending')
+    menu_helper.read_me(fake_interface)
+    assert capsys.readouterr().out == ""

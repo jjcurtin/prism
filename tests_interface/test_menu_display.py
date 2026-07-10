@@ -4,8 +4,8 @@
 closure) and can't be imported/called directly, so it's exercised
 indirectly here by calling `print_menu_options(fake_interface, menu_options,
 choice=<test string>)` and asserting on the resulting side effects, per
-utils/CLAUDE.md's documented fragility: the 8 special-command prefixes
-(`command `, `?`, `/`, `$`, `-`, `!`, `@`, `assistant `) are destructured
+utils/CLAUDE.md's documented fragility: the 6 special-command prefixes
+(`command `, `?`, `/`, `$`, `-`, `!`) are destructured
 positionally from a list of booleans (_menu_display.py:127-146) -- these
 tests pin each prefix to its correct behavior so a silent reordering bug
 would be caught.
@@ -126,30 +126,8 @@ def test_bang_alone_searches_all_macros(fake_interface, monkeypatch):
     mock_search.assert_called_once_with(fake_interface, '!', all=True)
 
 
-def test_at_prefix_queues_query_and_opens_assistant(fake_interface, monkeypatch):
-    mock_assistant = MagicMock()
-    monkeypatch.setattr(
-        'user_interface_menus.assistant._assistant_menu.assistant_menu', mock_assistant
-    )
-    result = print_menu_options(fake_interface, {}, choice='@what is prism')
-    assert result == 1
-    assert fake_interface.inputs_queue.get_nowait() == 'what is prism'
-    mock_assistant.assert_called_once_with(fake_interface)
-
-
-def test_assistant_word_prefix_queues_query_and_opens_assistant(fake_interface, monkeypatch):
-    mock_assistant = MagicMock()
-    monkeypatch.setattr(
-        'user_interface_menus.assistant._assistant_menu.assistant_menu', mock_assistant
-    )
-    result = print_menu_options(fake_interface, {}, choice='assistant what is prism')
-    assert result == 1
-    assert fake_interface.inputs_queue.get_nowait() == 'what is prism'
-    mock_assistant.assert_called_once_with(fake_interface)
-
-
 def test_no_matching_prefix_is_not_treated_as_special(fake_interface, monkeypatch):
-    """A choice with none of the 8 prefixes must fall through
+    """A choice with none of the 6 prefixes must fall through
     check_for_special_commands (returns False) to ordinary menu-option
     resolution, not be swallowed as a special command.
 

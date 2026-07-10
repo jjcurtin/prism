@@ -6,7 +6,7 @@ not this folder.** `run_prism.py`'s `load_paths()`/`load_api_keys()` read
 `environment` marker file at the repo root, `dev` or `prod`) for everything
 study-specific: the `api/` folder (Qualtrics/FollowMee/Twilio/etc. credentials
 + SMS message text), and most of `config/` (`study_coordinators.csv`,
-`system_task_schedule.csv`, `script_pipeline.csv`, `followmee_coords.csv`).
+`system_task_schedule.csv`, `followmee_coords.csv`).
 `study_participants.csv`/`reminders.csv` live under a separate
 `data_raw/participants/` path on the same drive (`dev_`-prefixed for the dev
 environment), per that environment's `paths.csv`. On Linux, the drive mounts
@@ -17,17 +17,16 @@ to `S:` (a fixed lab convention, not a per-machine setting) — that's why
 baked directly into `run_prism.py` are the same constant; there's no
 per-machine Windows drive-letter substitution to worry about.
 
-This folder now holds four things, all **tracked** (unlike everything else
+This folder now holds three things, all **tracked** (unlike everything else
 here, which is drive-sourced or git-ignored):
 - `repo_paths.csv` — internal resolution facts for this repo checkout itself
   (where logs live locally, how the drive mounts per-platform, which drive
   subpath this project is under) — as opposed to study-specific data, which
   comes from the drive.
-- `uiconfig.txt`, `saved_macros.txt`, `system_prompt.txt` — interface
-  defaults (display/assistant tunables, starter macros, the PRISM Assistant's
-  system prompt). These are generic, not study-specific or secret, so unlike
-  the drive-sourced files they ship with the repo rather than requiring a
-  fresh clone to copy them from the drive first. *(2026-07-10)*
+- `uiconfig.txt`, `saved_macros.txt` — interface defaults (display tunables,
+  starter macros). These are generic, not study-specific or secret, so
+  unlike the drive-sourced files they ship with the repo rather than
+  requiring a fresh clone to copy them from the drive first. *(2026-07-10)*
 
 ## Current known schema (from the real files on the drive)
 
@@ -49,9 +48,10 @@ if a background task or system check fails.
 `system_task_schedule.csv`: `task_type,task_time,r_script_path,run_today` —
 `task_type` must match a task class in `src/system_tasks/`.
 
-`script_pipeline.csv` *(deprecated)*: `script_path,arguments,enabled` — an
-older mechanism for chaining R scripts. Prefer dropping scripts where
-`r_scripts_dir` points, which PRISM auto-detects.
+`script_pipeline.csv` *(removed 2026-07-10)*: the older `RUN_R_SCRIPT_PIPELINE`
+mechanism for chaining R scripts (and this CSV, and `self.script_pipeline_path`)
+were removed entirely, not just deprecated. Drop scripts where `r_scripts_dir`
+points instead — PRISM auto-detects them for the `RUN_R_SCRIPT` task.
 
 ## A note on editing these by hand
 

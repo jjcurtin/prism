@@ -4,19 +4,15 @@
 importing it at all requires the whole `user_interface_menus` tree to
 import cleanly (true post phase-03, since `_keyboard.py` replaced the
 Windows-only `msvcrt` import). It builds and returns the single flat
-"global command" dict consumed by `_menu_helper.load_menus()` and rebuilt
-fresh for the assistant's system prompt on every query
-(`assistant/_prism_assistant.py`), so we assert on structural shape
-(expected keys present, each entry has the right fields) rather than exact
-key count, per the fragility already noted in utils/CLAUDE.md ("Worth
-caching after first build" -- not fixed here, out of scope for a coverage
-pass).
+"global command" dict consumed by `_menu_helper.load_menus()` at startup,
+so we assert on structural shape (expected keys present, each entry has the
+right fields) rather than exact key count.
 """
 from user_interface_menus.utils._commands import init_commands
 
 
 EXPECTED_KEYS = {
-    'main', 'check', 'help', 'assistant', 'tasks', 'participants',
+    'main', 'check', 'tasks', 'participants',
     'logs', 'settings', 'shutdown', 'command', 'register', 'debug',
     'recent', 'exit',
 }
@@ -52,20 +48,17 @@ def test_init_commands_known_entries_point_at_expected_callables():
     # (rather than the whole ~90-entry dict, which would be a brittle
     # over-specified test) to catch the exact positional-destructuring /
     # copy-paste mistakes this registry is prone to (see utils/CLAUDE.md).
-    assert result['help']['description'] == 'Help'
-    assert callable(result['help']['menu_caller'])
     assert result['shutdown']['description'] == 'Shutdown PRISM'
     assert callable(result['shutdown']['menu_caller'])
     assert result['command']['menu_caller'].__name__ == 'print_global_command_menu'
 
 
 def test_init_commands_is_idempotent_and_rebuildable():
-    """Called fresh on every assistant query (not cached, see
-    assistant/_assistant_menu.py) -- calling it repeatedly must keep
-    working and keep returning equivalent dicts. Compares keys and
-    descriptions only (not menu_caller identity): most entries are
-    `lambda`s rebuilt fresh on every call, so distinct calls never produce
-    `==`-equal function objects even though the dicts are equivalent."""
+    """Calling it repeatedly must keep working and keep returning
+    equivalent dicts. Compares keys and descriptions only (not menu_caller
+    identity): most entries are `lambda`s rebuilt fresh on every call, so
+    distinct calls never produce `==`-equal function objects even though
+    the dicts are equivalent."""
     first = init_commands()
     second = init_commands()
     assert first is not second

@@ -86,36 +86,6 @@ def best_related_parameter(self):
         return 0
     set_best_options_threshold(float(new_threshold))
 
-def temperature_parameter(self):
-    from user_interface_menus._menu_helper import ASSISTANT_TEMPERATURE
-    print("Current assistant temperature:", ASSISTANT_TEMPERATURE)
-    new_temperature = get_input(self, prompt = "Enter new temperature (ranges 0.0 to 1.0): ")
-    if new_temperature == '':
-        return 0
-    try:
-        if float(new_temperature) > 1.0 or float(new_temperature) < 0.0:
-            error("Temperature must be within the range 0.0 to 1.0.")
-            return 0
-    except Exception as e:
-        error("Invalid input. Please try again.")
-        return 0
-    set_assistant_temperature(float(new_temperature))
-
-def tokens_parameter(self):
-    from user_interface_menus._menu_helper import ASSISTANT_TOKENS
-    print("Current assistant max tokens:", ASSISTANT_TOKENS)
-    new_tokens = get_input(self, prompt = "Enter new max tokens (must be a positive integer): ")
-    if new_tokens == '':
-        return 0
-    try:
-        if int(new_tokens) <= 0:
-            error("Max tokens must be a positive integer.")
-            return 0
-    except Exception as e:
-        error("Invalid input. Please try again.")
-        return 0
-    set_assistant_tokens(int(new_tokens))
-
 def menu_delay_parameter(self):
     from user_interface_menus._menu_helper import MENU_DELAY
     print("Current menu delay:", MENU_DELAY)
@@ -148,7 +118,7 @@ def timeout_parameter(self):
 
 def param_set_type_speed(self):
     from user_interface_menus._menu_helper import ASSISTANT_TYPE_SPEED
-    print("Current assistant type speed:", ASSISTANT_TYPE_SPEED)
+    print("Current header type speed:", ASSISTANT_TYPE_SPEED)
     new_speed = get_input(self, prompt = "Enter new type speed (must be a positive number recommended 0.015): ")
     print(f"New type speed: {new_speed}")
     if new_speed == '':
@@ -165,12 +135,9 @@ def param_set_type_speed(self):
 def print_params(self):
     if not self.commands_queue:
         from user_interface_menus._menu_helper import RELATED_OPTIONS_THRESHOLD, BEST_OPTIONS_THRESHOLD, \
-                                                    ASSISTANT_TEMPERATURE, ASSISTANT_TOKENS, \
                                                     MENU_DELAY, TIMEOUT, ASSISTANT_TYPE_SPEED
         print(f"RELATED_OPTIONS_THRESHOLD: {RELATED_OPTIONS_THRESHOLD}")
         print(f"BEST_OPTIONS_THRESHOLD: {BEST_OPTIONS_THRESHOLD}")
-        print(f"ASSISTANT_TEMPERATURE: {ASSISTANT_TEMPERATURE}")
-        print(f"ASSISTANT_TOKENS: {ASSISTANT_TOKENS}")
         print(f"ASSISTANT_TYPE_SPEED: {ASSISTANT_TYPE_SPEED}")
         print(f"MENU_DELAY: {MENU_DELAY}")
         print(f"TIMEOUT: {TIMEOUT}")
@@ -181,10 +148,8 @@ def parameter_settings(self):
         'print': {'description': 'Print current system parameters', 'menu_caller': print_params},
         'threshold': {'description': 'Adjust the minimum command prediction similarity tolerance', 'menu_caller': related_parameter},
         'best threshold': {'description': 'Adjust the prioritized "best" command prediction similarity tolerance', 'menu_caller': best_related_parameter},
-        'temperature': {'description': 'Adjust the temperature of the PRISM Assistant', 'menu_caller': temperature_parameter},
-        'tokens': {'description': 'Adjust the maximum tokens for the PRISM Assistant', 'menu_caller': tokens_parameter},
-        'type speed': {'description': 'Adjust the typing speed of the PRISM Assistant', 'menu_caller': param_set_type_speed},
-        'delay': {'description': 'Adjust the delay between menu displays', 'menu_caller': menu_delay_parameter}, 
+        'type speed': {'description': 'Adjust the typing speed of header messages', 'menu_caller': param_set_type_speed},
+        'delay': {'description': 'Adjust the delay between menu displays', 'menu_caller': menu_delay_parameter},
         'timeout': {'description': 'Adjust the user interface timeout for API calls', 'menu_caller': timeout_parameter},
     }
 
@@ -269,12 +234,6 @@ PARAM_RELATED_THRESHOLD = related_parameter
 
 global PARAM_BEST_OPTIONS_THRESHOLD
 PARAM_BEST_OPTIONS_THRESHOLD = best_related_parameter
-
-global PARAM_ASSISTANT_TEMPERATURE
-PARAM_ASSISTANT_TEMPERATURE = temperature_parameter
-
-global PARAM_ASSISTANT_TOKENS
-PARAM_ASSISTANT_TOKENS = tokens_parameter
 
 global PARAM_ASSISTANT_TYPE_SPEED
 PARAM_ASSISTANT_TYPE_SPEED = param_set_type_speed

@@ -19,9 +19,7 @@ PRISM server or your study data, so feel free to experiment.
   - `print` — show current values
   - `threshold` / `best threshold` — how closely a typed command has to
     match a real command before PRISM suggests it (0.0–1.0)
-  - `temperature` / `tokens` / `type speed` — PRISM Assistant behavior: how
-    creative its answers are, how long they can be, and how fast they type
-    out on screen
+  - `type speed` — how fast header messages type out on screen
   - `delay` — pause between menu redraws
   - `timeout` — how long the interface waits for the PRISM server to
     respond before giving up

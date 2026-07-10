@@ -19,9 +19,6 @@ menus (see `src/user_interface_menus/tasks/README.md`).
   repo's `scripts/` folder is automatically picked up and offered as a
   choice in the `tasks add rscript` menu — you don't need to register it
   anywhere.
-- **`RUN_R_SCRIPT_PIPELINE`** *(deprecated path)* — runs every enabled
-  script listed in `config/script_pipeline.csv` in sequence. Prefer
-  scheduling individual scripts via `RUN_R_SCRIPT` instead.
 
 If a scheduled task fails, whoever is on `config/study_coordinators.csv`
 gets a text about it (in prod mode).

@@ -119,14 +119,13 @@ def test_display_settings_options_structure(fake_interface, monkeypatch):
 
 
 # ------------------------------------------------------------
-# related_parameter / best_related_parameter / temperature_parameter
+# related_parameter / best_related_parameter
 # (identical 0.0-1.0 float threshold validation pattern)
 # ------------------------------------------------------------
 
 _THRESHOLD_FUNCS = [
     ("related_parameter", "set_related_options_threshold"),
     ("best_related_parameter", "set_best_options_threshold"),
-    ("temperature_parameter", "set_assistant_temperature"),
 ]
 
 
@@ -162,63 +161,15 @@ def test_threshold_style_parameter_out_of_range(fake_interface, monkeypatch, fun
 
 @pytest.mark.parametrize("func_name,setter_name", _THRESHOLD_FUNCS)
 def test_threshold_style_parameter_non_numeric_is_handled_cleanly(fake_interface, monkeypatch, func_name, setter_name):
-    """Unlike tokens_parameter/param_set_type_speed (see bug tests below),
-    these three correctly `return 0` inside their except block, so
-    non-numeric input is handled without raising."""
+    """Unlike param_set_type_speed (see bug tests below), these two
+    correctly `return 0` inside their except block, so non-numeric input
+    is handled without raising."""
     mock_set = MagicMock()
     monkeypatch.setattr(_settings_menu, setter_name, mock_set)
     fake_interface.inputs_queue.put('notanumber')
     result = getattr(_settings_menu, func_name)(fake_interface)
     assert result == 0
     mock_set.assert_not_called()
-
-
-# ------------------------------------------------------------
-# tokens_parameter
-# ------------------------------------------------------------
-
-def test_tokens_parameter_valid(fake_interface, monkeypatch):
-    mock_set = MagicMock()
-    monkeypatch.setattr(_settings_menu, 'set_assistant_tokens', mock_set)
-    fake_interface.inputs_queue.put('800')
-    _settings_menu.tokens_parameter(fake_interface)
-    mock_set.assert_called_once_with(800)
-
-
-def test_tokens_parameter_empty_input_noop(fake_interface, monkeypatch):
-    mock_set = MagicMock()
-    monkeypatch.setattr(_settings_menu, 'set_assistant_tokens', mock_set)
-    fake_interface.inputs_queue.put('')
-    result = _settings_menu.tokens_parameter(fake_interface)
-    assert result == 0
-    mock_set.assert_not_called()
-
-
-def test_tokens_parameter_non_positive(fake_interface, monkeypatch, capsys):
-    mock_set = MagicMock()
-    monkeypatch.setattr(_settings_menu, 'set_assistant_tokens', mock_set)
-    fake_interface.inputs_queue.put('0')
-    result = _settings_menu.tokens_parameter(fake_interface)
-    assert result == 0
-    mock_set.assert_not_called()
-    assert "must be a positive integer" in capsys.readouterr().out
-
-
-def test_tokens_parameter_non_numeric_returns_without_raising(fake_interface, monkeypatch, capsys):
-    """Regression test for a fixed bug: settings/_settings_menu.py's
-    tokens_parameter `except Exception:` branch used to print "Invalid
-    input..." but not `return`, so execution fell through to
-    `set_assistant_tokens(int(new_tokens))` OUTSIDE the try/except, which
-    re-raised the same ValueError uncaught. Now returns cleanly after
-    reporting the error.
-    """
-    mock_set = MagicMock()
-    monkeypatch.setattr(_settings_menu, 'set_assistant_tokens', mock_set)
-    fake_interface.inputs_queue.put('notanumber')
-    result = _settings_menu.tokens_parameter(fake_interface)
-    assert result == 0
-    mock_set.assert_not_called()
-    assert 'Invalid input' in capsys.readouterr().out
 
 
 # ------------------------------------------------------------
@@ -293,11 +244,12 @@ def test_param_set_type_speed_out_of_range(fake_interface, monkeypatch, capsys):
 
 
 def test_param_set_type_speed_non_numeric_returns_without_raising(fake_interface, monkeypatch, capsys):
-    """Regression test for a fixed bug: same missing-return pattern as
-    tokens_parameter, at settings/_settings_menu.py's param_set_type_speed.
-    Non-numeric input now returns cleanly after reporting the error instead
-    of falling through to set_assistant_type_speed(float(new_speed)) and
-    re-raising.
+    """Regression test for a fixed bug: settings/_settings_menu.py's
+    param_set_type_speed `except Exception:` branch used to print "Invalid
+    input..." but not `return`, so execution fell through to
+    `set_assistant_type_speed(float(new_speed))` OUTSIDE the try/except,
+    which re-raised the same ValueError uncaught. Non-numeric input now
+    returns cleanly after reporting the error.
     """
     mock_set = MagicMock()
     monkeypatch.setattr(_settings_menu, 'set_assistant_type_speed', mock_set)
@@ -316,7 +268,7 @@ def test_print_params_prints_all_values(fake_interface, capsys):
     _settings_menu.print_params(fake_interface)
     out = capsys.readouterr().out
     assert "RELATED_OPTIONS_THRESHOLD" in out
-    assert "ASSISTANT_TOKENS" in out
+    assert "ASSISTANT_TYPE_SPEED" in out
     assert "TIMEOUT" in out
 
 
@@ -333,7 +285,7 @@ def test_parameter_settings_options_structure(fake_interface, monkeypatch):
     mock.assert_called_once()
     args, kwargs = mock.call_args
     assert set(args[1]) == {
-        'print', 'threshold', 'best threshold', 'temperature', 'tokens',
+        'print', 'threshold', 'best threshold',
         'type speed', 'delay', 'timeout',
     }
     assert kwargs['recommended_actions'] == ['print']

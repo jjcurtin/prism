@@ -54,9 +54,8 @@ paths that `tests/`'s mocked/offline coverage deliberately does not exercise:
   `load_paths()`/`load_api_keys()` expect under that environment's
   `config_base` actually exists, and that the drive-sourced `.api`/CSV files
   are populated beyond their checked-in templates (not still
-  `REPLACE_WITH_...` placeholders or empty CSVs with only a header row —
-  `script_pipeline.csv` is exempt from the latter, since it's a documented-
-  deprecated mechanism, `config/README.md`). Unlike the other files here,
+  `REPLACE_WITH_...` placeholders or empty CSVs with only a header row).
+  Unlike the other files here,
   it doesn't use the `real_app` fixture (that always loads whichever single
   environment the marker file points to) and it doesn't call
   `require_real_credentials` — a missing/placeholder-only field here is

@@ -28,12 +28,6 @@ RELATED_OPTIONS_THRESHOLD = 0.3
 global BEST_OPTIONS_THRESHOLD
 BEST_OPTIONS_THRESHOLD = 0.7
 
-global ASSISTANT_TEMPERATURE
-ASSISTANT_TEMPERATURE = 0.7
-
-global ASSISTANT_TOKENS
-ASSISTANT_TOKENS = 600
-
 global ASSISTANT_TYPE_SPEED
 ASSISTANT_TYPE_SPEED = 0.015
 
@@ -98,16 +92,6 @@ def set_best_options_threshold(new_threshold):
     save_params()
 
 # ------------------------------------------------------------
-
-def set_assistant_temperature(temperature):
-    global ASSISTANT_TEMPERATURE
-    ASSISTANT_TEMPERATURE = temperature
-    save_params()
-
-def set_assistant_tokens(tokens):
-    global ASSISTANT_TOKENS
-    ASSISTANT_TOKENS = tokens
-    save_params()
 
 def set_assistant_type_speed(speed):
     global ASSISTANT_TYPE_SPEED
@@ -314,8 +298,8 @@ def get_local_menu_options():
 
 def load_params():
     import time
-    global RIGHT_ALIGN, RELATED_OPTIONS_THRESHOLD, ASSISTANT_TEMPERATURE, \
-           BEST_OPTIONS_THRESHOLD, ASSISTANT_TOKENS, WINDOW_WIDTH, SHOW_README, COLOR_ON, \
+    global RIGHT_ALIGN, RELATED_OPTIONS_THRESHOLD, \
+           BEST_OPTIONS_THRESHOLD, WINDOW_WIDTH, SHOW_README, COLOR_ON, \
            MENU_DELAY, TIMEOUT, ASSISTANT_TYPE_SPEED, WINDOW_HEIGHT
 
     clear()
@@ -368,15 +352,6 @@ def load_params():
                             print(global_var, val)
                     except Exception as e:
                         print(global_var, "INVALID, please update")
-                elif global_var == "ASSISTANT_TEMPERATURE":
-                    try:
-                        if float(val) > 1.0 or float(val) < 0.0:
-                            print(global_var, "INVALID, please update")
-                        else:
-                            ASSISTANT_TEMPERATURE = float(val)
-                            print(global_var, val)
-                    except Exception as e:
-                        print(global_var, "INVALID, please update")
                 elif global_var == "SHOW_README":
                     if val == "True":
                         SHOW_README = True
@@ -394,15 +369,6 @@ def load_params():
                         COLOR_ON = False
                         print(global_var, val)
                     else:
-                        print(global_var, "INVALID, please update")
-                elif global_var == "ASSISTANT_TOKENS":
-                    try:
-                        if int(val) <= 0:
-                            print(global_var, "INVALID, please update")
-                        else:
-                            ASSISTANT_TOKENS = int(val)
-                            print(global_var, val)
-                    except Exception as e:
                         print(global_var, "INVALID, please update")
                 elif global_var == "MENU_DELAY":
                     try:
@@ -437,8 +403,8 @@ def load_params():
 # ------------------------------------------------------------
 
 def save_params():
-    global RIGHT_ALIGN, RELATED_OPTIONS_THRESHOLD, ASSISTANT_TEMPERATURE, \
-           BEST_OPTIONS_THRESHOLD, ASSISTANT_TOKENS, WINDOW_WIDTH, SHOW_README, COLOR_ON, \
+    global RIGHT_ALIGN, RELATED_OPTIONS_THRESHOLD, \
+           BEST_OPTIONS_THRESHOLD, WINDOW_WIDTH, SHOW_README, COLOR_ON, \
            MENU_DELAY, TIMEOUT, ASSISTANT_TYPE_SPEED, WINDOW_HEIGHT
 
     file_path = "../config/uiconfig.txt"
@@ -446,8 +412,6 @@ def save_params():
         file.write(f"RIGHT_ALIGN={RIGHT_ALIGN}\n")
         file.write(f"RELATED_OPTIONS_THRESHOLD={RELATED_OPTIONS_THRESHOLD}\n")
         file.write(f"BEST_OPTIONS_THRESHOLD={BEST_OPTIONS_THRESHOLD}\n")
-        file.write(f"ASSISTANT_TEMPERATURE={ASSISTANT_TEMPERATURE}\n")
-        file.write(f"ASSISTANT_TOKENS={ASSISTANT_TOKENS}\n")
         file.write(f"ASSISTANT_TYPE_SPEED={ASSISTANT_TYPE_SPEED}\n")
         file.write(f"WINDOW_WIDTH={WINDOW_WIDTH}\n")
         file.write(f"WINDOW_HEIGHT={WINDOW_HEIGHT}\n")
@@ -486,3 +450,36 @@ def read_from_interface_log():
     except Exception as e:
         print(f"An unexpected error occurred while reading the interface log: {e}")
         return ""
+
+# ------------------------------------------------------------
+# Startup README display: relocated from the now-removed help/_help_menu.py
+# (2026-07-10 removal of the help-menu tree) because prism_interface.py
+# imports README directly to show it on startup when SHOW_README is True --
+# this is not part of the help-menu navigation tree being removed.
+
+global read_me_lines
+read_me_lines = [
+    f"I recommend looking through the commands available via {yellow('command')}.",
+    f"\nYou can search for commands by typing {yellow('command <query>')} or {yellow('?<query>')}. Leave {yellow('<query>')} empty to search for all commands.",
+    f"Most commands are globally accessible but some are only available in specific menus.",
+    f"Commands are specified in {yellow('yellow')}.",
+    f"Example: To toggle color mode, use the command {yellow('display color')}.",
+    f"\nThere is also a command chaining feature that allows you to chain commands together using the {yellow('/')} character for commands and {yellow('?')} for user inputs.",
+    f"Example, to schedule the second available R script at midnight, you can use the command chain {yellow('/tasks/add/rscript?2?00:00:00')}",
+    f"To avoid the somewhat cumbersome action of typing the same command multiple times, you can use the {yellow('register')} command to save a command chain and then use it later.",
+    f"You can also use the command of the form {yellow('$<identifier> = <command_chain>')} to register a command chain.",
+    f"\nTL;DR: You can navigate the entire user interface using what you see on the screen, but you can use commands to access features more quickly.",
+    f"Command chaining is done with {yellow('/')}, but regular commands do not require this prefix.",
+    f"\nTo stop this message from displaying on startup use the command {yellow('readme set')}."
+]
+
+def read_me(self):
+    if not self.commands_queue:
+        print_menu_header("readme")
+        global read_me_lines
+        for line in read_me_lines:
+            print(line)
+        exit_menu()
+
+global README
+README = read_me

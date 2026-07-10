@@ -495,10 +495,6 @@ def re_print_fixed_terminal_prompt(self):
     move_cursor(self, x + len('prism> '), y - 1)
     return print_fixed_terminal_prompt(self).strip()
 
-def print_assistant_terminal_prompt(self):
-    from user_interface_menus.utils._menu_navigation import get_input
-    return get_input(self, f"\n{red('assistant> ')}", print_prompt = False).strip()
-
 def print_twilio_terminal_prompt():
     print("Please enter your message below. Press ENTER to send.")
     return input(f"\n{green('twilio> ')}").strip()
@@ -684,68 +680,3 @@ def assistant_header_write(self, lines):
     ansi_show_cursor()
     ansi_restore_cursor()
 
-def assistant_header_shift_write(self, lines):
-    from user_interface_menus._menu_helper import WINDOW_WIDTH
-    initial_x, initial_y = 0, 3
-    window_height = 1
-
-    full_text = " ".join(line.replace('\n', ' ') for line in lines)
-    padding = " " * WINDOW_WIDTH
-    scroll_text = padding + full_text + padding
-    length = len(scroll_text)
-
-    ansi_save_cursor()
-    ansi_hide_cursor()
-
-    with raw_mode():
-        for start in range(length - WINDOW_WIDTH + 1):
-            if kbhit():
-                key = getwch()
-                if key == '\r':
-                    clear_column(self, initial_x, initial_y, WINDOW_WIDTH, window_height)
-                    break
-
-            sys.stdout.write(f"\033[u\033[{initial_y + 1};{initial_x + 1}H{scroll_text[start:start + WINDOW_WIDTH]}")
-            sys.stdout.flush()
-
-            time.sleep(0.05)
-
-    ansi_show_cursor()
-    ansi_restore_cursor()
-    
-def assistant_write(self, lines, initial_x, initial_y, column_width, window_height):
-    clear_assistant_area(self)
-    ansi_save_cursor()
-
-    # Merge into one string with explicit newlines
-    full_text = "\n".join(lines)
-
-    row = 0
-    col = 0
-    with raw_mode():
-        for ch in full_text:
-            if kbhit():
-                key = getwch()
-                if key == '\r':
-                    ansi_restore_cursor()
-                    break
-            if ch == "\n" or col >= column_width:
-                # move to next row
-                row += 1
-                if row >= window_height:
-                    time.sleep(0.5) # page delay
-                    clear_assistant_area(self)
-                    row = 0
-                col = 0
-                if ch == "\n":
-                    continue
-
-            move_cursor(self, initial_x + col, initial_y + row)
-            ansi_write_char(ch)
-            time.sleep(0.015)  # typing delay
-        col += 1
-
-    ansi_restore_cursor()
-
-def clear_assistant_area(self):
-    clear_column(self, self.window_0_x, self.window_0_y, self.column_width, self.window_height)

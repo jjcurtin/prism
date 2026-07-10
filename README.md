@@ -62,6 +62,23 @@ Every folder in this repo has two docs, kept deliberately separate:
   confirmation before changing. *(2026-07-09)*
 
 ### Completed
+- Removed several obsolete features entirely: the PRISM Assistant (chat
+  menu, Azure-backed `_prism_assistant.py`, `@`/`assistant `-prefix command
+  routing, `ASSISTANT_TEMPERATURE`/`ASSISTANT_TOKENS` tunables, and
+  `config/system_prompt.txt` — `ASSISTANT_TYPE_SPEED` and
+  `assistant_header_write` stay, since they power the generic header-typing
+  effect used elsewhere, not just assistant chat); the help-menu tree
+  (`help`, `help ra`/research-assistant docs, `help dev`/developer docs —
+  the startup README content itself, `read_me`/`README`/`read_me_lines`,
+  moved into `_menu_helper.py` since `prism_interface.py` uses it directly
+  on startup and it isn't help-menu-specific); the deprecated
+  `RUN_R_SCRIPT_PIPELINE` task and `config/script_pipeline.csv` (the
+  still-live single-script `RUN_R_SCRIPT` task is unaffected); and the
+  Windows-only `src/check_loc.ps1`. Also moved the pulldown tasks'
+  (`PulldownQualtricsData`, `PulldownFollowmeeData`) hardcoded
+  `"../data/..."` path literals onto a new `self.app.data_dir`
+  (`config/repo_paths.csv`, resolved the same way as `logs_dir`), removing
+  their implicit dependency on a cwd of `src/`. *(2026-07-10)*
 - Documented the server's trust model explicitly (see "Security model"
   above): loopback-only binding, no authentication on any route, a
   deliberate/discussed tradeoff rather than an oversight, not a gap to fix

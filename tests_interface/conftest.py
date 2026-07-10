@@ -48,7 +48,7 @@ class FakeInterface:
     - `window_N_x`/`window_N_y`/`column_width`/`window_height`/
       `num_columns`: set dynamically by `print_key_line` in
       `_menu_display.py`; pre-seeded here so code that reads them before
-      writing (e.g. `clear_assistant_area`) doesn't blow up on AttributeError.
+      writing doesn't blow up on AttributeError.
     """
 
     def __init__(self):

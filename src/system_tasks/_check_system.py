@@ -40,7 +40,6 @@ class CheckSystem(SystemTask):
                 [], # logs
                 ['_check_system.py', # obviously
                  '_pulldown_qualtrics_data.py', '_pulldown_followmee_data.py',
-                 '_run_r_script_pipeline.py',
                  '_system_task.py' # obviously
                 ] # tasks
             ]
@@ -61,7 +60,7 @@ class CheckSystem(SystemTask):
             # paths PRISM itself already resolved rather than a local guess.
             drive_sourced_paths = [
                 'system_task_schedule_path', 'study_coordinators_path',
-                'script_pipeline_path', 'participants_path'
+                'participants_path'
             ]
             for attr in drive_sourced_paths:
                 path = getattr(self.app, attr, None)

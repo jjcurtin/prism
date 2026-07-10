@@ -26,7 +26,7 @@ from _helper import PLACEHOLDER_PREFIX, _is_real_value  # noqa: F401
 
 
 @pytest.fixture
-def real_app(monkeypatch):
+def real_app():
     """A PRISM instance with __init__ bypassed (no signal handlers, no web
     server launch, no clear()), loaded against the real repo checkout's
     real `environment` marker + real drive-sourced config_base -- exactly
@@ -35,14 +35,14 @@ def real_app(monkeypatch):
     SystemTask.execute() (not used directly by these tests, which call
     .run() instead) wouldn't fire coordinator SMS even if it were.
 
-    Also chdir's into src/ for the duration of the test, since the task
-    classes under test (PulldownQualtricsData, PulldownFollowmeeData)
-    resolve their output paths as "../data/..." relative to a cwd of src/,
-    matching how they run in the real app.
+    No chdir needed: the task classes under test (PulldownQualtricsData,
+    PulldownFollowmeeData) resolve their output paths via `self.app.data_dir`
+    (repo-root-relative, set in run_prism.py::load_paths() the same way as
+    logs_dir -- see config/repo_paths.csv's `data_dir` key), not a
+    cwd-relative "../data/..." literal. This fixture used to chdir into
+    src/ before 2026-07-10's move away from those hardcoded relative paths.
     """
     from run_prism import PRISM
-
-    monkeypatch.chdir(SRC_DIR)
 
     app = PRISM.__new__(PRISM)
     app.mode = 'test'
