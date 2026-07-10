@@ -580,6 +580,55 @@ def test_process_task_unexpected_error_notifies_coordinators_and_returns_neg1(fa
     assert 'unexpected' in message
 
 
+def test_process_task_notify_coordinators_failure_after_send_failure_does_not_propagate(fake_app, mocker):
+    """Regression test: the notify_coordinators() call after an SMS send
+    failure used to be unguarded -- if it too failed (e.g. the same
+    broken-Twilio-credentials root cause that likely caused the original
+    send failure), that second exception propagated out of process_task
+    entirely, which -- called from finish_task()/run() on the background
+    scheduler thread -- used to be exactly the cascade that silently
+    killed that thread the first time anything went wrong.
+    """
+    fake_app.mode = 'prod'
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+    fake_app.ema_survey_id = 'fake_survey'
+    fake_app.ema_message = "Hello, it's time to take your daily survey."
+    mocker.patch('task_managers._participant_manager.send_sms', side_effect=RuntimeError('twilio down'))
+    mocker.patch(
+        'task_managers._participant_manager.notify_coordinators',
+        side_effect=RuntimeError('twilio also broken'),
+    )
+
+    result = pm.process_task({'task_type': 'ema', 'participant_id': '000000000'})  # must not raise
+
+    assert result == -1
+    assert any(
+        'Also failed to notify coordinators' in msg and 'twilio also broken' in msg
+        for _, msg in fake_app.transcript
+    )
+
+
+def test_process_task_notify_coordinators_failure_after_unexpected_error_does_not_propagate(fake_app, mocker):
+    """Same regression as above, for the outermost catch-all's
+    notify_coordinators() call."""
+    pm = make_manager(fake_app)
+    fake_app.mode = 'prod'
+    mocker.patch(
+        'task_managers._participant_manager.notify_coordinators',
+        side_effect=RuntimeError('twilio also broken'),
+    )
+    pm.get_participant = mocker.Mock(side_effect=RuntimeError('unexpected'))
+
+    result = pm.process_task({'task_type': 'ema', 'participant_id': '000000000'})  # must not raise
+
+    assert result == -1
+    assert any(
+        'Also failed to notify coordinators' in msg and 'twilio also broken' in msg
+        for _, msg in fake_app.transcript
+    )
+
+
 def test_save_participants_round_trips_through_load(tmp_path, fake_app):
     csv_file = tmp_path / 'study_participants.csv'
     fake_app.participants_path = str(csv_file)

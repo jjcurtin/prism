@@ -42,9 +42,19 @@ class SystemTask:
         self.outcome = "SUCCESS" if result == 0 else "FAILURE"
         self.app.add_to_transcript(f"{self.task_type} #{self.task_number} completed with status: {self.outcome}.", "INFO")
         if self.app.mode == "prod":
-            sms_result = self.notify_via_sms()
-            if sms_result != 0:
-                self.app.add_to_transcript(f"Failed to send {sms_result} SMS notifications.", "ERROR")
+            # Defensively wrapped: notify_via_sms() itself failing (Twilio
+            # down, credentials broken, coordinators file unreadable, etc.)
+            # must never propagate out of execute() -- this runs for every
+            # task, success or failure, so an unguarded exception here would
+            # crash whatever called execute() (the background scheduler
+            # thread, if this ran off TaskManager.run()'s queue) over a
+            # *notification* failure, not the task's own actual work.
+            try:
+                sms_result = self.notify_via_sms()
+                if sms_result != 0:
+                    self.app.add_to_transcript(f"Failed to send {sms_result} SMS notifications.", "ERROR")
+            except Exception as e:
+                self.app.add_to_transcript(f"Failed to send coordinator SMS notifications: {e}", "ERROR")
         return 1 if self.outcome == "FAILURE" else 0
 
     def notify_via_sms(self) -> int:

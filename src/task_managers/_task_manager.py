@@ -156,7 +156,18 @@ class TaskManager():
 
     def run(self) -> None:
         while self.running:
-            self.check_tasks()
+            # check_tasks() must never be allowed to raise unguarded here --
+            # this loop is this manager's *entire* processing pipeline
+            # (every scheduled task, forever, until PRISM restarts); nothing
+            # else calls it, and nothing supervises/restarts this thread if
+            # it dies. Before this try/except, any exception here (a future
+            # code change, or an unexpected task-dict shape) would silently
+            # kill the thread with no transcript trace at all -- unlike a
+            # task-processing failure below, which was already caught.
+            try:
+                self.check_tasks()
+            except Exception as e:
+                self.app.add_to_transcript(f"An error occurred while checking scheduled tasks in {self.name}: {e}", "ERROR")
             try:
                 task: Task = self.task_queue.get(timeout = 1)
                 result = self.finish_task(task)
@@ -167,7 +178,17 @@ class TaskManager():
             except Exception as e:
                 task_type = task.get('task_type', '?') if 'task' in locals() else '?'
                 self.app.add_to_transcript(f"An error occurred while processing task {task_type}: {e}", "ERROR")
-                notify_coordinators(self.app, code_prefix('3001') + f"PRISM system failure: an error occurred while processing task {task_type} in {self.name}. Error: {e}")
+                # Defensively wrapped: notify_coordinators() itself failing
+                # (e.g. the same broken-Twilio-credentials root cause that
+                # may have caused the failure being reported here) must
+                # never propagate out of this handler -- that would crash
+                # this loop over a failed *alert about* a failure, which is
+                # exactly the cascade that used to silently kill this
+                # thread the first time anything went wrong.
+                try:
+                    notify_coordinators(self.app, code_prefix('3001') + f"PRISM system failure: an error occurred while processing task {task_type} in {self.name}. Error: {e}")
+                except Exception as notify_error:
+                    self.app.add_to_transcript(f"Also failed to notify coordinators about that error: {notify_error}", "ERROR")
                 # note: changed print to add_to_transcript and removed the thing that kills the manager
         self.app.add_to_transcript(f"{self.name} processor stopped.", "INFO")
 

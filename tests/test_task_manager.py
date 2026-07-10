@@ -282,6 +282,64 @@ def test_run_leaves_non_one_time_task_scheduled(fake_app):
     assert tm.tasks == [task]
 
 
+def test_run_check_tasks_exception_does_not_crash_loop(fake_app):
+    """Regression test: check_tasks() used to run outside run()'s try/
+    except entirely -- any exception there (a future code change, or an
+    unexpected task-dict shape) would silently kill the whole background
+    thread with no transcript trace at all, unlike a task-processing
+    failure, which was already caught. Confirms the loop survives a
+    check_tasks() failure and keeps calling it on the next tick.
+    """
+    tm = make_manager(fake_app)
+    tm.running = True
+    calls = {'n': 0}
+
+    def flaky_check_tasks():
+        calls['n'] += 1
+        if calls['n'] == 1:
+            raise RuntimeError('boom')
+        tm.running = False  # stop the loop on the second, successful call
+
+    tm.check_tasks = flaky_check_tasks
+
+    tm.run()  # must not raise
+
+    assert calls['n'] == 2
+    assert any('boom' in msg for _, msg in fake_app.transcript)
+
+
+def test_run_notify_coordinators_failure_does_not_crash_loop(fake_app, mocker):
+    """Regression test: the coordinator-alert call inside run()'s own
+    exception handler used to be unguarded -- if it too failed (e.g. the
+    same broken-Twilio-credentials root cause that likely caused the
+    original failure being reported), that second exception propagated
+    out of the handler entirely and silently killed the background
+    thread the first time anything went wrong.
+    """
+    fake_app.mode = 'prod'
+    tm = make_manager(fake_app)
+    tm.running = True
+    mocker.patch(
+        'task_managers._task_manager.notify_coordinators',
+        side_effect=RuntimeError('twilio also broken'),
+    )
+
+    def failing_process_task(task):
+        tm.running = False
+        raise RuntimeError('original failure')
+
+    tm.process_task = failing_process_task
+    tm.task_queue.put({'task_type': 'CHECK_SYSTEM'})
+
+    tm.run()  # must not raise
+
+    assert any('original failure' in msg for _, msg in fake_app.transcript)
+    assert any(
+        'Also failed to notify coordinators' in msg and 'twilio also broken' in msg
+        for _, msg in fake_app.transcript
+    )
+
+
 def test_run_outer_catch_all_notifies_coordinators(fake_app, mocker):
     """run()'s outer `except Exception` is a safety net around
     process_task() itself raising (e.g. threading/queue-level issues

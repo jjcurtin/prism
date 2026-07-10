@@ -73,9 +73,26 @@ def send_sms(app: App, receiver_numbers: list[str], messages: list[str], is_coor
         prefix = ""
     messages = [prefix + message for message in messages]
 
-    account_sid = app.twilio_account_sid
-    auth_token = app.twilio_auth_token
-    from_number = app.twilio_from_number
+    # getattr, not a bare attribute access: these have no defaults in
+    # API_FIELD_DEFAULTS (run_prism.py) the way message-text fields do, so
+    # if twilio.api ever fails to load (drive hiccup during startup,
+    # corrupted/missing file), the attributes are simply never set. A bare
+    # `app.twilio_account_sid` would raise AttributeError here -- and this
+    # function is called from inside failure-notification paths
+    # (SystemTask.notify_via_sms/TaskManager.run()'s own exception
+    # handler), so that AttributeError previously escaped uncaught and
+    # crashed the entire background task-processing thread the moment
+    # anything else failed and tried to alert a coordinator about it.
+    account_sid = getattr(app, 'twilio_account_sid', None)
+    auth_token = getattr(app, 'twilio_auth_token', None)
+    from_number = getattr(app, 'twilio_from_number', None)
+    if not account_sid or not auth_token or not from_number:
+        app.add_to_transcript(
+            "Twilio credentials not loaded (twilio.api failed to load, or is missing "
+            "required fields) -- cannot send SMS.",
+            "ERROR",
+        )
+        return len(receiver_numbers)
     try:
         client = Client(account_sid, auth_token)
     except Exception as e:

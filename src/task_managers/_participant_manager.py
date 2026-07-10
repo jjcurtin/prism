@@ -291,9 +291,22 @@ class ParticipantManager(TaskManager):
                 return 0
             except Exception as e:
                 self.app.add_to_transcript(f"Failed to send SMS to {participant_id}: {e}", "ERROR")
-                notify_coordinators(self.app, code_prefix('2001') + f"PRISM system failure: failed to send SMS to participant {participant_id}. Error: {e}")
+                # Defensively wrapped: a notify_coordinators() failure here
+                # (its own send_sms() call failing for whatever reason)
+                # must never propagate out of process_task -- this runs on
+                # the background scheduler thread via finish_task()/run(),
+                # and an uncaught exception here over a failed *alert about*
+                # a failure is exactly the cascade that used to silently
+                # kill that thread the first time anything went wrong.
+                try:
+                    notify_coordinators(self.app, code_prefix('2001') + f"PRISM system failure: failed to send SMS to participant {participant_id}. Error: {e}")
+                except Exception as notify_error:
+                    self.app.add_to_transcript(f"Also failed to notify coordinators about that error: {notify_error}", "ERROR")
                 return -1
         except Exception as e:
             self.app.add_to_transcript(f"Error with sending a message: {e}", "ERROR")
-            notify_coordinators(self.app, code_prefix('2002') + f"PRISM system failure: unexpected error while processing an SMS task. Error: {e}")
+            try:
+                notify_coordinators(self.app, code_prefix('2002') + f"PRISM system failure: unexpected error while processing an SMS task. Error: {e}")
+            except Exception as notify_error:
+                self.app.add_to_transcript(f"Also failed to notify coordinators about that error: {notify_error}", "ERROR")
             return -1

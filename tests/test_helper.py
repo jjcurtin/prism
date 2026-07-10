@@ -17,6 +17,25 @@ def _mock_twilio_client(mocker, fake_app):
     return mock_client
 
 
+def test_send_sms_missing_credentials_returns_failure_without_raising(fake_app):
+    """Regression test: twilio_account_sid/auth_token/from_number have no
+    defaults (unlike message-text fields, see API_FIELD_DEFAULTS in
+    run_prism.py) -- if twilio.api ever fails to load (drive hiccup during
+    startup, corrupted/missing file), those attributes are simply never
+    set on the app. A bare attribute access used to raise AttributeError
+    here -- and since send_sms() is called from inside failure-
+    notification paths themselves (notify_coordinators/
+    SystemTask.notify_via_sms), that AttributeError could cascade into
+    crashing whatever called this to report an unrelated failure, up to
+    and including the background scheduler thread itself. fake_app
+    deliberately has none of the twilio_* attributes set here.
+    """
+    result = send_sms(fake_app, ['5555550100'], ['Time for your survey.'])
+
+    assert result == 1
+    assert any('Twilio credentials not loaded' in msg for _, msg in fake_app.transcript)
+
+
 def test_send_sms_dev_environment_prefixes_participant_message(fake_app, mocker):
     fake_app.environment = 'dev'
     client = _mock_twilio_client(mocker, fake_app)

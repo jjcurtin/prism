@@ -63,6 +63,24 @@ def test_execute_logs_outcome(fake_app):
     assert any('completed with status: SUCCESS' in msg for _, msg in fake_app.transcript)
 
 
+def test_execute_notify_via_sms_failure_does_not_propagate(fake_app, mocker):
+    """Regression test: execute() used to call notify_via_sms() outside
+    any try/except of its own -- notify_via_sms() failing (Twilio down,
+    credentials broken, coordinators file unreadable) would propagate out
+    of execute() entirely, crashing whatever called it (the background
+    scheduler thread, if this task ran off TaskManager.run()'s queue) over
+    a *notification* failure, not the task's own actual work, which had
+    already completed successfully.
+    """
+    fake_app.mode = 'prod'
+    mocker.patch.object(SucceedingTask, 'notify_via_sms', side_effect=RuntimeError('twilio broken'))
+
+    result = SucceedingTask(fake_app).execute()  # must not raise
+
+    assert result == 0  # the task itself still succeeded
+    assert any('Failed to send coordinator SMS notifications' in msg and 'twilio broken' in msg for _, msg in fake_app.transcript)
+
+
 def test_notify_via_sms_sends_to_each_coordinator(tmp_path, fake_app, mocker):
     """Regression test for a fixed bug: notify_via_sms() used to `return`
     from inside the coordinator-parsing loop, so it sent an alert to only
