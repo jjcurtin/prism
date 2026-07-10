@@ -486,6 +486,7 @@ def test_unhandled_exception_returns_500_and_notifies_coordinators(routes_client
     assert resp.get_json() == {"error": "Internal server error"}
     notify.assert_called_once()
     message = notify.call_args[0][1]
+    assert message.startswith('[4001] ')
     assert 'boom' in message
     assert any('ERROR' == msg_type for msg_type, _ in routes_app_instance.transcript)
 

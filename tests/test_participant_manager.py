@@ -434,6 +434,7 @@ def test_process_task_send_sms_failure_notifies_coordinators_and_returns_neg1(fa
     assert result == -1
     notify.assert_called_once()
     message = notify.call_args[0][1]
+    assert message.startswith('[2001] ')
     assert '000000000' in message
     assert 'twilio down' in message
 
@@ -459,6 +460,7 @@ def test_process_task_unexpected_error_notifies_coordinators_and_returns_neg1(fa
     assert result == -1
     notify.assert_called_once()
     message = notify.call_args[0][1]
+    assert message.startswith('[2002] ')
     assert 'unexpected' in message
 
 

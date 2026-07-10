@@ -11,6 +11,7 @@ from datetime import datetime
 from datetime import timedelta
 
 from _helper import send_sms, notify_coordinators
+from _error_codes import code_prefix
 
 def create_flask_app(app_instance):
     flask_app = Flask(__name__)
@@ -306,7 +307,7 @@ def create_flask_app(app_instance):
         if isinstance(e, HTTPException):
             return e
         app_instance.add_to_transcript(f"Unhandled exception in Flask route: {e}", "ERROR")
-        notify_coordinators(app_instance, f"PRISM system failure: unhandled exception in Flask route: {e}")
+        notify_coordinators(app_instance, code_prefix('4001') + f"PRISM system failure: unhandled exception in Flask route: {e}")
         return jsonify({"error": "Internal server error"}), 500
 
     return flask_app

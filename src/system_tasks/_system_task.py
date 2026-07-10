@@ -3,6 +3,7 @@
 import random
 from datetime import datetime
 from _helper import notify_coordinators
+from _error_codes import code_prefix
 
 # kept in sync with run_prism.py's API_FIELD_DEFAULTS default for
 # coordinator_alert_message -- used here too so a FakeApp/test app that
@@ -50,4 +51,8 @@ class SystemTask:
             outcome=self.outcome,
             task_start=task_start_str,
         )
+        # Only a FAILURE outcome is an error -- a SUCCESS message isn't a
+        # failure and shouldn't carry an error code.
+        if self.outcome == "FAILURE":
+            message = code_prefix('1001') + message
         return notify_coordinators(self.app, message)

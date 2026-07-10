@@ -153,5 +153,6 @@ def test_run_outer_catch_all_notifies_coordinators(fake_app, mocker):
 
     notify.assert_called_once()
     message = notify.call_args[0][1]
+    assert message.startswith('[3001] ')
     assert 'CHECK_SYSTEM' in message
     assert 'boom' in message

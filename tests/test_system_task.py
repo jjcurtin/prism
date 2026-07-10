@@ -121,7 +121,7 @@ def test_notify_via_sms_uses_default_template_when_app_has_no_override(tmp_path,
     task.notify_via_sms()
 
     body = send_sms.call_args[0][2][0]
-    assert body.startswith('Alice: CHECK_SYSTEM #123456 FAILURE. Script was executed at ')
+    assert body.startswith('[1001] Alice: CHECK_SYSTEM #123456 FAILURE. Script was executed at ')
 
 
 def test_notify_via_sms_uses_app_coordinator_alert_message_template(tmp_path, fake_app, mocker):
@@ -138,7 +138,27 @@ def test_notify_via_sms_uses_app_coordinator_alert_message_template(tmp_path, fa
     task.notify_via_sms()
 
     body = send_sms.call_args[0][2][0]
-    assert body == 'Alice was alerted about CHECK_SYSTEM (FAILURE)'
+    assert body == '[1001] Alice was alerted about CHECK_SYSTEM (FAILURE)'
+
+
+def test_notify_via_sms_success_outcome_has_no_error_code(tmp_path, fake_app, mocker):
+    """A SUCCESS outcome isn't an error, so its message shouldn't carry an
+    error code -- only the FAILURE branch gets code_prefix('1001')."""
+    fake_app.mode = 'prod'
+    coordinators_file = tmp_path / 'study_coordinators.csv'
+    coordinators_file.write_text('"name","phone_number"\n"Alice","5555550100"\n')
+    fake_app.study_coordinators_path = str(coordinators_file)
+    fake_app.coordinator_alert_message = '{name} was alerted about {task_type} ({outcome})'
+    send_sms = mocker.patch('_helper.send_sms', return_value=0)
+
+    task = SucceedingTask(fake_app)
+    task.task_type = 'CHECK_SYSTEM'
+    task.outcome = 'SUCCESS'
+    task.notify_via_sms()
+
+    body = send_sms.call_args[0][2][0]
+    assert body == 'Alice was alerted about CHECK_SYSTEM (SUCCESS)'
+    assert not body.startswith('[')
 
 
 def test_notify_via_sms_skips_coordinators_with_blank_phone(tmp_path, fake_app, mocker):

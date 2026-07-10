@@ -1,6 +1,7 @@
 """participant management logic"""
 
 from _helper import send_sms, notify_coordinators
+from _error_codes import code_prefix
 from task_managers._task_manager import TaskManager
 import csv
 
@@ -281,9 +282,9 @@ class ParticipantManager(TaskManager):
                 return 0
             except Exception as e:
                 self.app.add_to_transcript(f"Failed to send SMS to {participant_id}: {e}", "ERROR")
-                notify_coordinators(self.app, f"PRISM system failure: failed to send SMS to participant {participant_id}. Error: {e}")
+                notify_coordinators(self.app, code_prefix('2001') + f"PRISM system failure: failed to send SMS to participant {participant_id}. Error: {e}")
                 return -1
         except Exception as e:
             self.app.add_to_transcript(f"Error with sending a message: {e}", "ERROR")
-            notify_coordinators(self.app, f"PRISM system failure: unexpected error while processing an SMS task. Error: {e}")
+            notify_coordinators(self.app, code_prefix('2002') + f"PRISM system failure: unexpected error while processing an SMS task. Error: {e}")
             return -1
