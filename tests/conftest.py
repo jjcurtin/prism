@@ -102,8 +102,9 @@ class FakeApp:
     PRISM instance would set is a plain settable attribute here — tests set
     only what the code path under test actually reads.
     """
-    def __init__(self, mode='test'):
+    def __init__(self, mode='test', environment='dev'):
         self.mode = mode
+        self.environment = environment
         self.transcript = []
 
     def add_to_transcript(self, message, message_type='INFO'):

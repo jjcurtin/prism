@@ -173,7 +173,7 @@ def test_notify_via_sms_skips_coordinators_with_blank_phone(tmp_path, fake_app, 
     task.outcome = 'FAILURE'
     task.notify_via_sms()
 
-    send_sms.assert_called_once_with(fake_app, ['5555550101'], mocker.ANY)
+    send_sms.assert_called_once_with(fake_app, ['5555550101'], mocker.ANY, is_coordinator_message = True)
 
 
 def test_notify_via_sms_noop_when_not_prod(tmp_path, fake_app, mocker):

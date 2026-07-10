@@ -24,12 +24,42 @@ def _is_real_value(value):
         return False
     return True
 
-def send_sms(app, receiver_numbers, messages):
+def send_sms(app, receiver_numbers, messages, is_coordinator_message = False):
     """Returns the number of recipients the send failed for (0 on success,
     or `len(receiver_numbers)` if the Twilio client itself couldn't be
     built) -- not a bool. notify_coordinators() re-uses this same contract
-    when it delegates here.
+    when it delegates here (passing `is_coordinator_message=True`).
+
+    Prepends an environment marker to the outbound message body (not the
+    transcript log line, which is already environment-scoped by which
+    machine's logs it lands in): "DEV: " for every message when
+    `app.environment == "dev"` (participant and coordinator alike, since a
+    dev-environment message may still reach a real phone during testing and
+    must never be mistaken for a real study communication); "PROD: " only
+    for coordinator messages when `app.environment == "prod"` (so
+    coordinators can tell prod alerts apart from anything else, but real
+    participants never see an internal environment tag on their real survey
+    texts -- prod participant-facing messages get no prefix at all).
+
+    This is `app.environment` (the "which environment's data/credentials"
+    marker set by `run_prism.py::load_paths()`) -- not `app.mode` (the
+    `-mode test`/`-mode prod` flag gating whether sends happen at all),
+    which is an orthogonal axis. `getattr(app, 'environment', 'dev')` is
+    used instead of a bare attribute access so a caller whose app object
+    doesn't have `environment` set yet (e.g. a test fixture, or
+    mid-construction before `load_paths()` has run) doesn't crash message
+    sending; this mirrors `load_paths()`'s own "defaults to dev if unset"
+    behavior.
     """
+    environment = getattr(app, 'environment', 'dev')
+    if environment == 'dev':
+        prefix = "DEV: "
+    elif is_coordinator_message:
+        prefix = "PROD: "
+    else:
+        prefix = ""
+    messages = [prefix + message for message in messages]
+
     account_sid = app.twilio_account_sid
     auth_token = app.twilio_auth_token
     from_number = app.twilio_from_number
@@ -107,7 +137,7 @@ def notify_coordinators(app, message):
     if not phone_numbers:
         return 0
 
-    return send_sms(app, phone_numbers, bodies)
+    return send_sms(app, phone_numbers, bodies, is_coordinator_message = True)
 
 def clear():
     os.system('cls' if os.name == 'nt' else 'clear')
