@@ -42,7 +42,7 @@ def fake_prism_env(tmp_path):
     (repo_root / 'config' / 'repo_paths.csv').write_text(
         '"key","value"\n'
         '"logs_dir","logs"\n'
-        '"drive_mount_windows","S:"\n'
+        f'"drive_mount_windows","{drive_root}"\n'
         f'"drive_mount_posix","{drive_root}"\n'
         '"prism_drive_subpath","optimize/prism"\n'
     )

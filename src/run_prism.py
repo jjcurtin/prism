@@ -75,11 +75,12 @@ class PRISM():
     def _resolve_drive_path(self, raw_path: object) -> str:
         # translates an "S:/..." literal (as written on the drive's own
         # paths.csv, which is authored from Windows) into this platform's
-        # real path. Non-drive-letter (relative) values are returned as-is,
-        # for the caller to resolve against config_base.
+        # real path by substituting self.drive_mount for the drive letter --
+        # on production Windows that's just "S:" again (a no-op), but it's
+        # what lets tests redirect drive_mount_windows to a fake temp dir.
+        # Non-drive-letter (relative) values are returned as-is, for the
+        # caller to resolve against config_base.
         raw_path = str(raw_path).strip()
-        if platform.system() == 'Windows':
-            return str(Path(raw_path))
         if len(raw_path) >= 2 and raw_path[1] == ':':
             raw_path = raw_path[2:].lstrip('/\\')
             return str((Path(self.drive_mount) / raw_path).resolve())
