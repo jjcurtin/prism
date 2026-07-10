@@ -10,7 +10,7 @@ PIP := $(VENV)/bin/pip
 PY_SYS := python3
 endif
 
-.PHONY: setup run interface test-server test-client test-all
+.PHONY: setup run interface test-server test-client test-all test-integration
 
 .DEFAULT_GOAL := run
 
@@ -51,3 +51,10 @@ test-client:
 	$(PYTHON) -m pytest tests_interface -v
 
 test-all: test-server test-client
+
+# real end-to-end tests against real external services (Qualtrics, FollowMee,
+# the research drive) using real dev-environment credentials -- local-only,
+# not run in CI, skips cleanly if dev credentials aren't configured here.
+# See tests_integration/README.md.
+test-integration:
+	$(PYTHON) -m pytest tests_integration -v
