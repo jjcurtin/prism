@@ -96,11 +96,25 @@ def test_environment_files_exist_and_are_populated(environment):
 
     # Graceful skip #1: the research drive itself isn't mounted on this
     # machine at all -- mirrors CheckSystem.check_research_drive()'s
-    # ismount-or-isdir check.
+    # ismount-or-isdir check, including its try/except: a *stale* mount
+    # (present in e.g. /etc/fstab but the remote host is currently
+    # unreachable -- VPN not connected, etc.) doesn't cleanly return False
+    # from is_dir(), it raises OSError (observed: "[Errno 112] Host is
+    # down"), which check_research_drive() already treats as "not
+    # connected" rather than letting it propagate. This test previously
+    # lacked that try/except and would fail with an unhandled OSError
+    # instead of skipping in exactly the situation it's meant to skip for.
     drive_mount = Path(app.drive_mount)
-    if not (os.path.ismount(str(drive_mount)) or drive_mount.is_dir()):
+    try:
+        reachable = os.path.ismount(str(drive_mount)) or drive_mount.is_dir()
+    except OSError as e:
+        reachable = False
+        skip_reason_suffix = f" ({e})"
+    else:
+        skip_reason_suffix = ""
+    if not reachable:
         pytest.skip(
-            f"research drive not mounted at {drive_mount} on this machine -- "
+            f"research drive not mounted at {drive_mount} on this machine{skip_reason_suffix} -- "
             f"skipping {environment} environment file checks"
         )
 
@@ -160,4 +174,20 @@ def test_environment_files_exist_and_are_populated(environment):
     assert not empty_csvs, (
         f"{environment} environment (config_base={config_base}) has CSVs with no data rows beyond "
         f"the header -- still just a template:\n  " + "\n  ".join(empty_csvs)
+    )
+
+    # 4. r_scripts_dir (paths.csv 'scripts' key) must resolve to a real,
+    # existing directory. Unlike the files checked above, this isn't read
+    # at startup -- only when a RUN_R_SCRIPT task actually fires
+    # (_run_r_script.py checks os.path.exists() itself and fails gracefully
+    # rather than crashing PRISM) -- so a broken scripts path wouldn't
+    # otherwise surface until the first scheduled R script silently fails.
+    # Resolution is relative to config_base, not the process's cwd (see
+    # run_prism.py::load_paths()), so this is stable regardless of how/from
+    # where PRISM was launched.
+    r_scripts_dir = getattr(app, 'r_scripts_dir', None)
+    assert r_scripts_dir and Path(r_scripts_dir).is_dir(), (
+        f"{environment} environment (config_base={config_base}) has an r_scripts_dir "
+        f"that doesn't resolve to a real directory (paths.csv 'scripts' key) -- "
+        f"resolved to: {r_scripts_dir!r}"
     )
