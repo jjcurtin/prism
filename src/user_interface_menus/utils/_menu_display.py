@@ -256,7 +256,7 @@ def invalid_choice_menu(self, menu_options, choice = None, submenu = False):
     diagnosis = f"\n{red("Invalid choice.")}"
 
     if combined_choices == '':
-        diagnosis += f" Please use {yellow("command")} to see a list of commands or {yellow("help")} to view documentation."
+        diagnosis += f" Please use {yellow("command")} to see a list of commands."
         print(diagnosis)
     else:    
         diagnosis += " Did you mean one of these?"

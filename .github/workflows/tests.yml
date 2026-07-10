@@ -216,7 +216,7 @@ jobs:
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
       - name: Run tests
-        run: python -m pytest tests/test_helper.py -v --junitxml=test-results.xml
+        run: python -m pytest tests/test_helper.py tests/test_error_codes.py -v --junitxml=test-results.xml
       - name: Publish test results
         uses: dorny/test-reporter@v1
         if: always()
