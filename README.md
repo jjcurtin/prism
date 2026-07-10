@@ -66,6 +66,8 @@ Every folder in this repo has two docs, kept deliberately separate:
   above): loopback-only binding, no authentication on any route, a
   deliberate/discussed tradeoff rather than an oversight, not a gap to fix
   reflexively. *(2026-07-10)*
+- Added the previously CI-excluded `tests/test_check_system.py` to
+  `.github/workflows/tests.yml` as a new `system-checks` job. *(2026-07-10)*
 - Research-drive sync now assumes the drive is already mounted (no more
   `net use`/plaintext-password `os.system()` mapping step) and copies
   cross-platform (`robocopy` on Windows, `rsync` on Linux) via `subprocess.run`
