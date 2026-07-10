@@ -13,11 +13,10 @@ class CheckSystem(SystemTask):
         self.app.add_to_transcript(f"{self.task_type} #{self.task_number} initiated.")
         file_system_check = self.check_file_system()
         qualtrics_check = self.check_qualtrics()
-        followmee_check = self.check_followmee()
         research_drive_check = self.check_research_drive()
         participant_check = self.check_participants()
         return (
-            file_system_check + qualtrics_check + followmee_check
+            file_system_check + qualtrics_check
             + research_drive_check + participant_check
         )
 
@@ -35,7 +34,6 @@ class CheckSystem(SystemTask):
                 [], # scripts
                 [], # logs
                 ['_check_system.py', # obviously
-                 '_pulldown_qualtrics_data.py', '_pulldown_followmee_data.py',
                  '_system_task.py' # obviously
                 ] # tasks
             ]
@@ -90,21 +88,6 @@ class CheckSystem(SystemTask):
             self.app.add_to_transcript(f"Connection error occurred: {str(e)}", "ERROR")
             return 1
 
-    def check_followmee(self):
-        self.app.add_to_transcript(f"INFO: Now checking FollowMee connection...")
-        username = self.app.followmee_username
-        api_key = self.app.followmee_api_token
-        url = f"https://www.followmee.com/api/info.aspx?key={api_key}&username={username}&function=devicelist"
-        try:
-            response = requests.get(url, timeout = 10)
-            if response.status_code == 200:
-                return 0
-            self.app.add_to_transcript(f"FollowMee connection failed. Status code: {response.status_code}", "ERROR")
-            return 1
-        except RequestException as e:
-            self.app.add_to_transcript(f"FollowMee connection error occurred: {str(e)}", "ERROR")
-            return 1
-        
     def check_research_drive(self):
         if self.app.mode == "prod":
             self.app.add_to_transcript(f"INFO: Now checking Research Drive connection...")

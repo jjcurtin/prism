@@ -15,7 +15,6 @@ def test_load_paths_resolves_everything_under_the_fake_drive(prism_instance, fak
     assert Path(prism_instance.reminders_path).name == 'dev_reminders.csv'
     assert Path(prism_instance.r_scripts_dir).name == 'dev_automation'
     assert Path(prism_instance.r_scripts_dir).is_dir()
-    assert Path(prism_instance.followmee_coords_path) == drive_config_base / 'config' / 'followmee_coords.csv'
     assert Path(prism_instance.system_task_schedule_path) == drive_config_base / 'config' / 'system_task_schedule.csv'
     assert Path(prism_instance.study_coordinators_path) == drive_config_base / 'config' / 'study_coordinators.csv'
 
@@ -67,8 +66,6 @@ def test_load_api_keys_reads_all_other_api_files(prism_instance):
     prism_instance.load_paths()
     prism_instance.load_api_keys()
 
-    assert prism_instance.followmee_username == 'fake_followmee_user'
-    assert prism_instance.followmee_api_token == 'fake_followmee_token'
     assert prism_instance.twilio_account_sid == 'fake_sid'
     assert prism_instance.twilio_auth_token == 'fake_token'
     assert prism_instance.twilio_from_number == '+15555550100'

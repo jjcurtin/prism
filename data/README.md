@@ -15,15 +15,6 @@ Survey response data pulled down from Qualtrics.
   clutter, drops empty columns, filters already-submitted rows):
   `filtered_qualtrics_ema_data.csv`, `filtered_qualtrics_feedback_data.csv`.
 
-## followmee/
-GPS/location tracking data pulled from FollowMee (if the study uses location
-tracking devices).
-
-- `raw/` — the device list and the raw location history as returned by the
-  FollowMee API (`followmee_device_list.json`, `raw_followmee_data.json`).
-- `processed/` — one CSV per tracking device, appended to over time
-  (`{device_id}_processed_followmee_data.csv`).
-
 ## messages/
 Reserved for message/communication logs. Not currently written to by
 anything in this version of PRISM — SMS is sent live via Twilio without

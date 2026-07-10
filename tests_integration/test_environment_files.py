@@ -44,12 +44,10 @@ ENVIRONMENTS = ["dev", "prod"]
 # run_prism.py::load_api_keys() if its field_maps change.
 REQUIRED_API_FIELDS = {
     'qualtrics.api': ['qualtrics_api_token', 'qualtrics_data_center', 'ema_survey_id', 'feedback_survey_id'],
-    'followmee.api': ['followmee_username', 'followmee_api_token'],
     'twilio.api': ['twilio_account_sid', 'twilio_auth_token', 'twilio_from_number'],
 }
 
 CSV_MUST_HAVE_DATA_ROWS = [
-    'config/followmee_coords.csv',
     'config/system_task_schedule.csv',
     'config/study_coordinators.csv',
 ]
@@ -76,9 +74,7 @@ def _required_files(app):
     return {
         'config/paths.csv': config_dir / 'paths.csv',
         'api/qualtrics.api': api_dir / 'qualtrics.api',
-        'api/followmee.api': api_dir / 'followmee.api',
         'api/twilio.api': api_dir / 'twilio.api',
-        'config/followmee_coords.csv': config_dir / 'followmee_coords.csv',
         'config/system_task_schedule.csv': config_dir / 'system_task_schedule.csv',
         'config/study_coordinators.csv': config_dir / 'study_coordinators.csv',
     }

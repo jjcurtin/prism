@@ -20,8 +20,7 @@ def make_fake_src_tree(tmp_path):
     (tmp_path / 'logs').mkdir()
     system_tasks_dir = src_dir / 'system_tasks'
     system_tasks_dir.mkdir()
-    for name in ['_check_system.py', '_pulldown_qualtrics_data.py', '_pulldown_followmee_data.py',
-                 '_system_task.py']:
+    for name in ['_check_system.py', '_system_task.py']:
         (system_tasks_dir / name).write_text('')
     return src_dir
 

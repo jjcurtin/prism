@@ -82,11 +82,14 @@ class PRISM():
         # not shared study config) — set first so add_to_transcript (called
         # right after this) always has somewhere to write.
         self.logs_dir = str((repo_root / repo_paths['logs_dir']).resolve())
-        # data_dir: where the pulldown tasks (PulldownQualtricsData,
-        # PulldownFollowmeeData) write raw/processed output -- resolved the
-        # same way as logs_dir (repo-root-relative, not cwd-relative), so
-        # callers no longer need to assume a cwd of src/ (see
-        # tests_integration/conftest.py's real_app fixture).
+        # data_dir: where data-pulldown system tasks write raw/processed
+        # output -- resolved the same way as logs_dir (repo-root-relative,
+        # not cwd-relative), so callers no longer need to assume a cwd of
+        # src/ (see tests_integration/conftest.py's real_app fixture).
+        # Currently unused: PulldownQualtricsData and PulldownFollowmeeData,
+        # the only tasks that wrote here, were both removed entirely
+        # 2026-07-10 (see root CLAUDE.md's Changelog); kept in case a future
+        # task needs a repo-root-relative data directory again.
         self.data_dir = str((repo_root / repo_paths['data_dir']).resolve())
         self.drive_mount = repo_paths['drive_mount_windows'] if platform.system() == 'Windows' else repo_paths['drive_mount_posix']
 
@@ -138,7 +141,6 @@ class PRISM():
         # These used to be separate paths.csv/paths.api entries; they now
         # live directly under config_base/config/ alongside everything else.
         config_dir = Path(self.config_base) / 'config'
-        self.followmee_coords_path = str(config_dir / 'followmee_coords.csv')
         self.system_task_schedule_path = str(config_dir / 'system_task_schedule.csv')
         self.study_coordinators_path = str(config_dir / 'study_coordinators.csv')
 
@@ -181,10 +183,6 @@ class PRISM():
             'feedback_message': 'feedback_message',
             'feedback_reminder_message': 'feedback_reminder_message'
         }, "Qualtrics")
-        load_keys('followmee.api', {
-            'followmee_username': 'username',
-            'followmee_api_token': 'api_token'
-        }, "FollowMee")
         load_keys('twilio.api', {
             'twilio_account_sid': 'account_sid',
             'twilio_auth_token': 'auth_token',

@@ -1,7 +1,7 @@
 # tests_integration/
 
-Real end-to-end tests that hit real external services (Qualtrics, FollowMee,
-the research drive) using real **dev-environment** credentials, loaded
+Real end-to-end tests that hit real external services (Qualtrics, the
+research drive) using real **dev-environment** credentials, loaded
 exactly the way the app itself loads them: via the git-ignored `environment`
 marker file at the repo root and the drive-sourced `config_base/api/*.api`
 files (see `config/README.md`). Nothing here is mocked.
@@ -43,10 +43,6 @@ Per the codebase's own "deliberately deferred" list (root `CLAUDE.md`'s
 Improvements section, `plan/02-server-pytest.md`) — the real network-calling
 paths that `tests/`'s mocked/offline coverage deliberately does not exercise:
 
-- `test_pulldown_qualtrics_data.py` — `PulldownQualtricsData.run()` against
-  the real dev Qualtrics survey.
-- `test_pulldown_followmee_data.py` — `PulldownFollowmeeData.run()` against
-  the real dev FollowMee account.
 - `test_environment_files.py` — for **both** `"dev"` and `"prod"` (not just
   whichever the repo's `environment` marker file currently points to;
   `run_prism.py::load_paths()` grew an optional `environment` param so this
@@ -55,9 +51,9 @@ paths that `tests/`'s mocked/offline coverage deliberately does not exercise:
   `config_base` actually exists, and that the drive-sourced `.api`/CSV files
   are populated beyond their checked-in templates (not still
   `REPLACE_WITH_...` placeholders or empty CSVs with only a header row).
-  Unlike the other files here,
-  it doesn't use the `real_app` fixture (that always loads whichever single
-  environment the marker file points to) and it doesn't call
+  Unlike a typical test here, it doesn't use the `real_app` fixture (that
+  always loads whichever single environment the marker file points to) and
+  it doesn't call
   `require_real_credentials` — a missing/placeholder-only field here is
   exactly the actionable problem this file exists to catch, not a
   precondition to skip past. It skips per-environment only when that

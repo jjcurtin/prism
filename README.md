@@ -3,7 +3,7 @@
 PRISM is a Flask-based backend that runs a behavioral-health research study: it
 schedules and sends daily surveys to participants over SMS (delivered as a
 bare Qualtrics survey link, with no PRISM-side page personalization), pulls
-down survey/GPS data, and gives research staff a terminal UI
+down survey data, and gives research staff a terminal UI
 (`src/prism_interface.py`) to manage participants and background tasks.
 
 ## Getting Started
@@ -24,12 +24,12 @@ integration` / `test all` (run the pytest suites described below).
 ## Navigating this repo
 
 - **api/** *(git-ignored, created at runtime)* — plaintext API credential CSVs
-  (Qualtrics, FollowMee, Twilio, the research drive). Not present in a
+  (Qualtrics, Twilio, the research drive). Not present in a
   fresh checkout; sourced from the research drive, see `config/README.md`
   for what's required.
 - **config/** — configuration CSVs PRISM needs to run (participant roster,
   task schedule, coordinator list). See `config/README.md`.
-- **data/** — output for pulled-down Qualtrics/FollowMee data. See
+- **data/** — output for pulled-down Qualtrics data. See
   `data/README.md`.
 - **logs/** — transcripts and activity logs. See `logs/README.md`.
 - **scripts/** *(git-ignored, created at runtime)* — R scripts for the script

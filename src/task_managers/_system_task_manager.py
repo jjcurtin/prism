@@ -5,8 +5,6 @@ from datetime import datetime
 
 from task_managers._task_manager import TaskManager
 from system_tasks._check_system import CheckSystem
-from system_tasks._pulldown_qualtrics_data import PulldownQualtricsData
-from system_tasks._pulldown_followmee_data import PulldownFollowmeeData
 from system_tasks._run_r_script import RunRScript
 
 # Every system task, statically registered here. Adding a new task type
@@ -15,8 +13,6 @@ from system_tasks._run_r_script import RunRScript
 # ever has one author for these files.
 TASK_CLASSES = {
     'CHECK_SYSTEM': CheckSystem,
-    'PULLDOWN_QUALTRICS_DATA': PulldownQualtricsData,
-    'PULLDOWN_FOLLOWMEE_DATA': PulldownFollowmeeData,
     'RUN_R_SCRIPT': RunRScript,
 }
 

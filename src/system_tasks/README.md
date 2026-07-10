@@ -8,13 +8,8 @@ menus (see `src/user_interface_menus/tasks/README.md`).
 ## What each task type does
 
 - **`CHECK_SYSTEM`** — the "run diagnostics" task behind the `check` menu.
-  Verifies the folder layout, connectivity to Qualtrics/FollowMee, the
+  Verifies the folder layout, connectivity to Qualtrics, the
   research-drive connection, and the participant roster (duplicate IDs).
-- **`PULLDOWN_QUALTRICS_DATA`** — downloads the latest EMA and feedback
-  survey responses from Qualtrics and writes cleaned CSVs into
-  `../../data/qualtrics/`.
-- **`PULLDOWN_FOLLOWMEE_DATA`** — downloads the latest GPS/location data
-  from FollowMee and writes it into `../../data/followmee/`.
 - **`RUN_R_SCRIPT`** — runs a single R script. Any script placed in the
   repo's `scripts/` folder is automatically picked up and offered as a
   choice in the `tasks add rscript` menu — you don't need to register it
@@ -25,8 +20,9 @@ gets a text about it (in prod mode).
 
 ## Adding a new task type (for whoever maintains PRISM's code)
 
-New task types are picked up automatically — there's no registry to update
-by hand:
+Task types are **statically registered**, not auto-discovered — there's no
+filesystem-listing/dynamic-import mechanism, so adding one means updating a
+registry by hand:
 
 - Create a new file directly in this folder: lowercase, underscore-
   separated, with a leading underscore (`_my_new_task.py`).
@@ -36,6 +32,8 @@ by hand:
   `run()` must also set `self.task_type` (e.g.
   `self.task_type = "CHECK_SYSTEM"`) — that string is what
   `config/system_task_schedule.csv` and the `tasks` menu use to refer to it.
-- Task types are discovered once at startup by listing this folder's
-  files — a new task file becomes available on the next PRISM restart,
-  same as any other Python import (no hot-reload).
+- Import the class and add a `task_type: ClassName` line to the
+  `TASK_CLASSES` dict in `../task_managers/_system_task_manager.py` — that
+  dict is the single source of truth for which task types exist. A new task
+  file has no effect until it's registered there, and becomes available on
+  the next PRISM restart (no hot-reload).

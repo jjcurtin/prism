@@ -23,7 +23,6 @@ config/*.txt
 !config/system_prompt.txt
 
 data/qualtrics/
-data/followmee/
 data/messages/
 
 scripts/

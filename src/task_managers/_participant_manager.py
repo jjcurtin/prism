@@ -88,37 +88,7 @@ class ParticipantManager(TaskManager):
         except Exception as e:
             self.app.add_to_transcript(f"Failed to retrieve participants: {e}", "ERROR")
             return []
-        
-    def get_coords(self, unique_id):
-        file_path = self.app.followmee_coords_path
-        payload = []
-        try:
-            with open(file_path, 'r') as file:
-                lines = file.readlines()
-        except Exception as e:
-            self.app.add_to_transcript(f"Failed to retrieve coordinates for participant {unique_id}: {e}", "ERROR")
-            return None
 
-        for row_number, line in enumerate(lines[1:], start = 2):
-            if not line.strip():
-                continue
-            try:
-                parts = line.strip().split(',')
-                if parts[0].strip('"') == unique_id:
-                    payload.append({
-                        'unique_id': parts[0].strip('"'),
-                        'latitude': float(parts[3].strip('"')),
-                        'longitude': float(parts[4].strip('"')),
-                    })
-            except Exception as e:
-                self.app.add_to_transcript(f"Skipping malformed coordinate row {row_number}: {e}", "ERROR")
-
-        if payload:
-            self.app.add_to_transcript(f"Retrieved coordinates for participant {unique_id}.", "INFO")
-            return payload
-        self.app.add_to_transcript(f"Coordinates for participant {unique_id} not found.", "ERROR")
-        return None
-        
     def save_participants(self):
         try:
             with open(self.file_path, 'w') as file:

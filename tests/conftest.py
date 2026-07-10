@@ -13,7 +13,6 @@ QUALTRICS_API = (
     '"fake_qualtrics_token","fake_dc","fake_ema_survey","fake_feedback_survey",'
     '"ema msg","ema reminder msg","feedback msg","feedback reminder msg"\n'
 )
-FOLLOWMEE_API = '"username","api_token"\n"fake_followmee_user","fake_followmee_token"\n'
 TWILIO_API = (
     '"account_sid","auth_token","from_number","coordinator_alert_message"\n'
     '"fake_sid","fake_token","+15555550100","fake coordinator alert msg"\n'
@@ -21,10 +20,6 @@ TWILIO_API = (
 
 STUDY_COORDINATORS_CSV = '"name","phone_number"\n"Test Coordinator","5555550100"\n'
 SYSTEM_TASK_SCHEDULE_CSV = '"task_type","task_time","r_script_path","run_today"\n"CHECK_SYSTEM","03:00:00","","no"\n'
-FOLLOWMEE_COORDS_CSV = (
-    'DeviceName,DeviceID,Date,Latitude,Longitude,Type,Speed(mph),Speed(km/h),'
-    'Direction,Altitude(ft),Altitude(m),Accuracy,Battery\n'
-)
 STUDY_PARTICIPANTS_CSV = (
     'initials,subid,unique_id,on_study,phone_number,ema_time,ema_reminder_time,'
     'feedback_time,feedback_reminder_time\n'
@@ -64,11 +59,9 @@ def fake_prism_env(tmp_path):
         '"scripts","../../proj_optimize/dev_automation/"\n'
     )
     (config_base / 'api' / 'qualtrics.api').write_text(QUALTRICS_API)
-    (config_base / 'api' / 'followmee.api').write_text(FOLLOWMEE_API)
     (config_base / 'api' / 'twilio.api').write_text(TWILIO_API)
     (config_base / 'config' / 'study_coordinators.csv').write_text(STUDY_COORDINATORS_CSV)
     (config_base / 'config' / 'system_task_schedule.csv').write_text(SYSTEM_TASK_SCHEDULE_CSV)
-    (config_base / 'config' / 'followmee_coords.csv').write_text(FOLLOWMEE_COORDS_CSV)
 
     participants_dir = drive_root / 'optimize' / 'data_raw' / 'participants'
     participants_dir.mkdir(parents=True)

@@ -35,11 +35,10 @@ def real_app():
     SystemTask.execute() (not used directly by these tests, which call
     .run() instead) wouldn't fire coordinator SMS even if it were.
 
-    No chdir needed: the task classes under test (PulldownQualtricsData,
-    PulldownFollowmeeData) resolve their output paths via `self.app.data_dir`
-    (repo-root-relative, set in run_prism.py::load_paths() the same way as
-    logs_dir -- see config/repo_paths.csv's `data_dir` key), not a
-    cwd-relative "../data/..." literal. This fixture used to chdir into
+    No chdir needed: task classes under test resolve their output paths via
+    `self.app.data_dir` (repo-root-relative, set in run_prism.py::load_paths()
+    the same way as logs_dir -- see config/repo_paths.csv's `data_dir` key),
+    not a cwd-relative "../data/..." literal. This fixture used to chdir into
     src/ before 2026-07-10's move away from those hardcoded relative paths.
     """
     from run_prism import PRISM

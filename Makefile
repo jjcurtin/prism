@@ -46,7 +46,7 @@ test-client:
 test-all:
 	$(PYTHON) tasks.py test all
 
-# real end-to-end tests against real external services (Qualtrics, FollowMee,
+# real end-to-end tests against real external services (Qualtrics,
 # the research drive) using real dev-environment credentials -- local-only,
 # not run in CI, skips cleanly if dev credentials aren't configured here.
 # See tests_integration/README.md.

@@ -4,9 +4,9 @@ config/api are sourced from the research drive, not this folder.
 `run_prism.py`'s `load_paths()`/`load_api_keys()` read
 `S:/optimize/prism/<environment>/` (`<environment>` from the git-ignored
 `environment` marker file at the repo root, `dev` or `prod`) for everything
-study-specific: the `api/` folder (Qualtrics/FollowMee/Twilio/etc. credentials
+study-specific: the `api/` folder (Qualtrics/Twilio/etc. credentials
 + SMS message text), and most of `config/` (`study_coordinators.csv`,
-`system_task_schedule.csv`, `followmee_coords.csv`).
+`system_task_schedule.csv`).
 `study_participants.csv`/`reminders.csv` live under a separate
 `data_raw/participants/` path on the same drive (`dev_`-prefixed for the dev
 environment), per that environment's `paths.csv`. On Linux, the drive mounts
