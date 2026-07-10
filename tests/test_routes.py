@@ -335,7 +335,7 @@ def test_send_survey_success(routes_client, routes_app_instance, mocker):
 
     assert resp.status_code == 200
     routes_app_instance.participant_manager.add_task.assert_called_once_with(
-        'ema', mocker.ANY, participant_id='1', one_time=True
+        'ema', mocker.ANY, participant_id='1', one_time=True, track=False
     )
     routes_app_instance.participant_manager.finish_task.assert_called_once_with(fake_task)
 
@@ -380,7 +380,7 @@ def test_send_survey_feedback_type_success(routes_client, routes_app_instance):
     assert resp.status_code == 200
     args, kwargs = routes_app_instance.participant_manager.add_task.call_args
     assert args[0] == 'feedback'
-    assert kwargs == {'participant_id': '1', 'one_time': True}
+    assert kwargs == {'participant_id': '1', 'one_time': True, 'track': False}
 
 
 def test_send_custom_sms_missing_message(routes_client, routes_app_instance):

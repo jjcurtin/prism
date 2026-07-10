@@ -34,6 +34,7 @@ class TaskManager():
         r_script_path: str | None = None,
         participant_id: str | None = None,
         one_time: bool = False,
+        track: bool = True,
     ) -> Task:
         """`r_script_path` accepts the literal string "None" as an
         empty/none value in addition to "". Callers that pass this through a
@@ -47,6 +48,20 @@ class TaskManager():
         other task this engine manages. Defaults to False so every existing
         caller/task keeps its current permanent, recurring behavior
         unchanged.
+
+        `track` controls whether the task is appended to `self.tasks` at
+        all -- the list the background `run()` thread's `check_tasks()`
+        scans every ~1s to decide what's due. Defaults to True (every
+        existing recurring/scheduled caller). A caller that's about to
+        `finish_task()` this exact task synchronously right now (e.g.
+        _routes.py's send_survey, whose task_time is `datetime.now()`) must
+        pass `track=False`: otherwise there's a real race between that
+        synchronous call and the background thread's own `check_tasks()`
+        tick, which sees a brand-new task scheduled for "now" -- within its
+        1-second firing window from the moment it's appended -- and can
+        independently enqueue + process the same task a second time before
+        the synchronous call finishes, sending a real duplicate SMS
+        (confirmed in practice: two distinct Twilio SIDs for one EMA send).
 
         Returns the created task dict so a caller that needs to process it
         synchronously (see `finish_task`) can reference this exact task
@@ -69,7 +84,8 @@ class TaskManager():
         task_dict['one_time'] = one_time
         if participant_id is not None:
             task_dict['participant_id'] = participant_id
-        self.tasks.append(task_dict)
+        if track:
+            self.tasks.append(task_dict)
         return task_dict
     
     def save_to_csv(self, data: list[Task], file_path: str) -> None:
@@ -110,7 +126,9 @@ class TaskManager():
         polling loop below (`run()`) and any direct/manual invocation (e.g.
         a route that needs a synchronous result right now instead of
         waiting for the next `check_tasks` tick) -- so a one-time task's
-        lifecycle is identical no matter which path finishes it.
+        lifecycle is identical no matter which path finishes it. The
+        removal is a harmless no-op for a task that was never tracked in
+        the first place (`add_task(..., track=False)`, see its docstring).
 
         Removal matches by object identity (`is`), not by task_type/
         participant_id/value equality, so it can never remove a different

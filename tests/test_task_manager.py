@@ -82,6 +82,45 @@ def test_add_task_returns_the_created_task_dict(fake_app):
     assert task is tm.tasks[0]
 
 
+def test_add_task_track_defaults_to_true(fake_app):
+    """Every existing recurring/scheduled caller relies on this -- a task
+    must land in self.tasks for the background poller to ever see it."""
+    tm = make_manager(fake_app)
+    task = tm.add_task('CHECK_SYSTEM', '03:00:00')
+    assert tm.tasks == [task]
+
+
+def test_add_task_track_false_not_added_to_tasks(fake_app):
+    """Regression test for a real duplicate-SMS bug: _routes.py's
+    send_survey adds a one-time task with task_time=now, which used to
+    always append to self.tasks -- immediately eligible for the background
+    poller's own check_tasks() tick (its ~1s window starts the moment the
+    task is appended), racing the synchronous finish_task() call and
+    sending a genuine duplicate SMS (two distinct Twilio SIDs observed for
+    one EMA send). track=False must keep the task out of self.tasks
+    entirely while still returning the task dict for the caller to pass to
+    finish_task() itself."""
+    tm = make_manager(fake_app)
+    task = tm.add_task('ema', '09:00:00', participant_id='000000000', one_time=True, track=False)
+    assert tm.tasks == []
+    assert task['task_type'] == 'ema'
+
+
+def test_add_task_track_false_task_time_now_never_reaches_check_tasks_queue(fake_app):
+    """End-to-end version of the regression above: even with task_time set
+    to the exact current moment (send_survey's real usage) and check_tasks()
+    actually run immediately afterward, an untracked task can never be
+    independently queued -- it was never in self.tasks for check_tasks() to
+    scan in the first place."""
+    tm = make_manager(fake_app)
+    now_str = datetime.now().strftime('%H:%M:%S')
+    tm.add_task('ema', now_str, participant_id='000000000', one_time=True, track=False)
+
+    tm.check_tasks()
+
+    assert tm.task_queue.empty()
+
+
 def test_check_tasks_queues_a_due_task(fake_app):
     tm = make_manager(fake_app)
     now = datetime.now().time()

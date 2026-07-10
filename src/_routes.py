@@ -228,17 +228,24 @@ def create_flask_app(app_instance: App) -> Flask:
         right now, synchronously -- distinct from the permanent recurring
         ema/ema_reminder/feedback/feedback_reminder tasks
         `schedule_participant_tasks` sets up for every participant. The
-        task is added with `one_time=True` and processed immediately via
-        `finish_task` (which removes it from the task list right after,
-        success or failure) instead of being queued for the polling loop to
-        pick up ~10 seconds later and optimistically reporting success
-        before the send is known to have worked.
+        task is added with `one_time=True, track=False` and processed
+        immediately via `finish_task` instead of being queued for the
+        polling loop to pick up ~10 seconds later and optimistically
+        reporting success before the send is known to have worked.
+        `track=False` is required, not just an optimization: task_time is
+        `datetime.now()`, so a tracked task would be immediately eligible
+        for the background poller's own `check_tasks()` tick (its ~1s
+        firing window starts the moment it's appended) -- a real race that
+        sent a genuine duplicate SMS in practice (two distinct Twilio SIDs
+        for one EMA send) before this fix.
         """
         if survey_type not in ['ema', 'feedback']:
             return jsonify({"error": "Invalid survey type"}), 400
         elif not app_instance.participant_manager.get_participant(unique_id):
             return jsonify({"error": "Participant not found"}), 404
-        task = app_instance.participant_manager.add_task(survey_type, datetime.now().strftime('%H:%M:%S'), participant_id = unique_id, one_time = True)
+        task = app_instance.participant_manager.add_task(
+            survey_type, datetime.now().strftime('%H:%M:%S'), participant_id = unique_id, one_time = True, track = False
+        )
         if app_instance.participant_manager.finish_task(task) != 0:
             return jsonify({"error": f"Failed to send {survey_type} survey to participant {unique_id}"}), 502
         return jsonify({"message": f"{survey_type.capitalize()} survey sent to participant {unique_id}"}), 200
