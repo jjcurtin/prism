@@ -1,9 +1,6 @@
 """This file checks the system to make sure components work"""
 
 import os
-import subprocess
-import sys
-from pathlib import Path
 
 import requests
 from requests.exceptions import RequestException
@@ -19,10 +16,9 @@ class CheckSystem(SystemTask):
         followmee_check = self.check_followmee()
         research_drive_check = self.check_research_drive()
         participant_check = self.check_participants()
-        tests_check = self.check_tests()
         return (
             file_system_check + qualtrics_check + followmee_check
-            + research_drive_check + participant_check + tests_check
+            + research_drive_check + participant_check
         )
 
     def check_file_system(self):
@@ -154,42 +150,4 @@ class CheckSystem(SystemTask):
                 self.app.add_to_transcript(f"Unique ID: {uid}, Participants: {', '.join(names)}", "ERROR")
             self.app.add_to_transcript("Please remedy these issues either through this interface or in the CSV file and refresh from CSV when you are ready.", "ERROR")
             return 1
-        return 0
-
-    def check_tests(self):
-        # Runs only the offline test suites (tests/, tests_interface/) --
-        # both fully mocked, no network/drive dependency (tests_integration/
-        # README.md's own description of the split). Deliberately excludes
-        # tests_integration/, which needs real credentials/the research
-        # drive mounted and would be circular/slow/unsafe to invoke from
-        # inside a health check that may itself be running in prod.
-        self.app.add_to_transcript("INFO: Now checking offline test suite...")
-        repo_root = getattr(self.app, 'repo_root', None) or Path(__file__).resolve().parent.parent.parent
-        try:
-            result = subprocess.run(
-                [sys.executable, '-m', 'pytest', 'tests', 'tests_interface', '-q'],
-                cwd = str(repo_root),
-                capture_output = True,
-                text = True,
-                timeout = 120,
-            )
-        except subprocess.TimeoutExpired as e:
-            output = ((e.stdout or '') + (e.stderr or '')).strip()
-            tail = "\n".join(output.splitlines()[-20:])
-            self.app.add_to_transcript(
-                f"Offline test suite timed out after {e.timeout}s. Last output:\n{tail}", "ERROR"
-            )
-            return 1
-        except Exception as e:
-            self.app.add_to_transcript(f"Failed to run offline test suite: {e}", "ERROR")
-            return 1
-
-        if result.returncode != 0:
-            output = (result.stdout + result.stderr).strip()
-            tail = "\n".join(output.splitlines()[-20:])
-            self.app.add_to_transcript(
-                f"Offline test suite reported failures (exit code {result.returncode}). Last output:\n{tail}", "ERROR"
-            )
-            return 1
-
         return 0

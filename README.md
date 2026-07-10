@@ -142,8 +142,10 @@ Every folder in this repo has two docs, kept deliberately separate:
   and the routes that consume them) with explicit `(ok, data)` tuples,
   removed the dead EMA/feedback log reader (routes/menu/tests) left behind
   by the earlier Qualtrics-route removal, and dropped the long-dead
-  `check_installed_packages()` stub in favor of a `check_tests()` health
-  check that runs the offline suite. Also removed the research-drive-push
+  `check_installed_packages()` stub (the `check_tests()` replacement that
+  briefly ran the offline suite from inside `CheckSystem` was itself
+  removed the same day — CheckSystem shouldn't run the test suite). Also
+  removed the research-drive-push
   system task (`PushDataToResearchDrive`) entirely — the plaintext-credential
   auto-mount it depended on was already dropped for security reasons, the
   task was unscheduled in both `dev` and `prod`, and the drive-side
