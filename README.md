@@ -10,18 +10,24 @@ participants and background tasks.
 
 `python tasks.py --help` is the canonical, cross-platform entry point for
 every dev task (setup, running the server, running the interface, running
-tests) -- it works the same on Windows (no `make` there) as on Linux/macOS.
-Run `python tasks.py <command> --help` for a given command's own options.
+tests) -- it works the same on Windows as on Linux/macOS. Run
+`python tasks.py <command> --help` for a given command's own options.
 On Linux/macOS, `make <target>` is a thin convenience wrapper around the
-same commands; run `make` with no target for the same list. Available
-commands: `setup` (create the venv and install dependencies -- run with the
-system python, before the venv exists), `run --mode test` / `run --mode
-prod` (stop any running server, then start PRISM in the given mode -- no
-default mode, to avoid accidentally booting prod), `interface` (launch the
-RA terminal interface), `test server` / `test client` / `test
-integration` / `test all` (run the pytest suites described below), and
-`typecheck` (run mypy over `src/`; see `mypy.ini` -- gradual/non-strict,
-`src/` only, wired into CI as its own job).
+same commands; run `make` with no target for the same list. On Windows,
+`.\prism.ps1 <target>` is the equivalent wrapper (same target names as the
+Makefile) -- run `.\prism.ps1` with no target for the same list. It
+self-locates the repo via its own script location, so it works correctly
+regardless of where the repo is cloned or which directory it's run from.
+Available commands/targets: `setup` (create the venv and install
+dependencies -- run with the system python, before the venv exists),
+`run --mode test` / `run-test` / `run --mode prod` / `run-prod` (stop any
+running server, then start PRISM in the given mode -- no default mode, to
+avoid accidentally booting prod), `interface` (launch the RA terminal
+interface), `test server` / `test-server` / `test client` / `test-client` /
+`test integration` / `test-integration` / `test all` / `test-all` (run the
+pytest suites described below), and `typecheck` (run mypy over `src/`; see
+`mypy.ini` -- gradual/non-strict, `src/` only, wired into CI as its own
+job).
 
 ## Navigating this repo
 
