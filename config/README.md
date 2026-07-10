@@ -1,7 +1,7 @@
 # Config
 
-**Updated 2026-07-09 — config/api are now sourced from the research drive,
-not this folder.** `run_prism.py`'s `load_paths()`/`load_api_keys()` read
+config/api are sourced from the research drive, not this folder.
+`run_prism.py`'s `load_paths()`/`load_api_keys()` read
 `S:/optimize/prism/<environment>/` (`<environment>` from the git-ignored
 `environment` marker file at the repo root, `dev` or `prod`) for everything
 study-specific: the `api/` folder (Qualtrics/FollowMee/Twilio/etc. credentials
@@ -26,23 +26,19 @@ here, which is drive-sourced or git-ignored):
 - `uiconfig.txt` — interface defaults (display tunables). This is generic,
   not study-specific or secret, so unlike the drive-sourced files it ships
   with the repo rather than requiring a fresh clone to copy it from the
-  drive first. *(2026-07-10)*
+  drive first.
 
 ## Current known schema (from the real files on the drive)
 
 `study_participants.csv`: `initials,subid,unique_id,on_study,phone_number,ema_time,ema_reminder_time,feedback_time,feedback_reminder_time`.
-`_participant_manager.py`'s CSV parsing matches this schema (fixed 2026-07-09,
-commit `271b865`).
+`_participant_manager.py`'s CSV parsing matches this schema.
 
 `reminders.csv`: `subid,unique_id,on_study,remind_ema,remind_feedback`.
 `remind_ema`/`remind_feedback` are `"yes"`/`"no"` flags meaning "should this
 participant still be reminded about today's EMA/feedback survey" —
 `"no"` means they've already opened it, so `process_task()` skips that
 reminder send. Nothing in PRISM's own codebase writes this file; it's
-populated by an external process (column-name fix 2026-07-10, was
-previously read via wrong column names; polarity fix same day, the
-initial "yes" == already-opened check had it backwards — see
-`src/task_managers/CLAUDE.md`).
+populated by an external process.
 
 `study_coordinators.csv`: `name,phone_number` (10 digits) — who gets texted
 if a background task or system check fails.
@@ -50,10 +46,8 @@ if a background task or system check fails.
 `system_task_schedule.csv`: `task_type,task_time,r_script_path,run_today` —
 `task_type` must match a task class in `src/system_tasks/`.
 
-`script_pipeline.csv` *(removed 2026-07-10)*: the older `RUN_R_SCRIPT_PIPELINE`
-mechanism for chaining R scripts (and this CSV, and `self.script_pipeline_path`)
-were removed entirely, not just deprecated. Drop scripts where `r_scripts_dir`
-points instead — PRISM auto-detects them for the `RUN_R_SCRIPT` task.
+R scripts for the `RUN_R_SCRIPT` task are auto-detected from wherever
+`r_scripts_dir` points — drop scripts there directly.
 
 ## A note on editing these by hand
 
