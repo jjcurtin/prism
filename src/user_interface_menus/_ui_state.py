@@ -29,6 +29,8 @@ settings/_settings_menu.py) keeps working and refers to this exact same
 object.
 """
 
+from pathlib import Path
+
 from user_interface_menus._types import MenuOptions
 
 class UIState:
@@ -41,6 +43,18 @@ class UIState:
     reference without needing a fresh import per call.
     """
     def __init__(self) -> None:
+        # anchored via __file__ (this module lives at
+        # src/user_interface_menus/_ui_state.py, three levels under the repo
+        # root), not the process's cwd -- load_params/save_params/
+        # write_to_interface_log/read_from_interface_log in _menu_helper.py
+        # used to hardcode cwd-relative "../..." paths, which only resolved
+        # correctly if the interface happened to be launched with cwd set to
+        # exactly <repo_root>/src (true only via `tasks.py interface`'s own
+        # subprocess cwd; any other launch method silently wrote config/logs
+        # to the wrong place -- e.g. one level above the actual repo root if
+        # launched with cwd already at the repo root). Tests override this
+        # via monkeypatch to point at a fake repo tree.
+        self.repo_root: Path = Path(__file__).resolve().parent.parent.parent
         self.window_width: int = 155
         self.window_height: int = 20
         self.right_align: bool = True

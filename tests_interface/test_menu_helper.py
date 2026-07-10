@@ -1,10 +1,10 @@
 """Tests for _menu_helper.py: module globals, setter functions, and
 uiconfig.txt param load/save.
 
-All the file I/O here uses hardcoded *relative* paths (e.g.
-"../config/uiconfig.txt") that assume cwd is the repo's src/ directory --
-so every test chdirs into a fabricated fake repo layout under tmp_path
-rather than touching the real repo's config/logs directories.
+All the file I/O here resolves paths via ui_state.repo_root (see
+user_interface_menus/_ui_state.py) -- every test points that at a
+fabricated fake repo layout under tmp_path rather than touching the real
+repo's config/logs directories.
 """
 import os
 import time
@@ -17,15 +17,13 @@ import user_interface_menus._menu_helper as menu_helper
 
 @pytest.fixture
 def fake_repo(tmp_path, monkeypatch):
-    """Fabricates a fake repo checkout: <root>/src (cwd), <root>/config,
-    <root>/logs/interface_logs -- matching the relative-path assumptions
-    baked into _menu_helper.py.
+    """Fabricates a fake repo checkout: <root>/config, <root>/logs/
+    interface_logs -- matching the paths _menu_helper.py resolves via
+    ui_state.repo_root.
     """
-    src_dir = tmp_path / "src"
     (tmp_path / "config").mkdir(parents=True)
     (tmp_path / "logs" / "interface_logs").mkdir(parents=True)
-    src_dir.mkdir(parents=True)
-    monkeypatch.chdir(src_dir)
+    monkeypatch.setattr(menu_helper.ui_state, 'repo_root', tmp_path)
     return tmp_path
 
 
@@ -322,10 +320,8 @@ def test_write_to_interface_log_creates_missing_directory(tmp_path, monkeypatch)
     FileNotFoundError, caught by the broad except and printed as "Error:
     Could not write to log file: ..." instead of writing the entry.
     """
-    src_dir = tmp_path / "src"
     (tmp_path / "logs").mkdir(parents=True)  # logs/ exists, interface_logs/ deliberately does not
-    src_dir.mkdir()
-    monkeypatch.chdir(src_dir)
+    monkeypatch.setattr(menu_helper.ui_state, 'repo_root', tmp_path)
 
     menu_helper.write_to_interface_log("hello")
 

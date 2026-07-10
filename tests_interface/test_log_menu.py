@@ -1,9 +1,9 @@
 """Tests for logs/_log_menu.py.
 
-print_interface_log()/read_from_interface_log() use a hardcoded relative
-path ("../logs/interface_logs/test_interface_log.txt") that assumes cwd is
-the repo's src/ directory, per the pattern in test_menu_helper.py -- the
-`fake_repo` fixture here fabricates that layout under tmp_path.
+print_interface_log()/read_from_interface_log() resolve their log file via
+ui_state.repo_root (see user_interface_menus/_ui_state.py) -- the
+`fake_repo` fixture here points that at a fabricated tmp_path tree instead
+of the real repo.
 """
 import os
 from unittest.mock import MagicMock
@@ -22,10 +22,8 @@ def _no_real_terminal(monkeypatch):
 
 @pytest.fixture
 def fake_repo(tmp_path, monkeypatch):
-    src_dir = tmp_path / "src"
-    src_dir.mkdir()
     (tmp_path / "logs" / "interface_logs").mkdir(parents=True)
-    monkeypatch.chdir(src_dir)
+    monkeypatch.setattr(menu_helper.ui_state, 'repo_root', tmp_path)
     return tmp_path
 
 

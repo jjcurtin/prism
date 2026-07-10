@@ -44,10 +44,10 @@ def cmd_setup(args):
         # and pip would silently fall back to a from-source build that
         # fails without MSVC Build Tools installed), so a plain venv +
         # pip install is enough.
-        subprocess.run([sys.executable, "-m", "venv", str(VENV_DIR)], check=True)
-        subprocess.run([str(venv_pip), "install", "--upgrade", "pip"], check=True)
-        subprocess.run([str(venv_pip), "install", "-r", "requirements.txt"], check=True)
-        subprocess.run([str(venv_pip), "install", "-r", "requirements-dev.txt"], check=True)
+        subprocess.run([sys.executable, "-m", "venv", str(VENV_DIR)], check=True, cwd=REPO_ROOT)
+        subprocess.run([str(venv_pip), "install", "--upgrade", "pip"], check=True, cwd=REPO_ROOT)
+        subprocess.run([str(venv_pip), "install", "-r", "requirements.txt"], check=True, cwd=REPO_ROOT)
+        subprocess.run([str(venv_pip), "install", "-r", "requirements-dev.txt"], check=True, cwd=REPO_ROOT)
     else:
         # pandas has no prebuilt wheel for this platform (cp313/aarch64);
         # install it via apt and build the venv with --system-site-packages
@@ -56,8 +56,9 @@ def cmd_setup(args):
         subprocess.run(
             [sys.executable, "-m", "venv", "--system-site-packages", str(VENV_DIR)],
             check=True,
+            cwd=REPO_ROOT,
         )
-        subprocess.run([str(venv_pip), "install", "--upgrade", "pip"], check=True)
+        subprocess.run([str(venv_pip), "install", "--upgrade", "pip"], check=True, cwd=REPO_ROOT)
         with open(REPO_ROOT / "requirements.txt") as f:
             stripped = "".join(line for line in f if not line.startswith("pandas"))
         subprocess.run(
@@ -65,10 +66,11 @@ def cmd_setup(args):
             input=stripped,
             text=True,
             check=True,
+            cwd=REPO_ROOT,
         )
-        subprocess.run([str(venv_pip), "install", "-r", "requirements-dev.txt"], check=True)
+        subprocess.run([str(venv_pip), "install", "-r", "requirements-dev.txt"], check=True, cwd=REPO_ROOT)
 
-    subprocess.run([sys.executable, "setup_env.py"], check=True)
+    subprocess.run([sys.executable, "setup_env.py"], check=True, cwd=REPO_ROOT)
 
     # Every other subcommand relies on sys.executable already being the
     # venv's python -- print the exact correct next command rather than
@@ -93,9 +95,11 @@ def cmd_setup(args):
 
 def cmd_run(args):
     """Stop any running server, then start run_prism.py in the given mode."""
-    subprocess.run([sys.executable, "stop_server.py"], check=True)
+    subprocess.run([sys.executable, "stop_server.py"], check=True, cwd=REPO_ROOT)
     try:
-        subprocess.run([sys.executable, "run_prism.py", "-mode", args.mode], cwd="src", check=True)
+        subprocess.run(
+            [sys.executable, "run_prism.py", "-mode", args.mode], cwd=REPO_ROOT / "src", check=True
+        )
     except KeyboardInterrupt:
         print("\nPRISM server stopped.")
 
@@ -103,7 +107,7 @@ def cmd_run(args):
 def cmd_interface(args):
     """Launch the RA terminal interface (src/prism_interface.py)."""
     try:
-        subprocess.run([sys.executable, "prism_interface.py"], cwd="src", check=True)
+        subprocess.run([sys.executable, "prism_interface.py"], cwd=REPO_ROOT / "src", check=True)
     except KeyboardInterrupt:
         print("\nInterface closed.")
 
@@ -126,13 +130,14 @@ def cmd_test(args):
         subprocess.run(
             [sys.executable, "-m", "pytest", _TEST_TARGETS[target], "-v"],
             check=True,
+            cwd=REPO_ROOT,
         )
 
 
 def cmd_typecheck(args):
     """Run mypy over src/ (see mypy.ini; gradual/non-strict, src/ only --
     tests/, tests_interface/, tests_integration/ are out of scope)."""
-    subprocess.run([sys.executable, "-m", "mypy", "src"], check=True)
+    subprocess.run([sys.executable, "-m", "mypy", "src"], check=True, cwd=REPO_ROOT)
 
 
 def build_parser():

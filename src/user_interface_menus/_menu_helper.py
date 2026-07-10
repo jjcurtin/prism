@@ -95,7 +95,7 @@ def load_params() -> None:
 
     clear()
     print("Now loading parameters...")
-    file_path = "../config/uiconfig.txt"
+    file_path = ui_state.repo_root / "config" / "uiconfig.txt"
     with open(file_path, 'r') as file:
         lines = file.readlines()
         for line in lines:
@@ -192,7 +192,7 @@ def load_params() -> None:
     save_params()
 
 def save_params() -> None:
-    file_path = "../config/uiconfig.txt"
+    file_path = ui_state.repo_root / "config" / "uiconfig.txt"
     with open(file_path, 'w') as file:
         file.write(f"RIGHT_ALIGN={ui_state.right_align}\n")
         file.write(f"RELATED_OPTIONS_THRESHOLD={ui_state.related_options_threshold}\n")
@@ -214,15 +214,16 @@ def load_menus() -> None:
 def write_to_interface_log(message: str) -> None:
     try:
         import os
-        os.makedirs("../logs/interface_logs", exist_ok=True)
-        with open("../logs/interface_logs/test_interface_log.txt", "a") as file:
+        log_dir = ui_state.repo_root / "logs" / "interface_logs"
+        os.makedirs(log_dir, exist_ok=True)
+        with open(log_dir / "test_interface_log.txt", "a") as file:
             file.write(f"{message}\n")
     except Exception as e:
         print(f"Error: Could not write to log file: {e}")
 
 def read_from_interface_log() -> str:
     try:
-        with open("../logs/interface_logs/test_interface_log.txt", "r") as file:
+        with open(ui_state.repo_root / "logs" / "interface_logs" / "test_interface_log.txt", "r") as file:
             content = file.read()
         return content
     except FileNotFoundError:
