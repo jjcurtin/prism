@@ -35,11 +35,13 @@ here, which is drive-sourced or git-ignored):
 commit `271b865`).
 
 `reminders.csv`: `subid,unique_id,on_study,remind_ema,remind_feedback`.
-`remind_ema`/`remind_feedback` are `"yes"`/`"no"` flags meaning "has this
-participant already opened today's EMA/feedback survey" — `"yes"` means
-`process_task()` skips that reminder send. Nothing in PRISM's own codebase
-writes this file; it's populated by an external process (fixed 2026-07-10,
-was previously read via wrong column names — see
+`remind_ema`/`remind_feedback` are `"yes"`/`"no"` flags meaning "should this
+participant still be reminded about today's EMA/feedback survey" —
+`"no"` means they've already opened it, so `process_task()` skips that
+reminder send. Nothing in PRISM's own codebase writes this file; it's
+populated by an external process (column-name fix 2026-07-10, was
+previously read via wrong column names; polarity fix same day, the
+initial "yes" == already-opened check had it backwards — see
 `src/task_managers/CLAUDE.md`).
 
 `study_coordinators.csv`: `name,phone_number` (10 digits) — who gets texted

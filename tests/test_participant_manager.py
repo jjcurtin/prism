@@ -373,12 +373,15 @@ def test_process_task_ema_reminder_skipped_when_already_opened(tmp_path, fake_ap
     reminders.csv schema (config/README.md: remind_ema/remind_feedback),
     so a KeyError was silently swallowed and every reminder fired regardless
     of whether the participant had already opened that survey today.
-    remind_ema/remind_feedback == "yes" means already opened -- skip.
+    remind_ema/remind_feedback == "no" means already opened -- skip (the
+    column tracks whether the participant should *still* be reminded, per
+    main's original semantics -- the column-name fix was correct but the
+    "yes"-means-skip polarity that landed alongside it was inverted).
     """
     reminders_file = tmp_path / 'reminders.csv'
     reminders_file.write_text(
         'subid,unique_id,on_study,remind_ema,remind_feedback\n'
-        '3000,000000000,yes,yes,no\n'
+        '3000,000000000,yes,no,yes\n'
     )
     fake_app.reminders_path = str(reminders_file)
     fake_app.mode = 'prod'
@@ -396,7 +399,7 @@ def test_process_task_ema_reminder_sent_when_not_yet_opened(tmp_path, fake_app, 
     reminders_file = tmp_path / 'reminders.csv'
     reminders_file.write_text(
         'subid,unique_id,on_study,remind_ema,remind_feedback\n'
-        '3000,000000000,yes,no,yes\n'
+        '3000,000000000,yes,yes,no\n'
     )
     fake_app.reminders_path = str(reminders_file)
     fake_app.mode = 'prod'

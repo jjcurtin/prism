@@ -1,4 +1,4 @@
-# participant management logic
+"""participant management logic"""
 
 from _helper import send_sms, notify_coordinators
 from task_managers._task_manager import TaskManager
@@ -64,6 +64,9 @@ class ParticipantManager(TaskManager):
             return None
         
     def get_lapse_data_and_message(self, unique_id):
+        """Stub -- always returns the same placeholder values regardless of
+        `unique_id`; not yet wired to any real lapse-detection logic.
+        """
         return {
             'lapse_level': 'high',
             'lapse_change': 'increasing',
@@ -158,6 +161,9 @@ class ParticipantManager(TaskManager):
             return 1
         
     def add_participant(self, participant):
+        """Rolls back the in-memory append if save_participants() fails, so
+        self.participants stays in sync with what's actually on disk.
+        """
         self.participants.append(participant)
         if self.save_participants():
             self.participants.remove(participant)
@@ -224,8 +230,12 @@ class ParticipantManager(TaskManager):
 
             # reminder checking logic -- remind_ema/remind_feedback ("yes"/"no",
             # config/README.md's reminders.csv schema) record whether this
-            # participant has already opened that survey today; "yes" means
-            # skip the reminder.
+            # participant should still be reminded about that survey today;
+            # "no" means they've already opened it, so skip the reminder.
+            # Confirmed against main's original semantics -- the dev-branch
+            # column-name fix (reading remind_ema/remind_feedback instead of
+            # the nonexistent ema_opened/feedback_opened) was correct, but
+            # the "yes" polarity check that landed alongside it was inverted.
             task_column_map = {
                 "ema_reminder": "remind_ema",
                 "feedback_reminder": "remind_feedback"
@@ -238,7 +248,7 @@ class ParticipantManager(TaskManager):
                     reader = csv.DictReader(file)
                     for row in reader:
                         if row["unique_id"] == str(participant_id):
-                            if row.get(column_name, "").strip().lower() == "yes":
+                            if row.get(column_name, "").strip().lower() == "no":
                                 return 0  # Already opened
                             break
 
