@@ -18,10 +18,6 @@ TWILIO_API = (
     '"account_sid","auth_token","from_number","coordinator_alert_message"\n'
     '"fake_sid","fake_token","+15555550100","fake coordinator alert msg"\n'
 )
-RESEARCH_DRIVE_API = (
-    '"destination_path"\n'
-    '"fake_dest"\n'
-)
 
 STUDY_COORDINATORS_CSV = '"name","phone_number"\n"Test Coordinator","5555550100"\n'
 SYSTEM_TASK_SCHEDULE_CSV = '"task_type","task_time","r_script_path","run_today"\n"CHECK_SYSTEM","03:00:00","","no"\n'
@@ -71,7 +67,6 @@ def fake_prism_env(tmp_path):
     (config_base / 'api' / 'qualtrics.api').write_text(QUALTRICS_API)
     (config_base / 'api' / 'followmee.api').write_text(FOLLOWMEE_API)
     (config_base / 'api' / 'twilio.api').write_text(TWILIO_API)
-    (config_base / 'api' / 'research_drive.api').write_text(RESEARCH_DRIVE_API)
     (config_base / 'config' / 'study_coordinators.csv').write_text(STUDY_COORDINATORS_CSV)
     (config_base / 'config' / 'system_task_schedule.csv').write_text(SYSTEM_TASK_SCHEDULE_CSV)
     (config_base / 'config' / 'script_pipeline.csv').write_text(SCRIPT_PIPELINE_CSV)
@@ -136,7 +131,7 @@ def routes_app_instance():
     app.system_task_manager = MagicMock()
     app.system_task_manager.task_types = {'CHECK_SYSTEM': 'CheckSystem', 'RUN_R_SCRIPT': 'RunRScript'}
     app.participant_manager = MagicMock()
-    app.get_transcript = MagicMock(return_value='fake transcript line\n')
+    app.get_transcript = MagicMock(return_value=(True, 'fake transcript line\n'))
     app.shutdown = MagicMock()
 
     return app

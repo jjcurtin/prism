@@ -99,10 +99,6 @@ def init_commands():
         'logs transcript': {'description': 'View Today\'s Transcript', 'menu_caller': lambda self: PRINT_TRANSCRIPT(self, 'get_transcript')},
         'transcript': {'description': 'View Today\'s Transcript', 'menu_caller': lambda self: PRINT_TRANSCRIPT(self, 'get_transcript')},
         'transcript log': {'description': 'View Today\'s Transcript', 'menu_caller': lambda self: PRINT_TRANSCRIPT(self, 'get_transcript')},
-        'ema log': {'description': 'View EMA Transcript', 'menu_caller': lambda self: PRINT_TRANSCRIPT(self, 'get_ema_log')},
-        'logs ema': {'description': 'View EMA Transcript', 'menu_caller': lambda self: PRINT_TRANSCRIPT(self, 'get_ema_log')},
-        'logs feedback': {'description': 'View Feedback Survey Log', 'menu_caller': lambda self: PRINT_TRANSCRIPT(self, 'get_feedback_log')},
-        'feedback log': {'description': 'View Feedback Survey Log', 'menu_caller': lambda self: PRINT_TRANSCRIPT(self, 'get_feedback_log')},
 
         'settings': {'description': 'Settings', 'menu_caller': settings_menu},  
         'settings system': {'description': 'System Settings', 'menu_caller': lambda self: SYSTEM_SETTINGS(self)},

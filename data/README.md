@@ -32,9 +32,7 @@ subfolder yet.
 
 ## What happens to this data
 
-`tasks` can push everything under this folder out to the lab's research
-drive (see the "push to research drive" system task), and the `check`
-menu's diagnostics touch this folder as part of confirming PRISM's overall
-health. There's currently no automatic cleanup — files accumulate here for
-as long as the study runs, so periodically archiving `data/` (after
-confirming a research-drive push succeeded) is worth doing on a long study.
+The `check` menu's diagnostics touch this folder as part of confirming
+PRISM's overall health. There's currently no automatic cleanup — files
+accumulate here for as long as the study runs, so periodically archiving
+`data/` is worth doing on a long study.

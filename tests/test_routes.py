@@ -33,22 +33,19 @@ def test_get_transcript_found(routes_client, routes_app_instance):
     routes_app_instance.get_transcript.assert_called_once_with('10')
 
 
-def test_get_transcript_not_found(routes_client, routes_app_instance):
-    routes_app_instance.get_transcript = MagicMock(return_value=None)
+def test_get_transcript_empty_is_200(routes_client, routes_app_instance):
+    """A genuinely empty (or just-created) transcript is a successful read,
+    not a failure -- distinct from test_get_transcript_read_failure below."""
+    routes_app_instance.get_transcript = MagicMock(return_value=(True, []))
     resp = routes_client.get('/system/get_transcript/10')
-    assert resp.status_code == 404
-
-
-def test_get_ema_log(routes_client, routes_app_instance):
-    resp = routes_client.get('/system/get_ema_log/5')
     assert resp.status_code == 200
-    routes_app_instance.get_transcript.assert_called_once_with('5', 'ema_log')
+    assert resp.get_json() == {'transcript': []}
 
 
-def test_get_feedback_log(routes_client, routes_app_instance):
-    resp = routes_client.get('/system/get_feedback_log/5')
-    assert resp.status_code == 200
-    routes_app_instance.get_transcript.assert_called_once_with('5', 'feedback_log')
+def test_get_transcript_read_failure_returns_500(routes_client, routes_app_instance):
+    routes_app_instance.get_transcript = MagicMock(return_value=(False, None))
+    resp = routes_client.get('/system/get_transcript/10')
+    assert resp.status_code == 500
 
 
 def test_shutdown_calls_app_shutdown(routes_client, routes_app_instance):

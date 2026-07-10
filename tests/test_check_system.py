@@ -1,4 +1,7 @@
 import os
+import subprocess
+import sys
+from unittest.mock import MagicMock, patch
 
 from system_tasks._check_system import CheckSystem
 
@@ -21,7 +24,7 @@ def make_fake_src_tree(tmp_path):
     system_tasks_dir = src_dir / 'system_tasks'
     system_tasks_dir.mkdir()
     for name in ['_check_system.py', '_pulldown_qualtrics_data.py', '_pulldown_followmee_data.py',
-                 '_push_data_to_research_drive.py', '_run_r_script_pipeline.py', '_system_task.py']:
+                 '_run_r_script_pipeline.py', '_system_task.py']:
         (system_tasks_dir / name).write_text('')
     return src_dir
 
@@ -133,3 +136,53 @@ def test_check_file_system_missing_drive_sourced_attr_returns_1(tmp_path, fake_a
 
     assert result == 1
     assert any('script_pipeline_path' in msg for _, msg in fake_app.transcript)
+
+
+def test_check_tests_subprocess_succeeds_returns_0(tmp_path, fake_app):
+    fake_app.repo_root = tmp_path
+    mock_result = MagicMock(returncode=0, stdout='152 passed\n', stderr='')
+
+    with patch('system_tasks._check_system.subprocess.run', return_value=mock_result) as mock_run:
+        result = CheckSystem(fake_app).check_tests()
+
+    assert result == 0
+    mock_run.assert_called_once()
+    args, kwargs = mock_run.call_args
+    assert args[0] == [sys.executable, '-m', 'pytest', 'tests', 'tests_interface', '-q']
+    assert kwargs['cwd'] == str(tmp_path)
+    assert kwargs['capture_output'] is True
+    assert kwargs['text'] is True
+    assert kwargs['timeout'] == 120
+    assert not any(msg_type == 'ERROR' for msg_type, _ in fake_app.transcript)
+
+
+def test_check_tests_subprocess_reports_failures_returns_1(tmp_path, fake_app):
+    fake_app.repo_root = tmp_path
+    failure_output = "\n".join(f"line {i}" for i in range(30)) + "\nFAILED tests/test_foo.py::test_bar\n1 failed, 151 passed\n"
+    mock_result = MagicMock(returncode=1, stdout=failure_output, stderr='')
+
+    with patch('system_tasks._check_system.subprocess.run', return_value=mock_result):
+        result = CheckSystem(fake_app).check_tests()
+
+    assert result == 1
+    error_messages = [msg for msg_type, msg in fake_app.transcript if msg_type == 'ERROR']
+    assert len(error_messages) == 1
+    assert 'reported failures' in error_messages[0]
+    assert 'FAILED tests/test_foo.py::test_bar' in error_messages[0]
+    # only the last ~20 lines should be logged, not the full firehose
+    assert 'line 0\n' not in error_messages[0]
+
+
+def test_check_tests_subprocess_times_out_returns_1(tmp_path, fake_app):
+    fake_app.repo_root = tmp_path
+
+    with patch(
+        'system_tasks._check_system.subprocess.run',
+        side_effect=subprocess.TimeoutExpired(cmd=['pytest'], timeout=120, output='stuck...\n', stderr=''),
+    ):
+        result = CheckSystem(fake_app).check_tests()
+
+    assert result == 1
+    error_messages = [msg for msg_type, msg in fake_app.transcript if msg_type == 'ERROR']
+    assert len(error_messages) == 1
+    assert 'timed out' in error_messages[0]

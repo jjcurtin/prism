@@ -43,10 +43,10 @@ def _no_terminal_header(monkeypatch):
 # ------------------------------------------------------------
 
 def test_print_task_schedule_prints_formatted_lines(fake_interface, capsys):
-    fake_interface.api = MagicMock(return_value={'tasks': [
+    fake_interface.api = MagicMock(return_value=(True, {'tasks': [
         {'task_type': 'ema', 'task_time': '16:00:00', 'r_script_path': None, 'run_today': True},
         {'task_type': 'RUN_R_SCRIPT', 'task_time': '02:00:00', 'r_script_path': 'foo.R'},
-    ]})
+    ]}))
     stm.print_task_schedule(fake_interface)
     out = capsys.readouterr().out
     assert '1: ema @ 16:00:00 - Run Today: True' in out
@@ -54,19 +54,19 @@ def test_print_task_schedule_prints_formatted_lines(fake_interface, capsys):
 
 
 def test_print_task_schedule_no_tasks_key(fake_interface, capsys):
-    fake_interface.api = MagicMock(return_value={'other': []})
+    fake_interface.api = MagicMock(return_value=(True, {'other': []}))
     stm.print_task_schedule(fake_interface)
     assert 'No tasks scheduled.' in capsys.readouterr().out
 
 
 def test_print_task_schedule_empty_tasks_list(fake_interface, capsys):
-    fake_interface.api = MagicMock(return_value={'tasks': []})
+    fake_interface.api = MagicMock(return_value=(True, {'tasks': []}))
     stm.print_task_schedule(fake_interface)
     assert 'No tasks scheduled.' in capsys.readouterr().out
 
 
 def test_print_task_schedule_api_failure(fake_interface, capsys):
-    fake_interface.api = MagicMock(return_value=None)
+    fake_interface.api = MagicMock(return_value=(False, None))
     stm.print_task_schedule(fake_interface)
     assert 'No tasks scheduled.' in capsys.readouterr().out
 
@@ -78,7 +78,7 @@ def test_print_task_schedule_api_failure(fake_interface, capsys):
 def test_remove_task_menu_valid_index_success(fake_interface, capsys):
     fake_interface.commands_queue = deque(['x'])  # skip header/print_task_schedule preamble
     task = {'task_type': 'ema', 'task_time': '16:00:00'}
-    fake_interface.api = MagicMock(side_effect=[{'tasks': [task]}, True])
+    fake_interface.api = MagicMock(side_effect=[(True, {'tasks': [task]}), (True, True)])
     fake_interface.inputs_queue.put('1')
 
     stm.remove_task_menu(fake_interface)
@@ -90,7 +90,7 @@ def test_remove_task_menu_valid_index_success(fake_interface, capsys):
 def test_remove_task_menu_valid_index_api_failure(fake_interface, capsys):
     fake_interface.commands_queue = deque(['x'])
     task = {'task_type': 'ema', 'task_time': '16:00:00'}
-    fake_interface.api = MagicMock(side_effect=[{'tasks': [task]}, None])
+    fake_interface.api = MagicMock(side_effect=[(True, {'tasks': [task]}), (False, None)])
     fake_interface.inputs_queue.put('1')
 
     stm.remove_task_menu(fake_interface)
@@ -101,7 +101,7 @@ def test_remove_task_menu_valid_index_api_failure(fake_interface, capsys):
 def test_remove_task_menu_out_of_range_index(fake_interface, capsys):
     fake_interface.commands_queue = deque(['x'])
     task = {'task_type': 'ema', 'task_time': '16:00:00'}
-    fake_interface.api = MagicMock(return_value={'tasks': [task]})
+    fake_interface.api = MagicMock(return_value=(True, {'tasks': [task]}))
     fake_interface.inputs_queue.put('5')
 
     stm.remove_task_menu(fake_interface)
@@ -112,7 +112,7 @@ def test_remove_task_menu_out_of_range_index(fake_interface, capsys):
 def test_remove_task_menu_non_numeric_index(fake_interface, capsys):
     fake_interface.commands_queue = deque(['x'])
     task = {'task_type': 'ema', 'task_time': '16:00:00'}
-    fake_interface.api = MagicMock(return_value={'tasks': [task]})
+    fake_interface.api = MagicMock(return_value=(True, {'tasks': [task]}))
     fake_interface.inputs_queue.put('abc')
 
     stm.remove_task_menu(fake_interface)
@@ -122,7 +122,7 @@ def test_remove_task_menu_non_numeric_index(fake_interface, capsys):
 
 def test_remove_task_menu_no_tasks_scheduled(fake_interface, capsys):
     fake_interface.commands_queue = deque(['x'])
-    fake_interface.api = MagicMock(return_value={'tasks': []})
+    fake_interface.api = MagicMock(return_value=(True, {'tasks': []}))
 
     stm.remove_task_menu(fake_interface)
 
@@ -155,7 +155,7 @@ def test_remove_task_menu_outer_exception_reported_accurately(fake_interface, ca
 
 def test_clear_task_schedule_menu_confirmed_success(fake_interface, capsys):
     fake_interface.inputs_queue.put('y')
-    fake_interface.api = MagicMock(return_value=True)
+    fake_interface.api = MagicMock(return_value=(True, True))
     stm.clear_task_schedule_menu(fake_interface)
     fake_interface.api.assert_called_once_with('DELETE', 'system/clear_task_schedule')
     assert 'Task schedule cleared.' in capsys.readouterr().out
@@ -163,7 +163,7 @@ def test_clear_task_schedule_menu_confirmed_success(fake_interface, capsys):
 
 def test_clear_task_schedule_menu_confirmed_failure(fake_interface, capsys):
     fake_interface.inputs_queue.put('y')
-    fake_interface.api = MagicMock(return_value=None)
+    fake_interface.api = MagicMock(return_value=(False, None))
     stm.clear_task_schedule_menu(fake_interface)
     assert 'Failed to clear task schedule.' in capsys.readouterr().out
 
@@ -200,7 +200,7 @@ def test_system_task_menu_options_wired_correctly(fake_interface, monkeypatch):
 
 def test_execute_r_script_menu_no_scripts_errors(fake_interface, capsys):
     fake_interface.commands_queue = deque(['x'])
-    fake_interface.api = MagicMock(return_value=None)
+    fake_interface.api = MagicMock(return_value=(False, None))
     etm.execute_r_script_menu(fake_interface)
     assert 'No R scripts available.' in capsys.readouterr().out
 
@@ -208,8 +208,8 @@ def test_execute_r_script_menu_no_scripts_errors(fake_interface, capsys):
 def test_execute_r_script_menu_valid_selection_success(fake_interface, capsys):
     fake_interface.commands_queue = deque(['x'])
     fake_interface.api = MagicMock(side_effect=[
-        {'r_script_tasks': {'analyze': 'scripts/analyze'}},
-        True,
+        (True, {'r_script_tasks': {'analyze': 'scripts/analyze'}}),
+        (True, True),
     ])
     fake_interface.inputs_queue.put('1')
 
@@ -222,8 +222,8 @@ def test_execute_r_script_menu_valid_selection_success(fake_interface, capsys):
 def test_execute_r_script_menu_valid_selection_failure(fake_interface, capsys):
     fake_interface.commands_queue = deque(['x'])
     fake_interface.api = MagicMock(side_effect=[
-        {'r_script_tasks': {'analyze': 'scripts/analyze'}},
-        None,
+        (True, {'r_script_tasks': {'analyze': 'scripts/analyze'}}),
+        (False, None),
     ])
     fake_interface.inputs_queue.put('1')
 
@@ -234,7 +234,7 @@ def test_execute_r_script_menu_valid_selection_failure(fake_interface, capsys):
 
 def test_execute_r_script_menu_invalid_index(fake_interface, capsys):
     fake_interface.commands_queue = deque(['x'])
-    fake_interface.api = MagicMock(return_value={'r_script_tasks': {'analyze': 'scripts/analyze'}})
+    fake_interface.api = MagicMock(return_value=(True, {'r_script_tasks': {'analyze': 'scripts/analyze'}}))
     fake_interface.inputs_queue.put('99')
 
     etm.execute_r_script_menu(fake_interface)
@@ -269,7 +269,7 @@ def test_execute_task_menu_success(fake_interface, capsys):
     fake_interface.commands_queue = deque(['x'])
     fake_interface.get_task_types = MagicMock(return_value={'SEND_EMA': 'Send EMA'})
     fake_interface.inputs_queue.put('1')
-    fake_interface.api = MagicMock(return_value=True)
+    fake_interface.api = MagicMock(return_value=(True, True))
 
     etm.execute_task_menu(fake_interface)
 
@@ -282,8 +282,8 @@ def test_execute_task_menu_failure_prints_transcript(fake_interface, capsys):
     fake_interface.get_task_types = MagicMock(return_value={'SEND_EMA': 'Send EMA'})
     fake_interface.inputs_queue.put('1')
     fake_interface.api = MagicMock(side_effect=[
-        None,
-        {'transcript': [{'timestamp': 't1', 'message': 'oops'}]},
+        (False, None),
+        (True, {'transcript': [{'timestamp': 't1', 'message': 'oops'}]}),
     ])
 
     etm.execute_task_menu(fake_interface)
@@ -298,7 +298,7 @@ def test_execute_task_menu_failure_no_transcript(fake_interface, capsys):
     fake_interface.commands_queue = deque(['x'])
     fake_interface.get_task_types = MagicMock(return_value={'SEND_EMA': 'Send EMA'})
     fake_interface.inputs_queue.put('1')
-    fake_interface.api = MagicMock(side_effect=[None, None])
+    fake_interface.api = MagicMock(side_effect=[(False, None), (False, None)])
 
     etm.execute_task_menu(fake_interface)
 
@@ -338,7 +338,7 @@ def test_execute_menu_options_wired_correctly(fake_interface, monkeypatch):
 
 def test_add_new_r_script_menu_no_scripts_errors(fake_interface, capsys):
     fake_interface.commands_queue = deque(['x'])
-    fake_interface.api = MagicMock(return_value=None)
+    fake_interface.api = MagicMock(return_value=(False, None))
     atm.add_new_r_script_menu(fake_interface)
     assert 'No R scripts available.' in capsys.readouterr().out
 
@@ -346,8 +346,8 @@ def test_add_new_r_script_menu_no_scripts_errors(fake_interface, capsys):
 def test_add_new_r_script_menu_valid_time_success(fake_interface, capsys):
     fake_interface.commands_queue = deque(['x'])
     fake_interface.api = MagicMock(side_effect=[
-        {'r_script_tasks': {'analyze': 'scripts/analyze'}},
-        True,
+        (True, {'r_script_tasks': {'analyze': 'scripts/analyze'}}),
+        (True, True),
     ])
     fake_interface.inputs_queue.put('1')
     fake_interface.inputs_queue.put('03:30:00')
@@ -361,8 +361,8 @@ def test_add_new_r_script_menu_valid_time_success(fake_interface, capsys):
 def test_add_new_r_script_menu_blank_time_defaults(fake_interface, capsys):
     fake_interface.commands_queue = deque(['x'])
     fake_interface.api = MagicMock(side_effect=[
-        {'r_script_tasks': {'analyze': 'scripts/analyze'}},
-        True,
+        (True, {'r_script_tasks': {'analyze': 'scripts/analyze'}}),
+        (True, True),
     ])
     fake_interface.inputs_queue.put('1')
     fake_interface.inputs_queue.put('')
@@ -375,8 +375,8 @@ def test_add_new_r_script_menu_blank_time_defaults(fake_interface, capsys):
 def test_add_new_r_script_menu_invalid_time_defaults(fake_interface, capsys):
     fake_interface.commands_queue = deque(['x'])
     fake_interface.api = MagicMock(side_effect=[
-        {'r_script_tasks': {'analyze': 'scripts/analyze'}},
-        True,
+        (True, {'r_script_tasks': {'analyze': 'scripts/analyze'}}),
+        (True, True),
     ])
     fake_interface.inputs_queue.put('1')
     fake_interface.inputs_queue.put('not-a-time')
@@ -390,7 +390,7 @@ def test_add_new_r_script_menu_invalid_time_defaults(fake_interface, capsys):
 
 def test_add_new_r_script_menu_invalid_index(fake_interface, capsys):
     fake_interface.commands_queue = deque(['x'])
-    fake_interface.api = MagicMock(return_value={'r_script_tasks': {'analyze': 'scripts/analyze'}})
+    fake_interface.api = MagicMock(return_value=(True, {'r_script_tasks': {'analyze': 'scripts/analyze'}}))
     fake_interface.inputs_queue.put('99')
 
     atm.add_new_r_script_menu(fake_interface)
@@ -401,8 +401,8 @@ def test_add_new_r_script_menu_invalid_index(fake_interface, capsys):
 def test_add_new_r_script_menu_add_failure(fake_interface, capsys):
     fake_interface.commands_queue = deque(['x'])
     fake_interface.api = MagicMock(side_effect=[
-        {'r_script_tasks': {'analyze': 'scripts/analyze'}},
-        None,
+        (True, {'r_script_tasks': {'analyze': 'scripts/analyze'}}),
+        (False, None),
     ])
     fake_interface.inputs_queue.put('1')
     fake_interface.inputs_queue.put('03:30:00')
@@ -440,7 +440,7 @@ def test_add_new_task_menu_success(fake_interface, capsys):
     fake_interface.get_task_types = MagicMock(return_value={'SEND_EMA': 'Send EMA'})
     fake_interface.inputs_queue.put('1')
     fake_interface.inputs_queue.put('05:00:00')
-    fake_interface.api = MagicMock(return_value=True)
+    fake_interface.api = MagicMock(return_value=(True, True))
 
     atm.add_new_task_menu(fake_interface)
 
@@ -453,7 +453,7 @@ def test_add_new_task_menu_failure(fake_interface, capsys):
     fake_interface.get_task_types = MagicMock(return_value={'SEND_EMA': 'Send EMA'})
     fake_interface.inputs_queue.put('1')
     fake_interface.inputs_queue.put('05:00:00')
-    fake_interface.api = MagicMock(return_value=None)
+    fake_interface.api = MagicMock(return_value=(False, None))
 
     atm.add_new_task_menu(fake_interface)
 
@@ -465,7 +465,7 @@ def test_add_new_task_menu_blank_time_defaults(fake_interface):
     fake_interface.get_task_types = MagicMock(return_value={'SEND_EMA': 'Send EMA'})
     fake_interface.inputs_queue.put('1')
     fake_interface.inputs_queue.put('')
-    fake_interface.api = MagicMock(return_value=True)
+    fake_interface.api = MagicMock(return_value=(True, True))
 
     atm.add_new_task_menu(fake_interface)
 
@@ -477,7 +477,7 @@ def test_add_new_task_menu_invalid_time_defaults(fake_interface, capsys):
     fake_interface.get_task_types = MagicMock(return_value={'SEND_EMA': 'Send EMA'})
     fake_interface.inputs_queue.put('1')
     fake_interface.inputs_queue.put('bogus')
-    fake_interface.api = MagicMock(return_value=True)
+    fake_interface.api = MagicMock(return_value=(True, True))
 
     atm.add_new_task_menu(fake_interface)
 

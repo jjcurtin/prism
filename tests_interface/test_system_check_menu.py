@@ -13,7 +13,7 @@ def _no_real_terminal(monkeypatch):
 
 
 def test_diagnostics_success(fake_interface, capsys):
-    fake_interface.api = MagicMock(return_value={"status": "ok"})
+    fake_interface.api = MagicMock(return_value=(True, {"status": "ok"}))
     _system_check_menu.diagnostics(fake_interface)
     out = capsys.readouterr().out
     assert "System checks complete" in out
@@ -21,7 +21,7 @@ def test_diagnostics_success(fake_interface, capsys):
 
 
 def test_diagnostics_failure_requests_transcript(fake_interface, capsys):
-    fake_interface.api = MagicMock(return_value=None)
+    fake_interface.api = MagicMock(return_value=(False, None))
     fake_interface.request_transcript = MagicMock()
     _system_check_menu.diagnostics(fake_interface)
     out = capsys.readouterr().out
@@ -31,8 +31,8 @@ def test_diagnostics_failure_requests_transcript(fake_interface, capsys):
 
 def test_system_check_menu_prints_status_and_breaks(fake_interface, monkeypatch, capsys):
     fake_interface.api = MagicMock(side_effect=[
-        {"uptime": "3 days"},
-        {"mode": "LIVE"},
+        (True, {"uptime": "3 days"}),
+        (True, {"mode": "LIVE"}),
     ])
     mock_print_menu_options = MagicMock(return_value=True)
     monkeypatch.setattr(_system_check_menu, 'print_menu_options', mock_print_menu_options)
@@ -48,7 +48,7 @@ def test_system_check_menu_prints_status_and_breaks(fake_interface, monkeypatch,
 
 
 def test_system_check_menu_errors_and_returns_when_api_unreachable(fake_interface, monkeypatch, capsys):
-    fake_interface.api = MagicMock(return_value=None)
+    fake_interface.api = MagicMock(return_value=(False, None))
     mock_print_menu_options = MagicMock(return_value=True)
     monkeypatch.setattr(_system_check_menu, 'print_menu_options', mock_print_menu_options)
 

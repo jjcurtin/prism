@@ -42,7 +42,9 @@ class FakeInterface:
       here (see `CommandInjector`).
     - `debug` (bool): gates verbose prints in `_display.py`.
     - `api(method, endpoint, json=None)`: records calls instead of hitting
-      a real network; returns None like a failed/unreachable request would.
+      a real network; returns `(False, None)` like a failed/unreachable
+      request would (see `PRISMInterface.api()`'s `(ok, data)` contract in
+      `prism_interface.py`).
     - `window_N_x`/`window_N_y`/`column_width`/`window_height`/
       `num_columns`: set dynamically by `print_key_line` in
       `_menu_display.py`; pre-seeded here so code that reads them before
@@ -63,7 +65,7 @@ class FakeInterface:
 
     def api(self, method, endpoint, json=None):
         self.api_calls.append((method, endpoint, json))
-        return None
+        return False, None
 
 
 @pytest.fixture

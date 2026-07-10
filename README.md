@@ -82,11 +82,28 @@ Every folder in this repo has two docs, kept deliberately separate:
   Windows-only — hard-coded paths centralized, the Windows-only `msvcrt`
   keypress module replaced with a `platform.system()`-branched
   `_keyboard.py`, a busy-wait CPU bug fixed). *(2026-07-09)*
-- Automated test suite: 540 tests total — 141 server-side (`tests/`, config
+- Automated test suite: 546 tests total — 147 server-side (`tests/`, config
   loading, task scheduling, participant management) and 399 interface-side
   (`tests_interface/`, full `user_interface_menus/` coverage). Runs via
   `make test-server` / `make test-client` / `make test-all`, with GitHub
-  Actions CI split into semantically-grouped jobs per side. *(2026-07-09)*
+  Actions CI split into semantically-grouped jobs per side. *(2026-07-10)*
+- Cleaned up loose ends from the local-only-server audit: documented the
+  deliberate no-auth trust model, closed a CI gap where two server-side test
+  files ran locally but not in CI, replaced an ambiguous-`None` error
+  contract (`prism_interface.py::api()`, `run_prism.py::get_transcript()`,
+  and the routes that consume them) with explicit `(ok, data)` tuples,
+  removed the dead EMA/feedback log reader (routes/menu/tests) left behind
+  by the earlier Qualtrics-route removal, and dropped the long-dead
+  `check_installed_packages()` stub in favor of a `check_tests()` health
+  check that runs the offline suite. Also removed the research-drive-push
+  system task (`PushDataToResearchDrive`) entirely — the plaintext-credential
+  auto-mount it depended on was already dropped for security reasons, the
+  task was unscheduled in both `dev` and `prod`, and the drive-side
+  `research_drive.api` config it read was confirmed intentionally deleted.
+  Added an integration test (`tests_integration/test_environment_files.py`)
+  that checks required config files exist and are filled in (not just
+  template placeholders) for both the `dev` and `prod` drive environments.
+  *(2026-07-10)*
 - Added README.md docs for the entire `src/user_interface_menus/` menu tree
   (main menu + assistant/check/help/logs/participants/settings/tasks/utils),
   paired with each folder's existing CLAUDE.md. *(2026-07-08)*
@@ -104,7 +121,3 @@ Pulled from the per-folder CLAUDE.md "Improvements" notes and this
 session's error-handling audit — see those files for full detail:
 - Close the open SMS relay (unvalidated participant/announcement endpoints
   can trigger real Twilio sends).
-- Reconsider `self.api()`'s (`prism_interface.py`) collapsing of "server
-  unreachable," "server returned an error," and certain success cases into
-  one indistinguishable `None` — touches ~390 interface tests and every
-  menu function if changed, so needs a design decision first.

@@ -4,8 +4,8 @@ from user_interface_menus._menu_helper import *
 def execute_r_script_menu(self):
     if not self.commands_queue:
         print_menu_header("tasks execute rscript")
-    r_scripts = self.api("GET", "system/get_r_script_tasks")
-    if not r_scripts:
+    r_scripts_ok, r_scripts = self.api("GET", "system/get_r_script_tasks")
+    if not r_scripts_ok or not r_scripts:
         error("No R scripts available.", self)
         return
     print("Available R Scripts:")
@@ -21,7 +21,8 @@ def execute_r_script_menu(self):
     selected_script_name = script_names[int(script_idx) - 1]
     r_script_path = f"{r_script_dict[selected_script_name]}.R"
     print(f"Executing R script: {selected_script_name} at {r_script_path}")
-    if self.api("POST", f"system/execute_r_script_task/{r_script_path}"):
+    ok, _ = self.api("POST", f"system/execute_r_script_task/{r_script_path}")
+    if ok:
         success(f"R script task {selected_script_name} executed.", self)
     else:
         error(f"Failed to execute R script task {selected_script_name}.", self)
@@ -44,16 +45,18 @@ def execute_task_menu(self):
 
     if task_type == 'RUN_R_SCRIPT':
         execute_r_script_menu(self)
-    elif self.api("POST", f"system/execute_task/{task_type}"):
-        success(f"Task {task_type} executed.", self)
     else:
-        data = self.api("GET", f"system/get_transcript/{15}")
-        if data and "transcript" in data:
-            for entry in data["transcript"]:
-                print(f"{entry['timestamp']} - {entry['message']}")
+        ok, _ = self.api("POST", f"system/execute_task/{task_type}")
+        if ok:
+            success(f"Task {task_type} executed.", self)
         else:
-            print("No transcript found or failed to retrieve.")
-        error("Failed to execute task.", self)
+            _, data = self.api("GET", f"system/get_transcript/{15}")
+            if data and "transcript" in data:
+                for entry in data["transcript"]:
+                    print(f"{entry['timestamp']} - {entry['message']}")
+            else:
+                print("No transcript found or failed to retrieve.")
+            error("Failed to execute task.", self)
 
 def execute_menu(self):
     menu_options = {

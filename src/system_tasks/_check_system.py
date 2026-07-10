@@ -1,8 +1,10 @@
 # This file checks the system to make sure components work
 
 import os
-import sys
 import subprocess
+import sys
+from pathlib import Path
+
 import requests
 from requests.exceptions import RequestException
 
@@ -15,34 +17,13 @@ class CheckSystem(SystemTask):
         file_system_check = self.check_file_system()
         qualtrics_check = self.check_qualtrics()
         followmee_check = self.check_followmee()
-        package_check = self.check_installed_packages()
         research_drive_check = self.check_research_drive()
         participant_check = self.check_participants()
-        return file_system_check + qualtrics_check + followmee_check + package_check + research_drive_check + participant_check
-    
-    def check_installed_packages(self):
-        return 0
-        # self.app.add_to_transcript(f"INFO: Now checking installed packages...")
-        # try:
-        #     with open("../requirements.txt", "r") as f:
-        #         requirements = f.readlines()
-        #     for req in requirements:
-        #         req = req.strip()
-        #         if req:
-        #             try:
-        #                 __import__(req)
-        #             except ImportError:
-        #                 self.app.add_to_transcript(f"WARNING: The package '{req}' is not installed. Attempting to install it...")
-        #                 try:
-        #                     subprocess.check_call([sys.executable, "-m", "pip", "install", req])
-        #                     self.app.add_to_transcript(f"INFO: Successfully installed '{req}'.")
-        #                 except subprocess.CalledProcessError as install_error:
-        #                     self.app.add_to_transcript(f"ERROR: Failed to install '{req}'. {install_error}")
-        #                     return 1
-        #     return 0
-        # except Exception as e:
-        #     self.app.add_to_transcript(f"ERROR: {e}")
-        #     return 1
+        tests_check = self.check_tests()
+        return (
+            file_system_check + qualtrics_check + followmee_check
+            + research_drive_check + participant_check + tests_check
+        )
 
     def check_file_system(self):
         self.app.add_to_transcript(f"INFO: Now checking file system...")
@@ -59,7 +40,7 @@ class CheckSystem(SystemTask):
                 [], # logs
                 ['_check_system.py', # obviously
                  '_pulldown_qualtrics_data.py', '_pulldown_followmee_data.py',
-                 '_push_data_to_research_drive.py', '_run_r_script_pipeline.py',
+                 '_run_r_script_pipeline.py',
                  '_system_task.py' # obviously
                 ] # tasks
             ]
@@ -174,4 +155,42 @@ class CheckSystem(SystemTask):
                 self.app.add_to_transcript(f"Unique ID: {uid}, Participants: {', '.join(names)}", "ERROR")
             self.app.add_to_transcript("Please remedy these issues either through this interface or in the CSV file and refresh from CSV when you are ready.", "ERROR")
             return 1
+        return 0
+
+    def check_tests(self):
+        # Runs only the offline test suites (tests/, tests_interface/) --
+        # both fully mocked, no network/drive dependency (tests_integration/
+        # README.md's own description of the split). Deliberately excludes
+        # tests_integration/, which needs real credentials/the research
+        # drive mounted and would be circular/slow/unsafe to invoke from
+        # inside a health check that may itself be running in prod.
+        self.app.add_to_transcript("INFO: Now checking offline test suite...")
+        repo_root = getattr(self.app, 'repo_root', None) or Path(__file__).resolve().parent.parent.parent
+        try:
+            result = subprocess.run(
+                [sys.executable, '-m', 'pytest', 'tests', 'tests_interface', '-q'],
+                cwd = str(repo_root),
+                capture_output = True,
+                text = True,
+                timeout = 120,
+            )
+        except subprocess.TimeoutExpired as e:
+            output = ((e.stdout or '') + (e.stderr or '')).strip()
+            tail = "\n".join(output.splitlines()[-20:])
+            self.app.add_to_transcript(
+                f"Offline test suite timed out after {e.timeout}s. Last output:\n{tail}", "ERROR"
+            )
+            return 1
+        except Exception as e:
+            self.app.add_to_transcript(f"Failed to run offline test suite: {e}", "ERROR")
+            return 1
+
+        if result.returncode != 0:
+            output = (result.stdout + result.stderr).strip()
+            tail = "\n".join(output.splitlines()[-20:])
+            self.app.add_to_transcript(
+                f"Offline test suite reported failures (exit code {result.returncode}). Last output:\n{tail}", "ERROR"
+            )
+            return 1
+
         return 0

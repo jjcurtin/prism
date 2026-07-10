@@ -7,7 +7,7 @@ import user_interface_menus._shutdown_menu as _shutdown_menu
 
 
 def test_shutdown_reports_already_down_when_uptime_unreachable(fake_interface, capsys):
-    fake_interface.api = MagicMock(return_value=None)
+    fake_interface.api = MagicMock(return_value=(False, None))
     _shutdown_menu.shutdown_menu(fake_interface)
     out = capsys.readouterr().out
     assert "PRISM is already shut down." in out
@@ -15,7 +15,7 @@ def test_shutdown_reports_already_down_when_uptime_unreachable(fake_interface, c
 
 
 def test_shutdown_cancelled_on_no_confirmation(fake_interface, capsys):
-    fake_interface.api = MagicMock(return_value={"uptime": "1h"})
+    fake_interface.api = MagicMock(return_value=(True, {"uptime": "1h"}))
     fake_interface.inputs_queue.put('n')
     _shutdown_menu.shutdown_menu(fake_interface)
     out = capsys.readouterr().out
@@ -24,7 +24,7 @@ def test_shutdown_cancelled_on_no_confirmation(fake_interface, capsys):
 
 
 def test_shutdown_confirmed_success(fake_interface, monkeypatch, capsys):
-    fake_interface.api = MagicMock(return_value={"uptime": "1h"})
+    fake_interface.api = MagicMock(return_value=(True, {"uptime": "1h"}))
     fake_interface.inputs_queue.put('y')
     exit_calls = []
     monkeypatch.setattr('builtins.exit', lambda code=0: exit_calls.append(code))
@@ -46,7 +46,7 @@ def test_shutdown_confirmed_failure_response_is_reported(fake_interface, monkeyp
     returning None) still unconditionally printed "PRISM shut down." Now the
     return value is checked and a failure is reported instead.
     """
-    fake_interface.api = MagicMock(side_effect=[{"uptime": "1h"}, None])
+    fake_interface.api = MagicMock(side_effect=[(True, {"uptime": "1h"}), (False, None)])
     fake_interface.inputs_queue.put('y')
     exit_calls = []
     monkeypatch.setattr('builtins.exit', lambda code=0: exit_calls.append(code))
@@ -69,7 +69,7 @@ def test_shutdown_confirmed_connection_error_is_reported(fake_interface, monkeyp
     exception, rather than being silently reported as a successful-looking
     "already shut down".
     """
-    fake_interface.api = MagicMock(side_effect=[{"uptime": "1h"}, requests.ConnectionError("boom")])
+    fake_interface.api = MagicMock(side_effect=[(True, {"uptime": "1h"}), requests.ConnectionError("boom")])
     fake_interface.inputs_queue.put('y')
     exit_calls = []
     monkeypatch.setattr('builtins.exit', lambda code=0: exit_calls.append(code))
@@ -82,7 +82,7 @@ def test_shutdown_confirmed_connection_error_is_reported(fake_interface, monkeyp
 
 
 def test_shutdown_confirmed_generic_error_is_reported(fake_interface, monkeypatch, capsys):
-    fake_interface.api = MagicMock(side_effect=[{"uptime": "1h"}, RuntimeError("server exploded")])
+    fake_interface.api = MagicMock(side_effect=[(True, {"uptime": "1h"}), RuntimeError("server exploded")])
     fake_interface.inputs_queue.put('y')
     exit_calls = []
     monkeypatch.setattr('builtins.exit', lambda code=0: exit_calls.append(code))

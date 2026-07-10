@@ -8,8 +8,8 @@ from user_interface_menus._menu_helper import *
 def add_new_r_script_menu(self):
     if not self.commands_queue:
         print_menu_header("tasks add rscript")
-    r_scripts = self.api("GET", "system/get_r_script_tasks")
-    if not r_scripts:
+    r_scripts_ok, r_scripts = self.api("GET", "system/get_r_script_tasks")
+    if not r_scripts_ok or not r_scripts:
         error("No R scripts available.", self)
         return
     print("Available R Scripts:")
@@ -33,7 +33,8 @@ def add_new_r_script_menu(self):
         except ValueError:
             print("Invalid time format, using default 00:00:00.")
             task_time = "00:00:00"
-    if self.api("POST", f"system/add_r_script_task/{r_script_path}/{task_time}"):
+    ok, _ = self.api("POST", f"system/add_r_script_task/{r_script_path}/{task_time}")
+    if ok:
         success(f"R script task {r_script_path} scheduled at {task_time}.", self)
     else:
         error(f"Failed to schedule R script task {selected_script_name}.", self)
@@ -67,7 +68,8 @@ def add_new_task_menu(self):
             except ValueError:
                 print("Invalid time format, using default 00:00:00.")
                 task_time = "00:00:00"
-        if self.api("POST", f"system/add_system_task/{task_type}/{task_time}"):
+        ok, _ = self.api("POST", f"system/add_system_task/{task_type}/{task_time}")
+        if ok:
             success("Task added.", self)
         else:
             error("Failed to add task.", self)

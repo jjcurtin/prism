@@ -39,7 +39,7 @@ def test_log_menu_options_structure(fake_interface, monkeypatch):
     _log_menu.log_menu(fake_interface)
     mock.assert_called_once()
     args, kwargs = mock.call_args
-    assert set(args[1]) == {'transcript', 'ema', 'feedback', 'interface'}
+    assert set(args[1]) == {'transcript', 'interface'}
     assert kwargs['recommended_actions'] == ['transcript']
 
 
@@ -56,15 +56,15 @@ def test_print_transcript_default_lines(fake_interface):
 def test_print_transcript_custom_lines(fake_interface):
     fake_interface.request_transcript = MagicMock()
     fake_interface.inputs_queue.put('25')
-    _log_menu.print_transcript(fake_interface, 'get_ema_log')
-    fake_interface.request_transcript.assert_called_once_with('25', 'get_ema_log')
+    _log_menu.print_transcript(fake_interface, 'get_transcript')
+    fake_interface.request_transcript.assert_called_once_with('25', 'get_transcript')
 
 
 def test_print_transcript_non_digit_falls_back_to_default(fake_interface):
     fake_interface.request_transcript = MagicMock()
     fake_interface.inputs_queue.put('abc')
-    _log_menu.print_transcript(fake_interface, 'get_feedback_log')
-    fake_interface.request_transcript.assert_called_once_with('10', 'get_feedback_log')
+    _log_menu.print_transcript(fake_interface, 'get_transcript')
+    fake_interface.request_transcript.assert_called_once_with('10', 'get_transcript')
 
 
 def test_print_transcript_skips_when_commands_queue_active(fake_interface):

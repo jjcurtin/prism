@@ -51,25 +51,11 @@ def create_flask_app(app_instance):
     
     @flask_app.route('/system/get_transcript/<num_lines>', methods = ['GET'])
     def get_transcript(num_lines):
-        transcript = app_instance.get_transcript(num_lines)
-        if not transcript:
-            return jsonify({"error": "Transcript not found"}), 404
+        ok, transcript = app_instance.get_transcript(num_lines)
+        if not ok:
+            return jsonify({"error": "Failed to read transcript"}), 500
         return jsonify({"transcript": transcript}), 200
-    
-    @flask_app.route('/system/get_ema_log/<num_lines>', methods = ['GET'])
-    def get_ema_log(num_lines):
-        transcript = app_instance.get_transcript(num_lines, "ema_log")
-        if not transcript:
-            return jsonify({"error": "Transcript not found"}), 404
-        return jsonify({"transcript": transcript}), 200
-    
-    @flask_app.route('/system/get_feedback_log/<num_lines>', methods = ['GET'])
-    def get_feedback_log(num_lines):
-        transcript = app_instance.get_transcript(num_lines, "feedback_log")
-        if not transcript:
-            return jsonify({"error": "Transcript not found"}), 404
-        return jsonify({"transcript": transcript}), 200
-        
+
     @flask_app.route('/system/shutdown', methods = ['POST'])
     def shutdown():
         app_instance.shutdown()

@@ -21,8 +21,8 @@ def add_participant_menu(self):
     if not unique_id or not unique_id.isnumeric() or len(unique_id) != 9:
         unique_id = str(random.randint(100000000, 999999999))
         print(f"Unique ID not valid. Generated: {unique_id}")
-    existing_participants = self.api("GET", "participants/get_participants")
-    if existing_participants:
+    existing_ok, existing_participants = self.api("GET", "participants/get_participants")
+    if existing_ok and existing_participants:
         for participant in existing_participants.get("participants", []):
             if participant.get("unique_id") == unique_id:
                 new_unique_id = str(random.randint(100000000, 999999999))
@@ -51,7 +51,8 @@ def add_participant_menu(self):
                     on_study = on_study,
                     phone_number = phone_number,
                     **times)
-    if self.api("POST", "participants/add_participant", json = payload):
+    ok, _ = self.api("POST", "participants/add_participant", json = payload)
+    if ok:
         success("Participant added.", self)
     else:
         error("Failed to add participant.", self)

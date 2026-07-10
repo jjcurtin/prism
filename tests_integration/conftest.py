@@ -16,22 +16,13 @@ if str(SRC_DIR) not in sys.path:
 
 import pytest
 
-# Placeholder marker used in the checked-in-nowhere, drive-sourced .api
-# template files (e.g. "REPLACE_WITH_QUALTRICS_API_TOKEN") -- a value still
-# carrying this prefix means the credential was never actually filled in,
-# not that it's missing outright.
-PLACEHOLDER_PREFIX = "REPLACE_WITH_"
-
-
-def _is_real_value(value):
-    if value is None:
-        return False
-    value = str(value).strip()
-    if not value:
-        return False
-    if value.startswith(PLACEHOLDER_PREFIX):
-        return False
-    return True
+# PLACEHOLDER_PREFIX/_is_real_value live in src/_helper.py so both app
+# runtime code and tests_integration/ (this file, test_environment_files.py)
+# agree on what counts as "still a template placeholder" -- re-exported here
+# under their old names so existing imports (`from conftest import
+# require_real_credentials`, and any direct `_is_real_value` usage) keep
+# working unchanged.
+from _helper import PLACEHOLDER_PREFIX, _is_real_value  # noqa: F401
 
 
 @pytest.fixture
@@ -45,9 +36,9 @@ def real_app(monkeypatch):
     .run() instead) wouldn't fire coordinator SMS even if it were.
 
     Also chdir's into src/ for the duration of the test, since the task
-    classes under test (PulldownQualtricsData, PulldownFollowmeeData,
-    PushDataToResearchDrive) resolve their output paths as "../data/..."
-    relative to a cwd of src/, matching how they run in the real app.
+    classes under test (PulldownQualtricsData, PulldownFollowmeeData)
+    resolve their output paths as "../data/..." relative to a cwd of src/,
+    matching how they run in the real app.
     """
     from run_prism import PRISM
 

@@ -7,8 +7,8 @@ from user_interface_menus.tasks._execute_task_menus import *
 # ------------------------------------------------------------
 
 def print_task_schedule(self):
-    tasks = self.api("GET", "system/get_task_schedule")
-    if tasks and "tasks" in tasks:
+    tasks_ok, tasks = self.api("GET", "system/get_task_schedule")
+    if tasks_ok and tasks and "tasks" in tasks:
         self.scheduled_tasks = tasks["tasks"]
         if self.scheduled_tasks:
             print("Scheduled Tasks")
@@ -28,8 +28,8 @@ def remove_task_menu(self):
         print_menu_header("tasks remove")
         print_task_schedule(self)
     try:
-        tasks = self.api("GET", "system/get_task_schedule")
-        if tasks and "tasks" in tasks:
+        tasks_ok, tasks = self.api("GET", "system/get_task_schedule")
+        if tasks_ok and tasks and "tasks" in tasks:
             self.scheduled_tasks = tasks["tasks"]
             if self.scheduled_tasks:
                 index = get_input(self, prompt = "Task index to remove: ")
@@ -37,7 +37,8 @@ def remove_task_menu(self):
                     idx = int(index) - 1
                     if 0 <= idx < len(self.scheduled_tasks):
                         t = self.scheduled_tasks[idx]
-                        if self.api("DELETE", f"system/remove_system_task/{t['task_type']}/{t['task_time']}"):
+                        remove_ok, _ = self.api("DELETE", f"system/remove_system_task/{t['task_type']}/{t['task_time']}")
+                        if remove_ok:
                             success("Task removed.", self)
                         else:
                             error("Failed to remove task.", self)
@@ -54,7 +55,8 @@ def remove_task_menu(self):
 
 def clear_task_schedule_menu(self):
     if prompt_confirmation(self, prompt = "Are you sure you want to clear the task schedule?"):
-        if self.api("DELETE", "system/clear_task_schedule"):
+        ok, _ = self.api("DELETE", "system/clear_task_schedule")
+        if ok:
             success("Task schedule cleared.", self)
         else:
             error("Failed to clear task schedule.", self)

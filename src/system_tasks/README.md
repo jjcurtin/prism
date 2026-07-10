@@ -15,8 +15,6 @@ menus (see `src/user_interface_menus/tasks/README.md`).
   `../../data/qualtrics/`.
 - **`PULLDOWN_FOLLOWMEE_DATA`** — downloads the latest GPS/location data
   from FollowMee and writes it into `../../data/followmee/`.
-- **`PUSH_DATA_TO_RESEARCH_DRIVE`** — copies everything under `../../data/`
-  out to the lab's research network drive.
 - **`RUN_R_SCRIPT`** — runs a single R script. Any script placed in the
   repo's `scripts/` folder is automatically picked up and offered as a
   choice in the `tasks add rscript` menu — you don't need to register it

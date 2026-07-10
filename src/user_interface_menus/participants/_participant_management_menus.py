@@ -8,8 +8,8 @@ from user_interface_menus.participants._add_participant_menu import add_particip
 
 def refresh_participants_menu(self):
     if prompt_confirmation(self, prompt = "Refresh participants from CSV?"):
-        result = self.api("POST", "participants/refresh_participants")
-        if result:
+        ok, _ = self.api("POST", "participants/refresh_participants")
+        if ok:
             success("Participants refreshed from CSV.", self)
         else:
             error("Failed to refresh participants.", self)
@@ -25,7 +25,8 @@ def send_announcement_menu(self):
         return
     
     require_on_study_param = "yes" if require_on_study else "no"
-    if self.api("POST", f"participants/study_announcement/{require_on_study_param}", json = {"message": message}):
+    ok, _ = self.api("POST", f"participants/study_announcement/{require_on_study_param}", json = {"message": message})
+    if ok:
         success("Study announcement sent.", self)
     else:
         error("No participants found or failed to retrieve.", self)
@@ -36,20 +37,21 @@ def remove_participant_menu(self):
         error("Participant ID cannot be empty.")
         return 0
     if prompt_confirmation(self, prompt = f"Are you sure you want to remove participant with ID '{participant_id}'?"):
-        if self.api("DELETE", f"participants/remove_participant/{participant_id}"):
+        ok, _ = self.api("DELETE", f"participants/remove_participant/{participant_id}")
+        if ok:
             success("Participant removed.", self)
             return 1
         else:
             error("Failed to remove participant. Unique ID not found", self)
             return 0
-        
+
 def access_specific_participant_menu(self):
     participant_id = get_input(self, prompt = "Please enter the unique ID of the participant that you would like to access: ")
     if not participant_id or participant_id.strip() == '':
         error("Participant ID cannot be empty.")
         return 0
-    data = self.api("GET", f"participants/get_participant/{participant_id}")
-    if data:
+    ok, data = self.api("GET", f"participants/get_participant/{participant_id}")
+    if ok:
         individual_participant_menu(self, participant_id)
     else:
         error("Failed to retrieve participant data. Unique ID not found.", self)
@@ -60,8 +62,8 @@ def access_specific_participant_menu(self):
 def participant_management_menu(self):
     def print_task_schedule(self):
         if not self.commands_queue:
-            tasks = self.api("GET", "participants/get_participant_task_schedule")
-            if tasks:
+            tasks_ok, tasks = self.api("GET", "participants/get_participant_task_schedule")
+            if tasks_ok and tasks:
                 print("Participant Task Schedule:")
                 for task in tasks.get("tasks", []):
                     print(f"{task['participant_id']}: {task['task_type']} at {task['task_time']} - On Study: {task['on_study']}")
@@ -138,8 +140,8 @@ def participant_management_menu(self):
             menu_options = {}
 
             # Fetch participants from the API
-            data = self.api("GET", "participants/get_participants")
-            participants = data.get("participants", []) if data else []
+            participants_ok, data = self.api("GET", "participants/get_participants")
+            participants = data.get("participants", []) if participants_ok and data else []
             if participants and not self.commands_queue:
                 for i, p in enumerate(_sort(_filter(participants)), 1):
                     menu_options[str(i)] = {

@@ -52,7 +52,7 @@ def _participant(unique_id, initials, subid, on_study=True):
 
 def test_refresh_participants_menu_confirmed_success(fake_interface, capsys):
     fake_interface.inputs_queue.put('y')
-    fake_interface.api = MagicMock(return_value={'ok': True})
+    fake_interface.api = MagicMock(return_value=(True, {'ok': True}))
     pmm.refresh_participants_menu(fake_interface)
     out = capsys.readouterr().out
     assert 'Participants refreshed from CSV.' in out
@@ -61,7 +61,7 @@ def test_refresh_participants_menu_confirmed_success(fake_interface, capsys):
 
 def test_refresh_participants_menu_not_confirmed(fake_interface, capsys):
     fake_interface.inputs_queue.put('n')
-    fake_interface.api = MagicMock(return_value={'ok': True})
+    fake_interface.api = MagicMock(return_value=(True, {'ok': True}))
     pmm.refresh_participants_menu(fake_interface)
     out = capsys.readouterr().out
     assert 'Refresh cancelled.' in out
@@ -78,7 +78,7 @@ def test_refresh_participants_menu_failure_reports_error_without_second_call(fak
     calls self.api once and reports the failure without crashing.
     """
     fake_interface.inputs_queue.put('y')
-    fake_interface.api = MagicMock(return_value=None)
+    fake_interface.api = MagicMock(return_value=(False, None))
     pmm.refresh_participants_menu(fake_interface)
     assert fake_interface.api.call_count == 1
     assert 'Failed to refresh participants' in capsys.readouterr().out
@@ -93,7 +93,7 @@ def test_send_announcement_menu_on_study_only_formats_yes_in_url(fake_interface,
     must be the literal string 'yes'/'no', not str(bool) ('True'/'False')."""
     fake_interface.inputs_queue.put('y')
     monkeypatch.setattr(pmm, 'print_twilio_terminal_prompt', lambda: 'hello participants')
-    fake_interface.api = MagicMock(return_value={'sent': True})
+    fake_interface.api = MagicMock(return_value=(True, {'sent': True}))
 
     pmm.send_announcement_menu(fake_interface)
 
@@ -106,7 +106,7 @@ def test_send_announcement_menu_on_study_only_formats_yes_in_url(fake_interface,
 def test_send_announcement_menu_all_participants_formats_no_in_url(fake_interface, monkeypatch):
     fake_interface.inputs_queue.put('n')
     monkeypatch.setattr(pmm, 'print_twilio_terminal_prompt', lambda: 'hi all')
-    fake_interface.api = MagicMock(return_value={'sent': True})
+    fake_interface.api = MagicMock(return_value=(True, {'sent': True}))
 
     pmm.send_announcement_menu(fake_interface)
 
@@ -129,7 +129,7 @@ def test_send_announcement_menu_empty_message_aborts_without_api_call(fake_inter
 def test_send_announcement_menu_api_failure_reports_error(fake_interface, monkeypatch, capsys):
     fake_interface.inputs_queue.put('y')
     monkeypatch.setattr(pmm, 'print_twilio_terminal_prompt', lambda: 'hi')
-    fake_interface.api = MagicMock(return_value=None)
+    fake_interface.api = MagicMock(return_value=(False, None))
 
     pmm.send_announcement_menu(fake_interface)
 
@@ -152,7 +152,7 @@ def test_remove_participant_menu_empty_id_errors(fake_interface, capsys):
 def test_remove_participant_menu_confirmed_success(fake_interface, capsys):
     fake_interface.inputs_queue.put('123456789')
     fake_interface.inputs_queue.put('y')
-    fake_interface.api = MagicMock(return_value=True)
+    fake_interface.api = MagicMock(return_value=(True, True))
     result = pmm.remove_participant_menu(fake_interface)
     assert result == 1
     fake_interface.api.assert_called_once_with('DELETE', 'participants/remove_participant/123456789')
@@ -162,7 +162,7 @@ def test_remove_participant_menu_confirmed_success(fake_interface, capsys):
 def test_remove_participant_menu_confirmed_failure(fake_interface, capsys):
     fake_interface.inputs_queue.put('123456789')
     fake_interface.inputs_queue.put('y')
-    fake_interface.api = MagicMock(return_value=None)
+    fake_interface.api = MagicMock(return_value=(False, None))
     result = pmm.remove_participant_menu(fake_interface)
     assert result == 0
     assert 'Failed to remove participant' in capsys.readouterr().out
@@ -191,7 +191,7 @@ def test_access_specific_participant_menu_empty_id_errors(fake_interface, capsys
 
 def test_access_specific_participant_menu_found_delegates(fake_interface, monkeypatch):
     fake_interface.inputs_queue.put('123456789')
-    fake_interface.api = MagicMock(return_value={'participant': {'unique_id': '123456789'}})
+    fake_interface.api = MagicMock(return_value=(True, {'participant': {'unique_id': '123456789'}}))
     calls = []
     monkeypatch.setattr(pmm, 'individual_participant_menu', lambda self, pid: calls.append((self, pid)))
 
@@ -203,7 +203,7 @@ def test_access_specific_participant_menu_found_delegates(fake_interface, monkey
 
 def test_access_specific_participant_menu_not_found_errors(fake_interface, capsys):
     fake_interface.inputs_queue.put('999')
-    fake_interface.api = MagicMock(return_value=None)
+    fake_interface.api = MagicMock(return_value=(False, None))
     result = pmm.access_specific_participant_menu(fake_interface)
     assert result == 0
     assert 'Unique ID not found' in capsys.readouterr().out
@@ -228,7 +228,7 @@ def _no_terminal_header(monkeypatch):
 
 
 def test_participant_management_menu_static_options_wired_correctly(fake_interface, monkeypatch):
-    fake_interface.api = MagicMock(return_value={'participants': []})
+    fake_interface.api = MagicMock(return_value=(True, {'participants': []}))
     mock_pmo = MagicMock(return_value=True)
     monkeypatch.setattr(pmm, 'print_menu_options', mock_pmo)
 
@@ -244,7 +244,7 @@ def test_participant_management_menu_static_options_wired_correctly(fake_interfa
 
 
 def test_participant_management_menu_no_participants_sets_index_and_text_false(fake_interface, monkeypatch, capsys):
-    fake_interface.api = MagicMock(return_value=None)
+    fake_interface.api = MagicMock(return_value=(False, None))
     mock_pmo = MagicMock(return_value=True)
     monkeypatch.setattr(pmm, 'print_menu_options', mock_pmo)
 
@@ -260,7 +260,7 @@ def test_participant_management_menu_default_sort_is_unique_id(fake_interface, m
         _participant('100', 'Alice', '3000'),
         _participant('200', 'Bob', 'Xavier'),
     ]
-    fake_interface.api = MagicMock(return_value={'participants': participants})
+    fake_interface.api = MagicMock(return_value=(True, {'participants': participants}))
     mock_pmo = MagicMock(return_value=True)
     monkeypatch.setattr(pmm, 'print_menu_options', mock_pmo)
 
@@ -279,7 +279,7 @@ def test_participant_management_menu_sort_by_name(fake_interface, monkeypatch):
         _participant('100', 'Zed', 'Adams'),
         _participant('200', 'Amy', 'Baker'),
     ]
-    fake_interface.api = MagicMock(return_value={'participants': participants})
+    fake_interface.api = MagicMock(return_value=(True, {'participants': participants}))
     mock_pmo = MagicMock(return_value=True)
     monkeypatch.setattr(pmm, 'print_menu_options', mock_pmo)
 
@@ -297,7 +297,7 @@ def test_participant_management_menu_sort_by_on_study(fake_interface, monkeypatc
         _participant('100', 'A', 'A', on_study=True),
         _participant('200', 'B', 'B', on_study=False),
     ]
-    fake_interface.api = MagicMock(return_value={'participants': participants})
+    fake_interface.api = MagicMock(return_value=(True, {'participants': participants}))
     mock_pmo = MagicMock(return_value=True)
     monkeypatch.setattr(pmm, 'print_menu_options', mock_pmo)
 
@@ -316,7 +316,7 @@ def test_participant_management_menu_filter_on_study_true(fake_interface, monkey
         _participant('100', 'A', 'A', on_study=True),
         _participant('200', 'B', 'B', on_study=False),
     ]
-    fake_interface.api = MagicMock(return_value={'participants': participants})
+    fake_interface.api = MagicMock(return_value=(True, {'participants': participants}))
     mock_pmo = MagicMock(return_value=True)
     monkeypatch.setattr(pmm, 'print_menu_options', mock_pmo)
 
@@ -333,7 +333,7 @@ def test_participant_management_menu_filter_on_study_false(fake_interface, monke
         _participant('100', 'A', 'A', on_study=True),
         _participant('200', 'B', 'B', on_study=False),
     ]
-    fake_interface.api = MagicMock(return_value={'participants': participants})
+    fake_interface.api = MagicMock(return_value=(True, {'participants': participants}))
     mock_pmo = MagicMock(return_value=True)
     monkeypatch.setattr(pmm, 'print_menu_options', mock_pmo)
 
@@ -352,7 +352,7 @@ def test_participant_management_menu_numbered_lambda_uses_default_arg_capture(fa
         _participant('100', 'A', 'A'),
         _participant('200', 'B', 'B'),
     ]
-    fake_interface.api = MagicMock(return_value={'participants': participants})
+    fake_interface.api = MagicMock(return_value=(True, {'participants': participants}))
     mock_pmo = MagicMock(return_value=True)
     monkeypatch.setattr(pmm, 'print_menu_options', mock_pmo)
 
@@ -376,7 +376,7 @@ def test_participant_management_menu_exception_is_caught(fake_interface, monkeyp
 
 
 def _build_menu_options(fake_interface, monkeypatch, participants=None, filter_settings=None):
-    fake_interface.api = MagicMock(return_value={'participants': participants or []})
+    fake_interface.api = MagicMock(return_value=(True, {'participants': participants or []}))
     if filter_settings is not None:
         fake_interface.participant_filter_settings = filter_settings
     mock_pmo = MagicMock(return_value=True)
@@ -388,9 +388,9 @@ def _build_menu_options(fake_interface, monkeypatch, participants=None, filter_s
 def test_participant_management_menu_schedule_option_prints_schedule(fake_interface, monkeypatch, capsys):
     menu_options = _build_menu_options(fake_interface, monkeypatch)
     fake_interface.commands_queue = deque()
-    fake_interface.api = MagicMock(return_value={
+    fake_interface.api = MagicMock(return_value=(True, {
         'tasks': [{'participant_id': '100', 'task_type': 'ema', 'task_time': '16:00:00', 'on_study': True}]
-    })
+    }))
     menu_options['schedule']['menu_caller'](fake_interface)
     out = capsys.readouterr().out
     assert 'Participant Task Schedule:' in out
@@ -484,7 +484,7 @@ def test_add_participant_menu_invalid_unique_id_generates_one(fake_interface, mo
     fake_interface.inputs_queue.put('')  # phone number skip
     for _ in range(4):
         fake_interface.inputs_queue.put('')  # use defaults for all 4 time fields
-    fake_interface.api = MagicMock(side_effect=[None, True])  # no existing participants, then add succeeds
+    fake_interface.api = MagicMock(side_effect=[(False, None), (True, True)])  # no existing participants, then add succeeds
 
     apm.add_participant_menu(fake_interface)
 
@@ -505,8 +505,8 @@ def test_add_participant_menu_unique_id_collision_regenerates(fake_interface, mo
         fake_interface.inputs_queue.put('')
     monkeypatch.setattr(apm.random, 'randint', lambda a, b: 222222222)
     fake_interface.api = MagicMock(side_effect=[
-        {'participants': [{'unique_id': '123456789'}]},
-        True,
+        (True, {'participants': [{'unique_id': '123456789'}]}),
+        (True, True),
     ])
 
     apm.add_participant_menu(fake_interface)
@@ -526,7 +526,7 @@ def test_add_participant_menu_default_times_used_when_blank(fake_interface):
     fake_interface.inputs_queue.put('5551234')
     for _ in range(4):
         fake_interface.inputs_queue.put('')
-    fake_interface.api = MagicMock(side_effect=[None, True])
+    fake_interface.api = MagicMock(side_effect=[(False, None), (True, True)])
 
     apm.add_participant_menu(fake_interface)
 
@@ -551,7 +551,7 @@ def test_add_participant_menu_invalid_time_format_falls_back_to_default(fake_int
     fake_interface.inputs_queue.put('not-a-time')
     for _ in range(3):
         fake_interface.inputs_queue.put('')
-    fake_interface.api = MagicMock(side_effect=[None, True])
+    fake_interface.api = MagicMock(side_effect=[(False, None), (True, True)])
 
     apm.add_participant_menu(fake_interface)
 
@@ -570,7 +570,7 @@ def test_add_participant_menu_success_and_failure(fake_interface, capsys):
     fake_interface.inputs_queue.put('')
     for _ in range(4):
         fake_interface.inputs_queue.put('')
-    fake_interface.api = MagicMock(side_effect=[None, True])
+    fake_interface.api = MagicMock(side_effect=[(False, None), (True, True)])
     apm.add_participant_menu(fake_interface)
     assert 'Participant added.' in capsys.readouterr().out
 
@@ -584,7 +584,7 @@ def test_add_participant_menu_add_api_failure(fake_interface, capsys):
     fake_interface.inputs_queue.put('')
     for _ in range(4):
         fake_interface.inputs_queue.put('')
-    fake_interface.api = MagicMock(side_effect=[None, None])
+    fake_interface.api = MagicMock(side_effect=[(False, None), (False, None)])
     apm.add_participant_menu(fake_interface)
     assert 'Failed to add participant.' in capsys.readouterr().out
 
@@ -594,19 +594,19 @@ def test_add_participant_menu_add_api_failure(fake_interface, capsys):
 # ------------------------------------------------------------
 
 def test_individual_participant_menu_not_found_errors(fake_interface, capsys):
-    fake_interface.api = MagicMock(return_value=None)
+    fake_interface.api = MagicMock(return_value=(False, None))
     ipm.individual_participant_menu(fake_interface, '123456789')
     assert 'Failed to retrieve participant schedule.' in capsys.readouterr().out
 
 
 def test_individual_participant_menu_missing_participant_key_errors(fake_interface, capsys):
-    fake_interface.api = MagicMock(return_value={'participant': None})
+    fake_interface.api = MagicMock(return_value=(True, {'participant': None}))
     ipm.individual_participant_menu(fake_interface, '123456789')
     assert 'Failed to retrieve participant schedule.' in capsys.readouterr().out
 
 
 def _open_individual_menu(fake_interface, monkeypatch, participant):
-    fake_interface.api = MagicMock(return_value={'participant': participant})
+    fake_interface.api = MagicMock(return_value=(True, {'participant': participant}))
     mock_pmo = MagicMock(return_value=True)
     monkeypatch.setattr(ipm, 'print_menu_options', mock_pmo)
     ipm.individual_participant_menu(fake_interface, participant['unique_id'])
@@ -633,7 +633,7 @@ def test_individual_participant_menu_update_field_text_success(fake_interface, m
     menu_options = _open_individual_menu(fake_interface, monkeypatch, participant)
 
     fake_interface.inputs_queue.put('Alicia')
-    fake_interface.api = MagicMock(return_value=True)
+    fake_interface.api = MagicMock(return_value=(True, True))
     menu_options['1']['menu_caller'](fake_interface)
 
     fake_interface.api.assert_called_once_with('PUT', 'participants/update_participant/1/initials/Alicia')
@@ -647,7 +647,7 @@ def test_individual_participant_menu_update_field_failure(fake_interface, monkey
     menu_options = _open_individual_menu(fake_interface, monkeypatch, participant)
 
     fake_interface.inputs_queue.put('Alicia')
-    fake_interface.api = MagicMock(return_value=None)
+    fake_interface.api = MagicMock(return_value=(False, None))
     menu_options['1']['menu_caller'](fake_interface)
 
     assert 'Failed to update participant.' in capsys.readouterr().out
@@ -660,7 +660,7 @@ def test_individual_participant_menu_update_subid_valid(fake_interface, monkeypa
     menu_options = _open_individual_menu(fake_interface, monkeypatch, participant)
 
     fake_interface.inputs_queue.put('4000')
-    fake_interface.api = MagicMock(return_value=True)
+    fake_interface.api = MagicMock(return_value=(True, True))
     menu_options['2']['menu_caller'](fake_interface)
 
     fake_interface.api.assert_called_once_with('PUT', 'participants/update_participant/1/subid/4000')
@@ -691,7 +691,7 @@ def test_individual_participant_menu_update_on_study_true(fake_interface, monkey
     menu_options = _open_individual_menu(fake_interface, monkeypatch, participant)
 
     fake_interface.inputs_queue.put('true')
-    fake_interface.api = MagicMock(return_value=True)
+    fake_interface.api = MagicMock(return_value=(True, True))
     menu_options['4']['menu_caller'](fake_interface)
 
     fake_interface.api.assert_called_once_with('PUT', 'participants/update_participant/1/on_study/True')
@@ -733,7 +733,7 @@ def test_individual_participant_menu_send_survey_valid(fake_interface, monkeypat
     menu_options = _open_individual_menu(fake_interface, monkeypatch, participant)
 
     fake_interface.inputs_queue.put('ema')
-    fake_interface.api = MagicMock(return_value=True)
+    fake_interface.api = MagicMock(return_value=(True, True))
     menu_options['survey']['menu_caller'](fake_interface)
 
     fake_interface.api.assert_called_once_with('POST', 'participants/send_survey/1/ema')
@@ -761,7 +761,7 @@ def test_individual_participant_menu_send_message_success(fake_interface, monkey
     menu_options = _open_individual_menu(fake_interface, monkeypatch, participant)
 
     monkeypatch.setattr(ipm, 'print_twilio_terminal_prompt', lambda: 'hello there')
-    fake_interface.api = MagicMock(return_value=True)
+    fake_interface.api = MagicMock(return_value=(True, True))
     menu_options['message']['menu_caller'](fake_interface)
 
     fake_interface.api.assert_called_once_with('POST', 'participants/send_custom_sms/1', json={'message': 'hello there'})
@@ -789,7 +789,7 @@ def test_individual_participant_menu_remove_confirmed_success(fake_interface, mo
     menu_options = _open_individual_menu(fake_interface, monkeypatch, participant)
 
     fake_interface.inputs_queue.put('y')
-    fake_interface.api = MagicMock(return_value=True)
+    fake_interface.api = MagicMock(return_value=(True, True))
     result = menu_options['remove']['menu_caller'](fake_interface)
 
     fake_interface.api.assert_called_once_with('DELETE', 'participants/remove_participant/1')
@@ -804,7 +804,7 @@ def test_individual_participant_menu_remove_confirmed_failure(fake_interface, mo
     menu_options = _open_individual_menu(fake_interface, monkeypatch, participant)
 
     fake_interface.inputs_queue.put('y')
-    fake_interface.api = MagicMock(return_value=None)
+    fake_interface.api = MagicMock(return_value=(False, None))
     result = menu_options['remove']['menu_caller'](fake_interface)
 
     assert result == 0

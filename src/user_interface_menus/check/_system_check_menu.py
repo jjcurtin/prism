@@ -5,7 +5,8 @@ from user_interface_menus._menu_helper import *
 # ------------------------------------------------------------
 
 def diagnostics(self):
-    if self.api("POST", "system/execute_task/CHECK_SYSTEM"):
+    ok, _ = self.api("POST", "system/execute_task/CHECK_SYSTEM")
+    if ok:
         success("System checks complete. No issues found.")
     else:
         self.request_transcript(25, "get_transcript")
@@ -21,10 +22,10 @@ def system_check_menu(self):
         if not self.commands_queue:
             print_menu_header("check")
         print("Checking PRISM status and system uptime...")
-        uptime_data = self.api("GET", "system/uptime")
-        mode_data = self.api("GET", "system/get_mode")
+        uptime_ok, uptime_data = self.api("GET", "system/uptime")
+        mode_ok, mode_data = self.api("GET", "system/get_mode")
 
-        if uptime_data and mode_data:
+        if uptime_ok and mode_ok:
             start_time = uptime_data.get('uptime', 'Unknown')
             mode = mode_data.get('mode', 'Unknown')
         else:

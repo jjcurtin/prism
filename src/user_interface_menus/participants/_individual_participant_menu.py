@@ -8,7 +8,8 @@ from user_interface_menus._menu_helper import *
 def individual_participant_menu(self, participant_id):
     def remove_participant_menu(self):
         if prompt_confirmation(self, prompt = "Remove participant?"):
-            if self.api("DELETE", f"participants/remove_participant/{participant_id}"):
+            ok, _ = self.api("DELETE", f"participants/remove_participant/{participant_id}")
+            if ok:
                 success("Participant removed.", self)
                 return 1
             else:
@@ -43,7 +44,8 @@ def individual_participant_menu(self, participant_id):
                 error("Sub ID must be a number.")
                 return
 
-        if self.api("PUT", f"participants/update_participant/{participant_id}/{field}/{new_val}"):
+        ok, _ = self.api("PUT", f"participants/update_participant/{participant_id}/{field}/{new_val}")
+        if ok:
             participant[field] = new_val
             success("Participant updated.", self)
         else:
@@ -52,7 +54,8 @@ def individual_participant_menu(self, participant_id):
     def send_survey_menu(self, participant_id):
         survey_type = get_input(self, prompt = "Enter survey type (ema/feedback): ").lower()
         if survey_type in ['ema', 'feedback']:
-            if self.api("POST", f"participants/send_survey/{participant_id}/{survey_type}"):
+            ok, _ = self.api("POST", f"participants/send_survey/{participant_id}/{survey_type}")
+            if ok:
                 success(f"{survey_type.capitalize()} survey sent.", self)
             else:
                 error(f"Failed to send {survey_type} survey.", self)
@@ -64,13 +67,14 @@ def individual_participant_menu(self, participant_id):
         if not message:
             error("Message cannot be empty.")
             return
-        if self.api("POST", f"participants/send_custom_sms/{participant_id}", json={"message": message}):
+        ok, _ = self.api("POST", f"participants/send_custom_sms/{participant_id}", json={"message": message})
+        if ok:
             success("Message sent.", self)
         else:
             error("Failed to send message.", self)
 
-    data = self.api("GET", f"participants/get_participant/{participant_id}")
-    participant = data.get("participant") if data else None
+    ok, data = self.api("GET", f"participants/get_participant/{participant_id}")
+    participant = data.get("participant") if ok and data else None
     if not participant:
         error("Failed to retrieve participant schedule.")
         return

@@ -9,8 +9,7 @@ def developer_documentation(self):
                 f"The following API keys are required to be in the api/ folder and have the described format for PRISM to function correctly:",
                 f'1. {green("qualtrics.api")}: "api_token","datacenter","ema_survey_id","feedback_survey_id"',
                 f'2. {green("followmee.api")}: "username","api_token"',
-                f'3. {green("twilio.api")}: "account_sid","auth_token","from_number","coordinator_alert_message"',
-                f'4. {green("research_drive.api")}: "destination_path" (the research drive is assumed already mounted -- see config/README.md)'
+                f'3. {green("twilio.api")}: "account_sid","auth_token","from_number","coordinator_alert_message"'
             ], title = "help dev start api")
 
         def config_setup(self):
@@ -74,14 +73,15 @@ def developer_documentation(self):
         def check_system(self):
             infopage(self, content = [
                 f"PRISM includes a system check feature that verifies the status of the application and its components.",
-                f"This includes checking packages, the directory structure, required files, testing API connectivity, and some additional participant information fidelity logic.",
-                f"The system check is performed by the SystemCheck class, which provides methods to check the status of various components of PRISM.",
+                f"This includes checking the directory structure, required files, testing API and research-drive connectivity, additional participant information fidelity logic, and a run of the offline test suite.",
+                f"The system check is performed by the CheckSystem class, which provides methods to check the status of various components of PRISM.",
                 f"The system check can be run from the command line or from the user interface.",
                 f"\nThe system check performs the following checks:",
-                f"1. Checks if all required packages are installed and up to date.",
-                f"2. Checks if the directory structure is correct and all required files are present.",
-                f"3. Tests API connectivity to ensure that PRISM can communicate with external services.",
+                f"1. Checks if the directory structure is correct and all required files are present.",
+                f"2. Tests Qualtrics/FollowMee API connectivity to ensure that PRISM can communicate with external services.",
+                f"3. Tests research-drive connectivity (prod mode only).",
                 f"4. Performs additional checks on participant information to ensure data integrity.",
+                f"5. Runs the offline test suite ({green('tests/')} and {green('tests_interface/')} -- not {green('tests_integration/')}, which needs real credentials/the mounted research drive) and fails if any test fails or the run times out.",
                 f"\nThe results of the system check are displayed in the user interface or printed to the console, allowing for easy identification of any issues that need to be addressed."
             ], title = "help dev backend check")
             
@@ -90,7 +90,6 @@ def developer_documentation(self):
                 f"PRISM supports data pull down from various sources, including Qualtrics and FollowMee.",
                 f"The data pull down feature allows PRISM to retrieve data from these sources and store it in the appropriate format for further processing.",
                 f"Data is output to the {green('../data/')} directory after pulldown and processing.",
-                f"PRISM also supports mapping and pushing data to the Research Drive, which allows for easy access and secure management of study data.",
                 f"\nThe data management system is designed to be flexible and extensible, allowing for easy integration of new data sources and formats.",
                 f"The data management system provides methods to pull down data from external sources, process it, and store it in the appropriate format for further analysis.",
                 f"This allows PRISM to adapt to changes in the study data without requiring a restart."
@@ -117,19 +116,17 @@ def developer_documentation(self):
                 f"1. GET /system/get_mode - Returns the current mode of the application.",
                 f"2. GET /system/uptime - Returns the uptime of the application.",
                 f"3. GET /system/get_transcript/<num_lines> - Retrieves the last <num_lines> lines of the system transcript.",
-                f"4. GET /system/get_ema_log/<num_lines> - Retrieves the last <num_lines> lines of the EMA log.",
-                f"5. GET /system/get_feedback_log/<num_lines> - Retrieves the last <num_lines> lines of the feedback log.",
-                f"6. POST /system/shutdown - Initiates a system shutdown.",
-                f"7. GET /system/get_task_schedule - Retrieves the current system task schedule.",
-                f"8. GET /system/get_task_types - Retrieves the available task types.",
-                f"9. GET /system/get_r_script_tasks - Retrieves the R script tasks.",
-                f"10. POST /system/add_system_task/<task_type>/<task_time> - Adds a system task.",
-                f"11. DELETE /system/remove_system_task/<task_type>/<task_time> - Removes a system task.",
-                f"12. DELETE /system/clear_task_schedule - Clears the task schedule.",
-                f"13. POST /system/execute_task/<task_type> - Executes a specific task.",
-                f"14. POST /system/add_r_script_task/<r_script_path>/<task_time> - Adds an R script task.",
-                f"15. DELETE /system/remove_r_script_task/<r_script_path>/<task_time> - Removes an R script task.",
-                f"16. POST /system/execute_r_script_task/<r_script_path> - Executes an R script task."
+                f"4. POST /system/shutdown - Initiates a system shutdown.",
+                f"5. GET /system/get_task_schedule - Retrieves the current system task schedule.",
+                f"6. GET /system/get_task_types - Retrieves the available task types.",
+                f"7. GET /system/get_r_script_tasks - Retrieves the R script tasks.",
+                f"8. POST /system/add_system_task/<task_type>/<task_time> - Adds a system task.",
+                f"9. DELETE /system/remove_system_task/<task_type>/<task_time> - Removes a system task.",
+                f"10. DELETE /system/clear_task_schedule - Clears the task schedule.",
+                f"11. POST /system/execute_task/<task_type> - Executes a specific task.",
+                f"12. POST /system/add_r_script_task/<r_script_path>/<task_time> - Adds an R script task.",
+                f"13. DELETE /system/remove_r_script_task/<r_script_path>/<task_time> - Removes an R script task.",
+                f"14. POST /system/execute_r_script_task/<r_script_path> - Executes an R script task."
             ], title = "help dev server system")
 
         def participant_endpoints(self):

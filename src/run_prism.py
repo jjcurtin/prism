@@ -51,7 +51,7 @@ class PRISM():
             return str((Path(self.drive_mount) / raw_path).resolve())
         return raw_path
 
-    def load_paths(self):
+    def load_paths(self, environment=None):
         # repo root is the parent of this file's directory (src/). Tests can
         # override by setting self.repo_root before calling this method, to
         # point at a fixture tree instead of the real checkout.
@@ -88,13 +88,20 @@ class PRISM():
         # everything under its config_base) this checkout loads from. This
         # stays gitignored (unlike repo_paths.csv above) because it's a
         # per-deployment choice, not something every checkout should share.
-        # Defaults to "dev" (the safer default) if missing.
-        env_file = repo_root / 'environment'
-        self.environment = 'dev'
-        if env_file.exists() and env_file.read_text().strip():
-            self.environment = env_file.read_text().strip()
+        # Defaults to "dev" (the safer default) if missing. Callers that
+        # need to resolve a specific environment regardless of the marker
+        # (e.g. tests_integration/test_environment_files.py, which checks
+        # both "dev" and "prod" in the same run) can pass `environment`
+        # directly instead.
+        if environment:
+            self.environment = environment
         else:
-            self.add_to_transcript(f"No environment file at {env_file} (or it's empty) — defaulting to 'dev'.", "WARNING")
+            env_file = repo_root / 'environment'
+            self.environment = 'dev'
+            if env_file.exists() and env_file.read_text().strip():
+                self.environment = env_file.read_text().strip()
+            else:
+                self.add_to_transcript(f"No environment file at {env_file} (or it's empty) — defaulting to 'dev'.", "WARNING")
 
         paths_csv = self._resolve_drive_path(f"S:/{repo_paths['prism_drive_subpath']}/{self.environment}/config/paths.csv")
         try:
@@ -178,9 +185,6 @@ class PRISM():
             'twilio_from_number': 'from_number',
             'coordinator_alert_message': 'coordinator_alert_message'
         }, "Twilio")
-        load_keys('research_drive.api', {
-            'destination_path': 'destination_path'
-        }, "Research Drive")
 
     def add_to_transcript(self, message, message_type = "INFO"):
         transcript_message = f"{message_type} - {message}"
@@ -199,6 +203,12 @@ class PRISM():
                 file.write(f"{datetime.now().strftime('%H:%M:%S')} - {transcript_message}\n")
 
     def get_transcript(self, num_lines = 10, target = "transcript"):
+        # Returns an (ok, entries) tuple rather than a bare value: `ok` is
+        # True whenever the read itself succeeded, `entries` is a (possibly
+        # empty) list of {"timestamp", "message"} dicts in that case. This
+        # keeps a genuinely empty/just-created log file (ok=True, entries=[])
+        # distinguishable from a real I/O failure (ok=False, entries=None) --
+        # both used to collapse to the same bare `None`.
         try:
             today_date = datetime.now().strftime('%Y-%m-%d')
             if self.mode == "test":
@@ -210,15 +220,14 @@ class PRISM():
                 with open(transcript_path, 'r') as f:
                     num_lines = int(num_lines)
                     content = f.read().splitlines()[-num_lines:]
-                    if not content:
-                        return None
-                    return [{"timestamp": line.split(' - ')[0], "message": ' - '.join(line.split(' - ')[1:])} for line in content]
+                    return True, [{"timestamp": line.split(' - ')[0], "message": ' - '.join(line.split(' - ')[1:])} for line in content]
             except FileNotFoundError:
                 with open(transcript_path, 'w') as f:
                     f.write(f"{datetime.now().strftime('%H:%M:%S')} - {target} file created.\n")
+                return True, []
         except Exception as e:
             self.add_to_transcript(f"Failed to read {target}: {e}", "ERROR")
-            return None    
+            return False, None
 
     def launch_web_app(self):
         self.flask_app = create_flask_app(self)

@@ -73,7 +73,6 @@ def test_load_api_keys_reads_all_other_api_files(prism_instance):
     assert prism_instance.twilio_auth_token == 'fake_token'
     assert prism_instance.twilio_from_number == '+15555550100'
     assert prism_instance.coordinator_alert_message == 'fake coordinator alert msg'
-    assert prism_instance.destination_path == 'fake_dest'
 
 
 def test_load_api_keys_falls_back_to_message_defaults_when_columns_missing(prism_instance):
