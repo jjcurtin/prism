@@ -49,5 +49,60 @@ def send_sms(app, receiver_numbers, messages):
 
     return result
 
+def notify_coordinators(app, message):
+    """Send `message` to every study coordinator listed in
+    `app.study_coordinators_path`, via send_sms(). Gated internally on
+    `app.mode == "prod"` -- returns 0 immediately otherwise, matching the
+    gating SystemTask.execute() already applies at its own call site (so
+    this is a no-op safety net, not a second independent gate in practice).
+
+    `message` may contain a `{name}` placeholder, which gets filled in with
+    each coordinator's own name from the CSV (SystemTask's per-coordinator
+    "Alice: ..." alert template relies on this); a plain message with no
+    `{name}` placeholder is sent verbatim to every coordinator.
+
+    CSV-parsing behavior (skip malformed entries, warn if the file itself is
+    missing) matches SystemTask.notify_via_sms(), which delegates to this
+    helper. Returns the number of coordinators the send failed for (0 on
+    success, or when there's nothing to send), same contract as send_sms().
+    """
+    if app.mode != "prod":
+        return 0
+
+    try:
+        with open(app.study_coordinators_path, 'r') as f:
+            lines = f.readlines()[1:]
+    except FileNotFoundError:
+        app.add_to_transcript("No study coordinators found. SMS notifications will not be sent.", "WARNING")
+        return 1
+    except Exception as e:
+        app.add_to_transcript(f"Failed to read study coordinators. Error message: {e}", "ERROR")
+        return 1
+
+    phone_numbers = []
+    bodies = []
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            name, phone_number = line.split(',')
+            name = name.strip('"')
+            phone_number = phone_number.strip('"')
+            if phone_number:
+                try:
+                    body = message.format(name=name)
+                except (KeyError, IndexError):
+                    body = message
+                phone_numbers.append(phone_number)
+                bodies.append(body)
+        except Exception as e:
+            app.add_to_transcript(f"Skipping malformed study coordinator entry: {e}", "ERROR")
+
+    if not phone_numbers:
+        return 0
+
+    return send_sms(app, phone_numbers, bodies)
+
 def clear():
     os.system('cls' if os.name == 'nt' else 'clear')

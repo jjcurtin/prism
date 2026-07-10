@@ -91,19 +91,50 @@ Every folder in this repo has two docs, kept deliberately separate:
   argument lists instead of shell strings. Added integration tests
   (`tests_integration/`, local-only, real dev credentials, `make
   test-integration`) for the previously-untested pulldown/research-drive
-  tasks. `uiconfig.txt`/`saved_macros.txt`/`system_prompt.txt` are now
-  tracked in `config/` (copied from the prod drive) instead of git-ignored,
-  so a fresh clone no longer needs to fetch them from the drive before the
-  interface will start. *(2026-07-10)*
+  tasks. `uiconfig.txt`/`system_prompt.txt` are now tracked in `config/`
+  (copied from the prod drive) instead of git-ignored, so a fresh clone no
+  longer needs to fetch them from the drive before the interface will
+  start. *(2026-07-10)*
+- Removed the macro subsystem (saved/named command-chain shortcuts via
+  `$<id> = <chain>`, plus the pre-canned `system_tests.txt`/
+  `system_utils.txt` shortcut files and the guided `register` menu) —
+  command chaining (`/cmd1?input/cmd2`) and global command search (`?`)
+  are unaffected; only saving/naming a chain for later reuse is gone.
+  *(2026-07-10)*
+- Extended coordinator SMS-on-system-failure coverage beyond
+  `SystemTaskManager`-dispatched tasks (unchanged: still gated on
+  `app.mode == "prod"`, still sends on both SUCCESS and FAILURE for those).
+  Refactored the coordinator-list-reading/sending logic out of
+  `SystemTask.notify_via_sms()` into a new shared `_helper.notify_coordinators(app,
+  message)`, then wired it into three genuine-system-failure paths that
+  previously had no coordinator alert at all: `SystemTaskManager.process_task()`'s
+  dynamic-import/dispatch failure, `ParticipantManager.process_task()`'s
+  SMS-send failures (also fixed a bug there — the outermost `except
+  Exception` had no `return` statement, implicitly returning `None` instead
+  of `-1`), and `TaskManager.run()`'s outer catch-all (shared by both
+  managers' background threads). Also added a generic Flask
+  `errorhandler(Exception)` in `_routes.py` for truly unhandled exceptions
+  (500/502), which alerts coordinators and re-raises/passes through
+  `HTTPException`s (404/405 routing errors) so those don't spuriously
+  trigger it. *(2026-07-10)*
+- Added a global `home` command to fix the recursive-menu-exit bug: backing
+  out of N nested menus used to require N separate `ENTER` presses (each
+  submenu runs its own dispatch loop as a directly nested Python call).
+  `home` now unwinds the whole call stack back to the main menu in one
+  step, via a `ReturnToMainMenu` exception (`utils/_menu_navigation.py`)
+  that every blanket `except Exception` on the navigation path re-raises
+  instead of swallowing, caught for real only in `_main_menu.py`'s
+  `main_menu()`. *(2026-07-10)*
 - Cross-platform port: server and interface now run on Linux (previously
   Windows-only — hard-coded paths centralized, the Windows-only `msvcrt`
   keypress module replaced with a `platform.system()`-branched
   `_keyboard.py`, a busy-wait CPU bug fixed). *(2026-07-09)*
-- Automated test suite: 546 tests total — 147 server-side (`tests/`, config
-  loading, task scheduling, participant management) and 399 interface-side
-  (`tests_interface/`, full `user_interface_menus/` coverage). Runs via
-  `make test-server` / `make test-client` / `make test-all`, with GitHub
-  Actions CI split into semantically-grouped jobs per side. *(2026-07-10)*
+- Automated test suite: 501 tests total — 164 server-side (`tests/`, config
+  loading, task scheduling, participant management, coordinator SMS alerting
+  on system failures) and 337 interface-side (`tests_interface/`, full
+  `user_interface_menus/` coverage). Runs via `make test-server` / `make
+  test-client` / `make test-all`, with GitHub Actions CI split into
+  semantically-grouped jobs per side. *(2026-07-10)*
 - Cleaned up loose ends from the local-only-server audit: documented the
   deliberate no-auth trust model, closed a CI gap where two server-side test
   files ran locally but not in CI, replaced an ambiguous-`None` error

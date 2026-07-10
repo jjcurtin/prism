@@ -463,3 +463,57 @@ def test_study_announcement_prod_mode_partial_failure_notes_count(routes_client,
 
     assert resp.status_code == 200
     assert '1 of 2' in resp.get_json()['message']
+
+
+# ------------------------------------------------------------
+# Unhandled-exception error handler
+# ------------------------------------------------------------
+#
+# Every route above returns its 400/404/500/502 "failure" responses as
+# plain `jsonify(...), <code>` values -- those are ordinary return values,
+# not raised exceptions, so Flask's generic errorhandler(Exception) never
+# sees them; it only fires for something that actually escapes a view
+# function unhandled. These tests force that by making a mocked manager
+# method raise instead of returning normally.
+
+def test_unhandled_exception_returns_500_and_notifies_coordinators(routes_client, routes_app_instance, mocker):
+    notify = mocker.patch('_routes.notify_coordinators', return_value=0)
+    routes_app_instance.system_task_manager.get_task_schedule.side_effect = RuntimeError('boom')
+
+    resp = routes_client.get('/system/get_task_schedule')
+
+    assert resp.status_code == 500
+    assert resp.get_json() == {"error": "Internal server error"}
+    notify.assert_called_once()
+    message = notify.call_args[0][1]
+    assert 'boom' in message
+    assert any('ERROR' == msg_type for msg_type, _ in routes_app_instance.transcript)
+
+
+def test_unmatched_route_returns_default_404_no_coordinator_notify(routes_client, mocker):
+    """A request to a URL that doesn't match any route raises Werkzeug's own
+    NotFound (an HTTPException) during routing/dispatch, before any view
+    function runs. That's not a "system failure" (broken PRISM
+    functionality) -- it's just a bad URL -- so the generic exception
+    handler must let it fall through to Flask's normal 404 handling instead
+    of alerting coordinators.
+    """
+    notify = mocker.patch('_routes.notify_coordinators', return_value=0)
+
+    resp = routes_client.get('/system/this_route_does_not_exist')
+
+    assert resp.status_code == 404
+    notify.assert_not_called()
+
+
+def test_wrong_http_method_returns_default_405_no_coordinator_notify(routes_client, mocker):
+    """Same idea as the 404 case above, but for MethodNotAllowed (e.g.
+    GET-ing a POST-only route) -- also a routing-layer HTTPException, not a
+    system failure.
+    """
+    notify = mocker.patch('_routes.notify_coordinators', return_value=0)
+
+    resp = routes_client.get('/system/shutdown')  # shutdown is POST-only
+
+    assert resp.status_code == 405
+    notify.assert_not_called()

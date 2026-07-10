@@ -69,11 +69,19 @@ def test_notify_via_sms_sends_to_each_coordinator(tmp_path, fake_app, mocker):
     the FIRST study coordinator in study_coordinators.csv and silently never
     notified the rest. Now accumulates all coordinators and sends one
     batched send_sms() call after the loop.
+
+    notify_via_sms() now delegates coordinator-list-reading/sending to the
+    shared _helper.notify_coordinators() (which itself calls _helper.send_sms),
+    so that's what gets mocked here instead of system_tasks._system_task.send_sms
+    (which no longer exists -- notify_via_sms() no longer imports send_sms
+    directly). notify_coordinators() is gated on app.mode == "prod", same as
+    the real dispatch path via SystemTask.execute(), so mode is set to 'prod'.
     """
+    fake_app.mode = 'prod'
     coordinators_file = tmp_path / 'study_coordinators.csv'
     coordinators_file.write_text('"name","phone_number"\n"Alice","5555550100"\n"Bob","5555550101"\n')
     fake_app.study_coordinators_path = str(coordinators_file)
-    send_sms = mocker.patch('system_tasks._system_task.send_sms', return_value=0)
+    send_sms = mocker.patch('_helper.send_sms', return_value=0)
 
     task = SucceedingTask(fake_app)
     task.task_type = 'CHECK_SYSTEM'
@@ -87,6 +95,7 @@ def test_notify_via_sms_sends_to_each_coordinator(tmp_path, fake_app, mocker):
 
 
 def test_notify_via_sms_missing_file_returns_1_and_warns(fake_app):
+    fake_app.mode = 'prod'
     fake_app.study_coordinators_path = '/nonexistent/study_coordinators.csv'
 
     task = SucceedingTask(fake_app)
@@ -99,10 +108,11 @@ def test_notify_via_sms_missing_file_returns_1_and_warns(fake_app):
 
 
 def test_notify_via_sms_uses_default_template_when_app_has_no_override(tmp_path, fake_app, mocker):
+    fake_app.mode = 'prod'
     coordinators_file = tmp_path / 'study_coordinators.csv'
     coordinators_file.write_text('"name","phone_number"\n"Alice","5555550100"\n')
     fake_app.study_coordinators_path = str(coordinators_file)
-    send_sms = mocker.patch('system_tasks._system_task.send_sms', return_value=0)
+    send_sms = mocker.patch('_helper.send_sms', return_value=0)
 
     task = SucceedingTask(fake_app)
     task.task_type = 'CHECK_SYSTEM'
@@ -115,11 +125,12 @@ def test_notify_via_sms_uses_default_template_when_app_has_no_override(tmp_path,
 
 
 def test_notify_via_sms_uses_app_coordinator_alert_message_template(tmp_path, fake_app, mocker):
+    fake_app.mode = 'prod'
     coordinators_file = tmp_path / 'study_coordinators.csv'
     coordinators_file.write_text('"name","phone_number"\n"Alice","5555550100"\n')
     fake_app.study_coordinators_path = str(coordinators_file)
     fake_app.coordinator_alert_message = '{name} was alerted about {task_type} ({outcome})'
-    send_sms = mocker.patch('system_tasks._system_task.send_sms', return_value=0)
+    send_sms = mocker.patch('_helper.send_sms', return_value=0)
 
     task = SucceedingTask(fake_app)
     task.task_type = 'CHECK_SYSTEM'
@@ -131,10 +142,11 @@ def test_notify_via_sms_uses_app_coordinator_alert_message_template(tmp_path, fa
 
 
 def test_notify_via_sms_skips_coordinators_with_blank_phone(tmp_path, fake_app, mocker):
+    fake_app.mode = 'prod'
     coordinators_file = tmp_path / 'study_coordinators.csv'
     coordinators_file.write_text('"name","phone_number"\n"Alice",""\n"Bob","5555550101"\n')
     fake_app.study_coordinators_path = str(coordinators_file)
-    send_sms = mocker.patch('system_tasks._system_task.send_sms', return_value=0)
+    send_sms = mocker.patch('_helper.send_sms', return_value=0)
 
     task = SucceedingTask(fake_app)
     task.task_type = 'CHECK_SYSTEM'
@@ -142,3 +154,25 @@ def test_notify_via_sms_skips_coordinators_with_blank_phone(tmp_path, fake_app, 
     task.notify_via_sms()
 
     send_sms.assert_called_once_with(fake_app, ['5555550101'], mocker.ANY)
+
+
+def test_notify_via_sms_noop_when_not_prod(tmp_path, fake_app, mocker):
+    """notify_coordinators() (and therefore notify_via_sms(), which now
+    delegates to it) is a no-op outside prod mode -- in real dispatch this is
+    redundant with SystemTask.execute()'s own "only call notify_via_sms() in
+    prod" gate, but notify_via_sms() can also be called directly (as these
+    tests do), so the gate needs to hold on its own too.
+    """
+    fake_app.mode = 'test'
+    coordinators_file = tmp_path / 'study_coordinators.csv'
+    coordinators_file.write_text('"name","phone_number"\n"Alice","5555550100"\n')
+    fake_app.study_coordinators_path = str(coordinators_file)
+    send_sms = mocker.patch('_helper.send_sms', return_value=0)
+
+    task = SucceedingTask(fake_app)
+    task.task_type = 'CHECK_SYSTEM'
+    task.outcome = 'FAILURE'
+    result = task.notify_via_sms()
+
+    assert result == 0
+    send_sms.assert_not_called()

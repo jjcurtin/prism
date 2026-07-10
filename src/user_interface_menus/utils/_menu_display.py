@@ -8,7 +8,7 @@ from user_interface_menus.utils._menu_navigation import *
 # ------------------------------------------------------------
 
 def print_menu_options(self, menu_options, submenu = False, index_and_text = False, choice = None, recommended_actions = None):
-    from user_interface_menus._menu_helper import add_recent_command, set_local_menu_options, add_user_defined_global_command, save_macro
+    from user_interface_menus._menu_helper import add_recent_command, set_local_menu_options
 
     if submenu:
         set_local_menu_options("debug", menu_options)
@@ -111,33 +111,35 @@ def print_menu_options(self, menu_options, submenu = False, index_and_text = Fal
                 display_local_menu_options(self, start_index = 1, num_to_print = WINDOW_HEIGHT, indexed = True)
             display_local_menu_options(self, start_index = 1)
             if submenu:
-                print(f"\n{yellow("ENTER")}: Back to Previous Menu")
+                print(f"\n{yellow("ENTER")}: Back to Previous Menu   {yellow("home")}: Jump to Main Menu")
         except Exception as e:
             error(f"Error printing keys: {e}")
 
     def check_for_special_commands(choice, self):
         try:
-            from user_interface_menus._menu_helper import remove_macro, macro_search
+            # "home" is a reserved word, not a symbol prefix like the ones
+            # below -- matched by exact equality (not startswith) so it
+            # doesn't also swallow unrelated choices like "homework".
+            # Checked against every collision surface first (get_menu_options()'s
+            # registered keys, utils/_commands.py's init_commands() dict): no
+            # existing global command or menu key is "home".
+            if choice == "home":
+                raise ReturnToMainMenu()
+
             def check_prefix(prefix):
                 return choice.startswith(prefix)
-            
+
             def check_prefixes(prefixes):
                 return [check_prefix(prefix) for prefix in prefixes]
 
             command, \
             command_query, \
-            execute_commands, \
-            register_command, \
-            remove_command, \
-            search_macros = \
+            execute_commands = \
             \
             check_prefixes (
                 ["command ",
                 "?",
                 "/",
-                "$",
-                "-",
-                "!",
                 ]
             )
 
@@ -151,19 +153,11 @@ def print_menu_options(self, menu_options, submenu = False, index_and_text = Fal
             elif execute_commands:
                 for _ in range(iterations):
                     CommandInjector(choice)(self)
-            elif register_command:
-                identifier = choice.split("=")[0][1:].strip()
-                command_string = choice.split("=")[1].strip() if '=' in choice else None
-                print(f"Registering {identifier} as {command_string}")
-                if add_user_defined_global_command(identifier, command_string, self = self):
-                    save_macro(self, identifier, command_string)
-            elif remove_command:
-                remove_macro(self, choice)
-            elif search_macros:
-                macro_search(self, choice, all = (len(choice) == 1))
             else:
                 return False
             return True
+        except ReturnToMainMenu:
+            raise
         except Exception as e:
             error(f"Error checking for special commands: {e}")
             return False
@@ -190,7 +184,9 @@ def print_menu_options(self, menu_options, submenu = False, index_and_text = Fal
                 add_recent_command(choice)
                 if goto_menu(menu_caller, self):
                     return 1
-            except Exception as e:  
+            except ReturnToMainMenu:
+                raise
+            except Exception as e:
                 error(f"Local menu option error: {e}")
                 return 0
         elif check_global_menu_options(choice):
@@ -199,6 +195,8 @@ def print_menu_options(self, menu_options, submenu = False, index_and_text = Fal
                 add_recent_command(choice)
                 if goto_menu(menu_caller, self):
                     return 1
+            except ReturnToMainMenu:
+                raise
             except Exception as e:
                 error(f"Global menu option error: {e}")
                 return 0
@@ -206,24 +204,13 @@ def print_menu_options(self, menu_options, submenu = False, index_and_text = Fal
             syntax_highlight(self, prompt = f"{cyan('prism> ')}", items = [(red, choice)])
             invalid_choice_menu(self, menu_options, choice, submenu = submenu)
         return 0
+    except ReturnToMainMenu:
+        raise
     except Exception as e:
         error(f"Error parsing command: {e}")
         return 0
 
 # ------------------------------------------------------------
-
-def print_register_command_menu(self):
-    from user_interface_menus._menu_helper import add_user_defined_global_command, save_macro
-    identifier = get_input(self, prompt = "Enter the command identifier (e.g., 'my_command'): ")
-    command_string = get_input(self, prompt = "Enter the command string (e.g., '/command1?input'): ")
-    description = get_input(self, prompt = "Enter a description for the command (optional): ")
-    if not identifier or not command_string:
-        error("Identifier and command string cannot be empty.")
-        return
-    if description == '':
-        description = None
-    if add_user_defined_global_command(identifier, command_string, description, self):
-        save_macro(self, identifier, command_string, description)
 
 def print_global_command_menu(self, query = None):
     menu_options = get_relevant_menu_options(query)

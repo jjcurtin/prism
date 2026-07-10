@@ -38,8 +38,8 @@ class FakeInterface:
     - `inputs_queue` (queue.Queue): pre-populate via `.put(...)` so
       `get_input`/`prompt_confirmation` take the queue-override path
       instead of blocking on real stdin.
-    - `commands_queue` (collections.deque): chained/macro commands land
-      here (see `CommandInjector`).
+    - `commands_queue` (collections.deque): chained commands land here
+      (see `CommandInjector`).
     - `debug` (bool): gates verbose prints in `_display.py`.
     - `api(method, endpoint, json=None)`: records calls instead of hitting
       a real network; returns `(False, None)` like a failed/unreachable

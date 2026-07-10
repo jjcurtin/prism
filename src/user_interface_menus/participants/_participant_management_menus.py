@@ -168,6 +168,14 @@ def participant_management_menu(self):
             
             if print_menu_options(self, menu_options, submenu = True, index_and_text = index_and_text):
                 break
+    except ReturnToMainMenu:
+        # this menu wraps its whole dispatch loop in a try/except (unlike
+        # most other menu files), so it needs its own explicit carve-out --
+        # otherwise "home" typed from anywhere nested under participants/
+        # (e.g. deep inside individual_participant_menu) would be caught
+        # here and swallowed into an error() message instead of unwinding
+        # to the main menu.
+        raise
     except Exception as e:
         error(f"An error occurred in the participant management menu: {e}", self)
 

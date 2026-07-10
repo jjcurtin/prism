@@ -4,7 +4,7 @@ import requests, queue
 from collections import deque
 
 from user_interface_menus._main_menu import main_menu
-from user_interface_menus._menu_helper import README, load_menus, exit_menu, load_params, load_saved_macros
+from user_interface_menus._menu_helper import README, load_menus, exit_menu, load_params
 
 class PRISMInterface:
     def __init__(self):
@@ -18,8 +18,6 @@ class PRISMInterface:
         self.commands_queue = deque()
         self.debug = False
 
-        load_saved_macros(self)
-            
         from user_interface_menus._menu_helper import SHOW_README
         if SHOW_README == True:
             README(self)

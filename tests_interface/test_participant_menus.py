@@ -30,6 +30,7 @@ import user_interface_menus._menu_helper as menu_helper
 import user_interface_menus.participants._add_participant_menu as apm
 import user_interface_menus.participants._individual_participant_menu as ipm
 import user_interface_menus.participants._participant_management_menus as pmm
+from user_interface_menus.utils._menu_navigation import ReturnToMainMenu
 
 
 @pytest.fixture(autouse=True)
@@ -373,6 +374,24 @@ def test_participant_management_menu_exception_is_caught(fake_interface, monkeyp
     pmm.participant_management_menu(fake_interface)
 
     assert 'An error occurred in the participant management menu: boom' in capsys.readouterr().out
+
+
+def test_participant_management_menu_propagates_return_to_main_menu(fake_interface, monkeypatch):
+    """Contrast with test_participant_management_menu_exception_is_caught
+    above: this menu is one of the few that wraps its whole dispatch loop
+    in a try/except (most menu files don't), so it needs its own explicit
+    `except ReturnToMainMenu: raise` carve-out ahead of the blanket `except
+    Exception` -- otherwise "home" typed anywhere nested under participants/
+    (e.g. from inside individual_participant_menu, reached via the 'access'
+    option) would be caught here and swallowed into an "An error occurred
+    in the participant management menu" message instead of unwinding all
+    the way back to the main menu.
+    """
+    fake_interface.api = MagicMock(return_value=(True, {'participants': []}))
+    monkeypatch.setattr(pmm, 'print_menu_options', MagicMock(side_effect=ReturnToMainMenu()))
+
+    with pytest.raises(ReturnToMainMenu):
+        pmm.participant_management_menu(fake_interface)
 
 
 def _build_menu_options(fake_interface, monkeypatch, participants=None, filter_settings=None):

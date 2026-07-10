@@ -5,11 +5,12 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from werkzeug.exceptions import HTTPException
 import time
 from datetime import datetime
 from datetime import timedelta
 
-from _helper import send_sms
+from _helper import send_sms, notify_coordinators
 
 def create_flask_app(app_instance):
     flask_app = Flask(__name__)
@@ -273,5 +274,39 @@ def create_flask_app(app_instance):
         else:
             app_instance.add_to_transcript(f"Simulated sending messages.")
         return jsonify({"message": f"Study announcement sent to all participants, require on study: {require_on_study}"}), 200
+
+    ########################
+    #  Error handling      #
+    ########################
+
+    # Every route above returns its "failure" responses (400/404/500/502)
+    # as plain `jsonify(...), <code>` values, not raised exceptions -- per
+    # _routes.py's convention, 400/404 are user-input validation problems
+    # already resolved before this handler would ever see them. This
+    # handler exists only to catch what *isn't* already handled that way:
+    # a genuinely unhandled exception escaping a view function (broken
+    # system functionality), which Flask converts into an internal
+    # InternalServerError unless we intervene here first.
+    #
+    # Flask/Werkzeug also raises HTTPException subclasses of its own for
+    # routing problems (e.g. NotFound for an unmatched URL, MethodNotAllowed
+    # for a mismatched HTTP verb) -- those aren't "system failures" either.
+    # A generic `errorhandler(Exception)` catches HTTPExceptions too (Flask
+    # falls back to the broadest matching handler when no handler is
+    # registered for that specific HTTPException/code), so this returns the
+    # exception itself unmodified -- HTTPException instances are valid WSGI
+    # responses -- letting Flask render its normal default error page
+    # instead of alerting coordinators. (Re-raising it here instead of
+    # returning it would escape this handler entirely and hit Flask's
+    # top-level exception propagation instead of its normal HTTPException
+    # rendering -- with TESTING/DEBUG on, that surfaces as an uncaught
+    # exception rather than a clean response.)
+    @flask_app.errorhandler(Exception)
+    def handle_unexpected_error(e):
+        if isinstance(e, HTTPException):
+            return e
+        app_instance.add_to_transcript(f"Unhandled exception in Flask route: {e}", "ERROR")
+        notify_coordinators(app_instance, f"PRISM system failure: unhandled exception in Flask route: {e}")
+        return jsonify({"error": "Internal server error"}), 500
 
     return flask_app

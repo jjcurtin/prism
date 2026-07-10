@@ -23,10 +23,10 @@ here, which is drive-sourced or git-ignored):
   (where logs live locally, how the drive mounts per-platform, which drive
   subpath this project is under) — as opposed to study-specific data, which
   comes from the drive.
-- `uiconfig.txt`, `saved_macros.txt` — interface defaults (display tunables,
-  starter macros). These are generic, not study-specific or secret, so
-  unlike the drive-sourced files they ship with the repo rather than
-  requiring a fresh clone to copy them from the drive first. *(2026-07-10)*
+- `uiconfig.txt` — interface defaults (display tunables). This is generic,
+  not study-specific or secret, so unlike the drive-sourced files it ships
+  with the repo rather than requiring a fresh clone to copy it from the
+  drive first. *(2026-07-10)*
 
 ## Current known schema (from the real files on the drive)
 

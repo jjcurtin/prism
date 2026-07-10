@@ -322,6 +322,25 @@ def test_process_task_unknown_participant_returns_neg1_no_crash(fake_app):
     assert result == -1
 
 
+def test_process_task_unknown_sms_task_type_does_not_notify_coordinators(fake_app, mocker):
+    """Judgment call: an unrecognized task_type reaching this code is a
+    data-shape/config-drift issue (e.g. survey_types gained a new key that
+    task_attr_map never learned about), not a runtime malfunction like a
+    Twilio/network failure -- it doesn't indicate PRISM's SMS-sending
+    functionality is actually broken, so it's deliberately excluded from
+    coordinator alerting here (unlike the genuine send-failure paths below).
+    """
+    fake_app.mode = 'prod'
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+    notify = mocker.patch('task_managers._participant_manager.notify_coordinators')
+
+    result = pm.process_task({'task_type': 'not_a_real_task_type', 'participant_id': '000000000'})
+
+    assert result == -1
+    notify.assert_not_called()
+
+
 def test_process_task_off_study_returns_0_no_sms(fake_app, mocker):
     pm = make_manager(fake_app)
     participant = dict(PARTICIPANT, on_study=False)
@@ -391,6 +410,53 @@ def test_process_task_ema_reminder_sent_when_not_yet_opened(tmp_path, fake_app, 
 
     assert result == 0
     send_sms.assert_called_once_with(fake_app, ['5555550100'], mocker.ANY)
+
+
+def test_process_task_send_sms_failure_notifies_coordinators_and_returns_neg1(fake_app, mocker):
+    """A Twilio/network-level send failure is broken system functionality
+    (not a user-input/data-shape problem), so it should alert coordinators
+    via the shared notify_coordinators() helper and return -1 for a
+    consistent failure contract.
+    """
+    fake_app.mode = 'prod'
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+    fake_app.ema_survey_id = 'fake_survey'
+    fake_app.ema_message = "Hello, it's time to take your daily survey."
+    mocker.patch('task_managers._participant_manager.send_sms', side_effect=RuntimeError('twilio down'))
+    notify = mocker.patch('task_managers._participant_manager.notify_coordinators', return_value=0)
+
+    result = pm.process_task({'task_type': 'ema', 'participant_id': '000000000'})
+
+    assert result == -1
+    notify.assert_called_once()
+    message = notify.call_args[0][1]
+    assert '000000000' in message
+    assert 'twilio down' in message
+
+
+def test_process_task_unexpected_error_notifies_coordinators_and_returns_neg1(fake_app, mocker):
+    """Regression test for a fixed bug: the outermost catch-all used to fall
+    off the end of the function with no return statement, implicitly
+    returning None instead of a failure code -- inconsistent with every
+    other failure path in this function (which all return -1). A genuine
+    unexpected exception here is broken system functionality, so it should
+    also alert coordinators.
+    """
+    pm = make_manager(fake_app)
+    fake_app.mode = 'prod'
+    notify = mocker.patch('task_managers._participant_manager.notify_coordinators', return_value=0)
+    # get_participant() is called early in process_task(); make it blow up
+    # with something other than the handled lookup-failure path to exercise
+    # the outer try/except's catch-all.
+    pm.get_participant = mocker.Mock(side_effect=RuntimeError('unexpected'))
+
+    result = pm.process_task({'task_type': 'ema', 'participant_id': '000000000'})
+
+    assert result == -1
+    notify.assert_called_once()
+    message = notify.call_args[0][1]
+    assert 'unexpected' in message
 
 
 def test_save_participants_round_trips_through_load(tmp_path, fake_app):

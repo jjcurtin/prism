@@ -13,7 +13,7 @@ from user_interface_menus.utils._commands import init_commands
 
 EXPECTED_KEYS = {
     'main', 'check', 'tasks', 'participants',
-    'logs', 'settings', 'shutdown', 'command', 'register', 'debug',
+    'logs', 'settings', 'shutdown', 'command', 'debug',
     'recent', 'exit',
 }
 

@@ -4,6 +4,27 @@ from user_interface_menus.utils._display import *
 
 # ------------------------------------------------------------
 
+class ReturnToMainMenu(Exception):
+    """Raised by the global "home" command (see _menu_display.py's
+    check_for_special_commands) to unwind the whole menu call stack back to
+    the main menu in one shot, regardless of how many submenus deep the user
+    currently is.
+
+    Every blanket `except Exception` that sits between where this is raised
+    and the top-level main_menu() loop must catch-and-reraise this first
+    (`except ReturnToMainMenu: raise`) so it propagates instead of being
+    swallowed and converted into an error() message -- see goto_menu() and
+    process_chained_command() below, print_menu_options() in
+    _menu_display.py (all three of its try/except blocks), and
+    participant_management_menu() in
+    participants/_participant_management_menus.py (the one other menu file
+    that wraps its own menu-dispatch loop in a try/except). Caught for real
+    only in _main_menu.py's main_menu().
+    """
+    pass
+
+# ------------------------------------------------------------
+
 def menu_loop(self, menu_options, header = "main", name = "Main Menu", submenu = True, recommended_actions = [], additional_content = None):
     if 'print_menu_options' not in globals():
         from user_interface_menus.utils._menu_display import print_menu_options
@@ -102,16 +123,18 @@ def goto_menu(menu_caller, self):
                     return goto_menu(menu_caller, self)
             else:
                 print_local_menu_options()
-                error_string = f"likely a syntax error. {(yellow('?<query>'))} to search for commands, or {yellow('!<query>')} to search macros specifically."
+                error_string = f"likely a syntax error. {(yellow('?<query>'))} to search for commands."
                 error(f"Command '{menu_caller}' failed; {error_string}", self)
                 return False
         else:
             error("Invalid menu caller.", self)
             return False
+    except ReturnToMainMenu:
+        raise
     except Exception as e:
         error(f"An error occurred while navigating to the menu: {e}", self)
         return False
-    
+
 # ------------------------------------------------------------
 
 def get_input(self, prompt = None, default_value = None, print_prompt = True):
@@ -202,6 +225,16 @@ def process_chained_command(self):
     import time
     commands = self.commands_queue
     inputs = self.inputs_queue
+    # Predefine `command` so the `except Exception as e:` handler below can
+    # always reference it in its error message, even if commands.popleft()
+    # itself raises (empty queue) before `command` would otherwise be
+    # assigned. Previously this didn't matter -- referencing the undefined
+    # name raised a *second* exception (UnboundLocalError) while already
+    # handling the first, but the old `finally: return 1` unconditionally
+    # swallowed whatever was propagating, masking it. Now that `finally`
+    # only clears the inputs queue (see ReturnToMainMenu handling below), a
+    # real second exception here would propagate uncaught instead.
+    command = None
     try:
         command = commands.popleft()
         from user_interface_menus._menu_helper import MENU_DELAY
@@ -219,10 +252,18 @@ def process_chained_command(self):
                 inputs.put(value.strip())
         else:
             print(f"Executing command: {command}")
-        if goto_menu(command, self):
-            return 1
+        goto_menu(command, self)
+        return 1
+    except ReturnToMainMenu:
+        # No `return` (or `break`/`continue`) may appear in the `finally`
+        # below while this is propagating -- a `return` in `finally` always
+        # wins over an in-flight exception/return from the `try`/`except`
+        # above it (a general Python gotcha, not specific to this
+        # exception), which would silently swallow "home" here and convert
+        # it into a normal `return 1` instead of unwinding to the main menu.
+        raise
     except Exception as e:
         error(f"Error processing command '{command}': {e}", self)
+        return 1
     finally:
         clear_inputs_queue(self)
-        return 1

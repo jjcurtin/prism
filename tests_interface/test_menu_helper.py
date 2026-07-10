@@ -1,11 +1,10 @@
-"""Tests for _menu_helper.py: module globals, setter functions, macro
-persistence (saved_macros.txt), and uiconfig.txt param load/save.
+"""Tests for _menu_helper.py: module globals, setter functions, and
+uiconfig.txt param load/save.
 
 All the file I/O here uses hardcoded *relative* paths (e.g.
-"../config/saved_macros.txt", "user_interface_menus/utils/system_tests.txt")
-that assume cwd is the repo's src/ directory -- so every test chdirs into a
-fabricated fake repo layout under tmp_path rather than touching the real
-repo's config/logs directories.
+"../config/uiconfig.txt") that assume cwd is the repo's src/ directory --
+so every test chdirs into a fabricated fake repo layout under tmp_path
+rather than touching the real repo's config/logs directories.
 """
 import os
 import time
@@ -14,36 +13,35 @@ from collections import deque
 import pytest
 
 import user_interface_menus._menu_helper as menu_helper
-from user_interface_menus.utils._menu_navigation import CommandInjector
 
 
 @pytest.fixture
 def fake_repo(tmp_path, monkeypatch):
     """Fabricates a fake repo checkout: <root>/src (cwd), <root>/config,
-    <root>/logs/interface_logs, <root>/src/user_interface_menus/utils --
-    matching the relative-path assumptions baked into _menu_helper.py.
+    <root>/logs/interface_logs -- matching the relative-path assumptions
+    baked into _menu_helper.py.
     """
     src_dir = tmp_path / "src"
     (tmp_path / "config").mkdir(parents=True)
     (tmp_path / "logs" / "interface_logs").mkdir(parents=True)
-    (src_dir / "user_interface_menus" / "utils").mkdir(parents=True)
+    src_dir.mkdir(parents=True)
     monkeypatch.chdir(src_dir)
     return tmp_path
 
 
 @pytest.fixture(autouse=True)
 def _no_real_terminal(monkeypatch):
-    """Several call paths here (macro_search -> display_in_columns,
-    load_params' clear()) touch a real terminal (ANSI cursor queries,
-    os.system('clear')) that would hang or spam output under plain pytest.
+    """load_params' clear() touches a real terminal (os.system('clear'))
+    that would spam output under plain pytest; get_cursor_position is
+    neutralized defensively for any other call path that might reach it.
     Neutralize them; behavior of the terminal-facing code itself is covered
     by test_display.py.
     """
     import user_interface_menus.utils._display as _display
 
-    # get_cursor_position is defined in _display.py; display_in_columns
-    # (called by macro_search) looks it up in that module's own globals,
-    # not menu_helper's star-imported name -- patch the defining module.
+    # get_cursor_position is defined in _display.py; other code looks it up
+    # in that module's own globals, not menu_helper's star-imported name --
+    # patch the defining module.
     monkeypatch.setattr(_display, "get_cursor_position", lambda *a, **k: (0, 0))
     monkeypatch.setattr(os, "system", lambda *a, **k: 0)
     monkeypatch.setattr(time, "sleep", lambda *a, **k: None)
@@ -91,44 +89,6 @@ def test_add_recent_command_caps_at_ten_fifo():
     # cmd0 was the first in, should have been popped
     assert "cmd0" not in menu_helper.RECENT_COMMANDS
     assert "cmd10" in menu_helper.RECENT_COMMANDS
-
-
-# ------------------------------------------------------------
-# add_user_defined_global_command
-
-
-def test_add_user_defined_global_command_accepts_valid_identifier():
-    ok = menu_helper.add_user_defined_global_command("mymacro", "/help", "desc")
-    assert ok is True
-    assert "mymacro" in menu_helper._menu_options
-    entry = menu_helper._menu_options["mymacro"]
-    assert entry["description"] == "desc"
-    assert isinstance(entry["menu_caller"], CommandInjector)
-
-
-def test_add_user_defined_global_command_defaults_description_to_command_string():
-    menu_helper.add_user_defined_global_command("mymacro", "/help")
-    assert menu_helper._menu_options["mymacro"]["description"] == "/help"
-
-
-@pytest.mark.parametrize("identifier", ["y", "n", "yes", "no", "0", "999", "a", "Z"])
-def test_add_user_defined_global_command_rejects_banned_identifiers(identifier):
-    ok = menu_helper.add_user_defined_global_command(identifier, "/help")
-    assert ok is False
-    assert menu_helper._menu_options is None or identifier not in menu_helper._menu_options
-
-
-@pytest.mark.parametrize("identifier", ["a/b", "a?b", "/leading", "trailing?"])
-def test_add_user_defined_global_command_rejects_banned_characters(identifier):
-    ok = menu_helper.add_user_defined_global_command(identifier, "/help")
-    assert ok is False
-
-
-def test_add_user_defined_global_command_rejects_duplicate():
-    assert menu_helper.add_user_defined_global_command("mymacro", "/help") is True
-    assert menu_helper.add_user_defined_global_command("mymacro", "/other") is False
-    # original entry preserved, not overwritten
-    assert menu_helper._menu_options["mymacro"]["description"] == "/help"
 
 
 # ------------------------------------------------------------
@@ -340,111 +300,6 @@ def test_load_params_right_align_sets_directly_from_file(fake_repo):
     (fake_repo / "config" / "uiconfig.txt").write_text("RIGHT_ALIGN=True\n")
     menu_helper.load_params()
     assert menu_helper.RIGHT_ALIGN is True
-
-
-# ------------------------------------------------------------
-# macro persistence (saved_macros.txt)
-
-
-def test_save_macro_writes_line(fake_repo):
-    menu_helper.save_macro(FakeApp(), "mymacro", "/help", "My macro")
-    content = (fake_repo / "config" / "saved_macros.txt").read_text()
-    assert content == "mymacro|/help|My macro\n"
-
-
-def test_save_macro_defaults_description_to_command_string(fake_repo):
-    menu_helper.save_macro(FakeApp(), "mymacro", "/help")
-    content = (fake_repo / "config" / "saved_macros.txt").read_text()
-    assert content == "mymacro|/help|/help\n"
-
-
-def test_load_saved_macros_populates_menu_options(fake_repo):
-    (fake_repo / "config" / "saved_macros.txt").write_text(
-        "mymacro|/help|My macro\nother|/settings|Other macro\n"
-    )
-    menu_helper.load_saved_macros(FakeApp())
-    assert "mymacro" in menu_helper._menu_options
-    assert "other" in menu_helper._menu_options
-    assert menu_helper._menu_options["mymacro"]["description"] == "My macro"
-
-
-def test_load_saved_macros_missing_file_prints_message(fake_repo, capsys):
-    menu_helper.load_saved_macros(FakeApp())
-    out = capsys.readouterr().out
-    assert "No saved macros found" in out
-
-
-def test_load_saved_macros_also_loads_system_tests_and_utils(fake_repo):
-    (fake_repo / "src" / "user_interface_menus" / "utils" / "system_tests.txt").write_text(
-        "systest|/check|System test macro\n"
-    )
-    (fake_repo / "src" / "user_interface_menus" / "utils" / "system_utils.txt").write_text(
-        "sysutil|/logs|System util macro\n"
-    )
-    menu_helper.load_saved_macros(FakeApp())
-    assert "systest" in menu_helper._menu_options
-    assert "sysutil" in menu_helper._menu_options
-
-
-def test_remove_macro_deletes_entry_and_rewrites_file(fake_repo):
-    (fake_repo / "config" / "saved_macros.txt").write_text(
-        "mymacro|/help|My macro\nother|/settings|Other macro\n"
-    )
-    menu_helper.load_saved_macros(FakeApp())
-    assert "mymacro" in menu_helper._menu_options
-
-    menu_helper.remove_macro(FakeApp(), "-mymacro")
-
-    assert "mymacro" not in menu_helper._menu_options
-    remaining = (fake_repo / "config" / "saved_macros.txt").read_text()
-    assert "mymacro" not in remaining
-    assert "other|/settings|Other macro" in remaining
-
-
-def test_remove_macro_noop_when_identifier_unknown(fake_repo):
-    (fake_repo / "config" / "saved_macros.txt").write_text("other|/settings|Other macro\n")
-    menu_helper.load_saved_macros(FakeApp())
-    menu_helper.remove_macro(FakeApp(), "-doesnotexist")
-    # file untouched
-    content = (fake_repo / "config" / "saved_macros.txt").read_text()
-    assert content == "other|/settings|Other macro\n"
-
-
-def test_macro_search_by_substring(fake_repo, capsys):
-    (fake_repo / "config" / "saved_macros.txt").write_text(
-        "mymacro|/help|My macro\nother|/settings|Other macro\n"
-    )
-    menu_helper.macro_search(FakeApp(), "?my")
-    out = capsys.readouterr().out
-    assert "mymacro" in out
-    assert "Success" in out
-
-
-def test_macro_search_all(fake_repo, capsys):
-    (fake_repo / "config" / "saved_macros.txt").write_text(
-        "mymacro|/help|My macro\nother|/settings|Other macro\n"
-    )
-    menu_helper.macro_search(FakeApp(), "?", all=True)
-    out = capsys.readouterr().out
-    assert "mymacro" in out
-    assert "other" in out
-
-
-def test_macro_search_no_matches(fake_repo, capsys):
-    # query must be dissimilar enough to also clear the fuzzy-match cutoff
-    # (RELATED_OPTIONS_THRESHOLD=0.3, per conftest's autouse fixture) --
-    # short/partially-overlapping queries like "zzzznomatch" vs "other"
-    # still register as a fuzzy match via difflib.get_close_matches.
-    (fake_repo / "config" / "saved_macros.txt").write_text("other|/settings|Other macro\n")
-    menu_helper.macro_search(FakeApp(), "?completelydifferentxyz123")
-    out = capsys.readouterr().out
-    assert "No matching macros found" in out
-
-
-def test_macro_search_missing_file(fake_repo, capsys):
-    menu_helper.macro_search(FakeApp(), "?anything")
-    out = capsys.readouterr().out
-    assert "No saved macros found" in out
 
 
 # ------------------------------------------------------------

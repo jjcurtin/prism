@@ -2,7 +2,7 @@
 
 import random
 from datetime import datetime
-from _helper import send_sms
+from _helper import notify_coordinators
 
 # kept in sync with run_prism.py's API_FIELD_DEFAULTS default for
 # coordinator_alert_message -- used here too so a FakeApp/test app that
@@ -35,44 +35,19 @@ class SystemTask:
         return 1 if self.outcome == "FAILURE" else 0
 
     def notify_via_sms(self):
-        try:
-            with open(self.app.study_coordinators_path, 'r') as f:
-                lines = f.readlines()
-                lines = lines[1:]
-        except FileNotFoundError:
-            self.app.add_to_transcript("No study coordinators found. SMS notifications will not be sent.", "WARNING")
-            return 1
-        except Exception as e:
-            self.app.add_to_transcript(f"Failed to read study coordinators. Error message: {e}", "ERROR")
-            return 1
-
         alert_template = getattr(self.app, 'coordinator_alert_message', DEFAULT_COORDINATOR_ALERT_MESSAGE)
         task_start_str = self.task_start.strftime('%m/%d/%Y at %I:%M:%S %p')
-
-        phone_numbers = []
-        bodies = []
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                name, phone_number = line.split(',')
-                name = name.strip('"')
-                phone_number = phone_number.strip('"')
-                if phone_number and phone_number != "":
-                    body = alert_template.format(
-                        name=name,
-                        task_type=self.task_type,
-                        task_number=self.task_number,
-                        outcome=self.outcome,
-                        task_start=task_start_str,
-                    )
-                    phone_numbers.append(phone_number)
-                    bodies.append(body)
-            except Exception as e:
-                self.app.add_to_transcript(f"Skipping malformed study coordinator entry: {e}", "ERROR")
-
-        if not phone_numbers:
-            return 0
-
-        return send_sms(self.app, phone_numbers, bodies)
+        # Fill in every field except {name} -- notify_coordinators() fills
+        # that in per-coordinator from study_coordinators_path. Passing
+        # name='{name}' re-inserts the literal text "{name}" (str.format()
+        # doesn't recursively re-parse a substituted value as a new format
+        # field), so it survives as a placeholder for the second .format()
+        # call inside notify_coordinators().
+        message = alert_template.format(
+            name='{name}',
+            task_type=self.task_type,
+            task_number=self.task_number,
+            outcome=self.outcome,
+            task_start=task_start_str,
+        )
+        return notify_coordinators(self.app, message)

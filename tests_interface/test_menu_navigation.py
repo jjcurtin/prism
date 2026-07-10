@@ -11,6 +11,7 @@ import pytest
 import user_interface_menus._menu_helper as _menu_helper
 from user_interface_menus.utils._menu_navigation import (
     CommandInjector,
+    ReturnToMainMenu,
     check_global_menu_options,
     clear_commands_queue,
     clear_inputs_queue,
@@ -164,6 +165,23 @@ def test_goto_menu_exception_in_caller_is_caught(fake_interface):
     assert goto_menu(caller, fake_interface) is False
 
 
+def test_goto_menu_propagates_return_to_main_menu_instead_of_swallowing(fake_interface):
+    """Contrast with test_goto_menu_exception_in_caller_is_caught above: an
+    ordinary exception raised by a menu_caller is caught and converted to
+    False, but ReturnToMainMenu (the "home" command's unwind signal) must
+    NOT be -- it needs to propagate through goto_menu's try/except
+    (`except ReturnToMainMenu: raise`, ahead of the blanket `except
+    Exception`) so a "home" raised arbitrarily deep in a nested submenu call
+    reaches _main_menu.py::main_menu() instead of being reported as
+    "An error occurred while navigating to the menu".
+    """
+    def caller(self):
+        raise ReturnToMainMenu()
+
+    with pytest.raises(ReturnToMainMenu):
+        goto_menu(caller, fake_interface)
+
+
 # ------------------------------------------------------------
 # get_input / prompt_confirmation
 # ------------------------------------------------------------
@@ -309,8 +327,7 @@ def test_process_chained_command_runs_next_command(fake_interface):
 def test_process_chained_command_splits_input_values_into_inputs_queue(fake_interface, capsys):
     """The '?'-separated input values do get `.put()` onto inputs_queue
     (see _menu_navigation.py:211-219) -- but process_chained_command's
-    `finally: clear_inputs_queue(self); return 1` (see gotcha docs on
-    process_chained_command below) drains that same queue again before
+    `finally: clear_inputs_queue(self)` drains that same queue again before
     returning, on every call, success or not. So by the time the call
     returns there's nothing left to observe on the queue itself; assert on
     the print instead, and separately confirm the queue ends up empty.
@@ -325,9 +342,11 @@ def test_process_chained_command_splits_input_values_into_inputs_queue(fake_inte
 
 def test_process_chained_command_always_returns_1_even_when_goto_menu_fails(fake_interface):
     """goto_menu('unknown-command', ...) returns False (unresolvable), but
-    process_chained_command's `finally: return 1` means the caller can't
-    tell success from failure just from the return value -- documented,
-    matching the analogous CommandInjector behavior above.
+    process_chained_command unconditionally returns 1 for it anyway (an
+    explicit `return 1` follows the `goto_menu(...)` call regardless of its
+    result) -- the caller can't tell success from failure just from the
+    return value -- documented, matching the analogous CommandInjector
+    behavior above.
     """
     _set_menu_options({})
     fake_interface.commands_queue.append('unknown-command')
@@ -344,16 +363,16 @@ def test_process_chained_command_clears_inputs_queue_on_success(fake_interface):
 
 
 def test_process_chained_command_empty_queue_returns_1_without_raising(fake_interface):
-    """Real, pre-existing quirk (not fixed here -- flagged in the test
-    session report): commands_queue.popleft() on an empty deque raises
-    IndexError before `command` is ever assigned. The `except` handler then
-    references the (still-undefined) `command` name while building its
-    error message, raising UnboundLocalError *while already handling*
-    the IndexError. That new exception propagates into the `finally`
-    block -- but `finally: return 1` unconditionally swallows any
-    in-flight exception, so this never surfaces to the caller; it just
-    silently returns 1. See
-    src/user_interface_menus/utils/_menu_navigation.py:201-228.
+    """commands_queue.popleft() on an empty deque raises IndexError before
+    `command` would otherwise be assigned. `command` is now predefined
+    (`= None`) ahead of the try block specifically so the `except Exception`
+    handler's error message can safely reference it instead of raising a
+    *second* exception (UnboundLocalError) while already handling the
+    IndexError -- fixed as part of the 2026-07-10 ReturnToMainMenu/"home"
+    work, which also removed the `finally: return 1` that used to
+    unconditionally swallow any in-flight exception (including that second
+    one) regardless of what caused it. See
+    src/user_interface_menus/utils/_menu_navigation.py.
     """
     assert len(fake_interface.commands_queue) == 0
     result = process_chained_command(fake_interface)
@@ -363,4 +382,73 @@ def test_process_chained_command_empty_queue_returns_1_without_raising(fake_inte
 def test_process_chained_command_empty_command_string_raises_value_error_internally(fake_interface):
     fake_interface.commands_queue.append('')
     result = process_chained_command(fake_interface)
-    assert result == 1  # swallowed by the same finally: return 1 pattern
+    assert result == 1  # handled by `except Exception as e: ...; return 1`
+
+
+# ------------------------------------------------------------
+# ReturnToMainMenu / "home" command
+# ------------------------------------------------------------
+
+def test_process_chained_command_propagates_return_to_main_menu(fake_interface):
+    """A "home"-triggering menu_caller reached via command chaining must
+    also unwind past process_chained_command's try/except/finally, not get
+    swallowed into a normal `return 1` the way an ordinary exception would.
+    """
+    def caller(self):
+        raise ReturnToMainMenu()
+
+    _set_menu_options({'boom': {'description': 'Boom', 'menu_caller': caller}})
+    fake_interface.inputs_queue.put('leftover')
+    fake_interface.commands_queue.append('boom')
+
+    with pytest.raises(ReturnToMainMenu):
+        process_chained_command(fake_interface)
+
+    # the `finally` clause's cleanup still runs during unwinding
+    assert fake_interface.inputs_queue.empty()
+
+
+def test_home_from_three_levels_deep_returns_to_main_menu_in_one_shot(fake_interface, monkeypatch):
+    """End-to-end regression test for the recursive-menu-exit bug: each
+    submenu (main -> tasks -> tasks/add) runs its own `menu_loop`-style
+    `while True: ... if print_menu_options(...): break` as a directly
+    nested Python call (goto_menu -> menu_caller(self)), so previously
+    backing out required one ENTER per level. Confirms that typing "home"
+    from the deepest level (tasks/add) returns control to the main menu in
+    a single typed command, not N separate ENTER-equivalent inputs -- by
+    driving three real, unmodified menu functions (main_menu,
+    system_task_menu, add_task_menu) through a scripted sequence of
+    `print_fixed_terminal_prompt` responses and recording exactly which
+    menu headers get (re)drawn, in order.
+    """
+    import user_interface_menus._main_menu as main_menu_module
+    import user_interface_menus.utils._menu_display as _menu_display
+    import user_interface_menus.utils._menu_navigation as _menu_navigation
+    import user_interface_menus.tasks._add_task_menus as atm
+    import user_interface_menus.tasks._system_task_menu as stm
+    from user_interface_menus._main_menu import main_menu
+
+    headers_shown = []
+    monkeypatch.setattr(_menu_navigation, 'print_menu_header', lambda title: headers_shown.append(title))
+    monkeypatch.setattr(stm, 'print_menu_header', lambda title: headers_shown.append(title))
+    monkeypatch.setattr(atm, 'print_menu_header', lambda title: headers_shown.append(title))
+    monkeypatch.setattr(_menu_navigation, 'assistant_header_write', lambda *a, **k: None)
+    monkeypatch.setattr(stm, 'assistant_header_write', lambda *a, **k: None)
+
+    responses = iter(['tasks', 'add', 'home', 'exit'])
+    monkeypatch.setattr(_menu_display, 'print_fixed_terminal_prompt', lambda self, submenu: next(responses))
+
+    def fake_exit(self):
+        raise SystemExit(0)
+
+    monkeypatch.setattr(main_menu_module, 'exit_interface', fake_exit)
+
+    with pytest.raises(SystemExit):
+        main_menu(fake_interface)
+
+    # 'main' (startup) -> 'tasks' -> 'tasks add' -> 'main' again, straight
+    # back from the deepest level after a single "home", then 'exit' is
+    # resolved at that (correctly main-menu-level) redraw -- not, e.g., two
+    # more 'main' redraws (which repeated single-level ENTER-style unwinding
+    # would have produced) and not a repeat of 'tasks'/'tasks add'.
+    assert headers_shown == ['main', 'tasks', 'tasks add', 'main']

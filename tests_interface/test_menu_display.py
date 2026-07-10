@@ -4,9 +4,9 @@
 closure) and can't be imported/called directly, so it's exercised
 indirectly here by calling `print_menu_options(fake_interface, menu_options,
 choice=<test string>)` and asserting on the resulting side effects, per
-utils/CLAUDE.md's documented fragility: the 6 special-command prefixes
-(`command `, `?`, `/`, `$`, `-`, `!`) are destructured
-positionally from a list of booleans (_menu_display.py:127-146) -- these
+utils/CLAUDE.md's documented fragility: the 3 special-command prefixes
+(`command `, `?`, `/`) are destructured
+positionally from a list of booleans (_menu_display.py) -- these
 tests pin each prefix to its correct behavior so a silent reordering bug
 would be caught.
 
@@ -29,8 +29,8 @@ from user_interface_menus.utils._menu_display import (
     print_global_command_menu,
     print_menu_options,
     print_recent_commands,
-    print_register_command_menu,
 )
+from user_interface_menus.utils._menu_navigation import ReturnToMainMenu
 
 
 def _set_menu_options(options):
@@ -75,59 +75,32 @@ def test_slash_prefix_with_iterations_repeats_command(fake_interface):
     assert list(fake_interface.commands_queue) == ['cmd', 'cmd', 'cmd']
 
 
-def test_dollar_prefix_registers_and_saves_macro(fake_interface, monkeypatch):
-    mock_add = MagicMock(return_value=True)
-    mock_save = MagicMock()
-    monkeypatch.setattr(_menu_helper, 'add_user_defined_global_command', mock_add)
-    monkeypatch.setattr(_menu_helper, 'save_macro', mock_save)
-    result = print_menu_options(fake_interface, {}, choice='$myid = /cmd1/cmd2')
-    assert result == 1
-    mock_add.assert_called_once_with('myid', '/cmd1/cmd2', self=fake_interface)
-    mock_save.assert_called_once_with(fake_interface, 'myid', '/cmd1/cmd2')
+def test_home_command_raises_return_to_main_menu(fake_interface):
+    """The "home" global command is the fix for the recursive-menu-exit bug:
+    it must propagate all the way out of print_menu_options as a
+    ReturnToMainMenu (not get caught by print_menu_options' own outer
+    try/except and converted into an error() call/return 0), so a caller
+    several stack frames up (ultimately _main_menu.py::main_menu()) can
+    catch it and redraw a fresh main menu in one shot.
+    """
+    with pytest.raises(ReturnToMainMenu):
+        print_menu_options(fake_interface, {}, choice='home')
 
 
-def test_dollar_prefix_without_equals_has_none_command_string(fake_interface, monkeypatch):
-    mock_add = MagicMock(return_value=True)
-    monkeypatch.setattr(_menu_helper, 'add_user_defined_global_command', mock_add)
-    monkeypatch.setattr(_menu_helper, 'save_macro', MagicMock())
-    print_menu_options(fake_interface, {}, choice='$myid')
-    mock_add.assert_called_once_with('myid', None, self=fake_interface)
-
-
-def test_dollar_prefix_does_not_save_macro_when_registration_fails(fake_interface, monkeypatch):
-    mock_add = MagicMock(return_value=False)
-    mock_save = MagicMock()
-    monkeypatch.setattr(_menu_helper, 'add_user_defined_global_command', mock_add)
-    monkeypatch.setattr(_menu_helper, 'save_macro', mock_save)
-    print_menu_options(fake_interface, {}, choice='$myid = /cmd1')
-    mock_save.assert_not_called()
-
-
-def test_dash_prefix_removes_macro(fake_interface, monkeypatch):
-    mock_remove = MagicMock()
-    monkeypatch.setattr(_menu_helper, 'remove_macro', mock_remove)
-    result = print_menu_options(fake_interface, {}, choice='-myid')
-    assert result == 1
-    mock_remove.assert_called_once_with(fake_interface, '-myid')
-
-
-def test_bang_prefix_searches_macros(fake_interface, monkeypatch):
-    mock_search = MagicMock()
-    monkeypatch.setattr(_menu_helper, 'macro_search', mock_search)
-    result = print_menu_options(fake_interface, {}, choice='!query')
-    assert result == 1
-    mock_search.assert_called_once_with(fake_interface, '!query', all=False)
-
-
-def test_bang_alone_searches_all_macros(fake_interface, monkeypatch):
-    mock_search = MagicMock()
-    monkeypatch.setattr(_menu_helper, 'macro_search', mock_search)
-    print_menu_options(fake_interface, {}, choice='!')
-    mock_search.assert_called_once_with(fake_interface, '!', all=True)
+def test_home_is_exact_match_not_a_prefix(fake_interface, monkeypatch):
+    """"home" is matched by exact equality, not startswith -- unlike the
+    symbol-based prefixes below, so a menu option or typed word that merely
+    starts with "home" (e.g. "homework") isn't swallowed by it."""
+    monkeypatch.setattr(_menu_display, 'invalid_choice_menu', MagicMock())
+    monkeypatch.setattr(_menu_display, 'syntax_highlight', MagicMock())
+    _set_menu_options({})
+    result = print_menu_options(fake_interface, {}, choice='homework')
+    assert result == 0
+    _menu_display.invalid_choice_menu.assert_called_once()
 
 
 def test_no_matching_prefix_is_not_treated_as_special(fake_interface, monkeypatch):
-    """A choice with none of the 6 prefixes must fall through
+    """A choice with none of the 3 prefixes must fall through
     check_for_special_commands (returns False) to ordinary menu-option
     resolution, not be swallowed as a special command.
 
@@ -236,38 +209,6 @@ def test_print_global_command_menu_reports_no_matches(fake_interface, monkeypatc
     monkeypatch.setattr(_menu_display, 'print_menu_options', lambda self, menu_options, **k: True)
     print_global_command_menu(fake_interface, query='no-such-thing-zzz')
     assert 'No commands found matching your query.' in capsys.readouterr().out
-
-
-# ------------------------------------------------------------
-# print_register_command_menu
-# ------------------------------------------------------------
-
-def test_print_register_command_menu_saves_when_valid(fake_interface, monkeypatch):
-    fake_interface.inputs_queue.put('myid')
-    fake_interface.inputs_queue.put('/cmd1')
-    fake_interface.inputs_queue.put('')  # description left blank -> None
-    mock_add = MagicMock(return_value=True)
-    mock_save = MagicMock()
-    monkeypatch.setattr(_menu_helper, 'add_user_defined_global_command', mock_add)
-    monkeypatch.setattr(_menu_helper, 'save_macro', mock_save)
-
-    print_register_command_menu(fake_interface)
-
-    mock_add.assert_called_once_with('myid', '/cmd1', None, fake_interface)
-    mock_save.assert_called_once_with(fake_interface, 'myid', '/cmd1', None)
-
-
-def test_print_register_command_menu_rejects_empty_identifier(fake_interface, monkeypatch):
-    fake_interface.inputs_queue.put('')  # identifier blank
-    fake_interface.inputs_queue.put('/cmd1')
-    fake_interface.inputs_queue.put('')
-    mock_add = MagicMock()
-    monkeypatch.setattr(_menu_helper, 'add_user_defined_global_command', mock_add)
-    monkeypatch.setattr(_menu_helper, 'save_macro', MagicMock())
-
-    print_register_command_menu(fake_interface)
-
-    mock_add.assert_not_called()
 
 
 # ------------------------------------------------------------

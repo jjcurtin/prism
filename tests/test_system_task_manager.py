@@ -180,3 +180,43 @@ def test_remove_task_not_found_returns_1(fake_app):
 
     assert result == 1
     assert any('not found' in msg for _, msg in fake_app.transcript)
+
+
+# --- process_task dispatch-failure coordinator notification ---------------
+
+def test_process_task_import_failure_notifies_coordinators(fake_app, mocker):
+    """A dynamic-import/dispatch failure happens before any SystemTask
+    instance exists (so there's no risk of double-notifying against
+    SystemTask.execute()'s own SMS) -- this represents broken system
+    functionality (e.g. a corrupted/missing task module), so it should
+    alert coordinators via the shared notify_coordinators() helper.
+    """
+    fake_app.mode = 'prod'
+    stm = make_manager(fake_app)
+    stm.task_types = {'CHECK_SYSTEM': 'CheckSystem'}
+    notify = mocker.patch('task_managers._system_task_manager.notify_coordinators', return_value=0)
+    mocker.patch('builtins.__import__', side_effect=ImportError('boom'))
+
+    result = stm.process_task({'task_type': 'CHECK_SYSTEM'})
+
+    assert result == -1
+    notify.assert_called_once()
+    message = notify.call_args[0][1]
+    assert 'CHECK_SYSTEM' in message
+    assert 'boom' in message
+
+
+def test_process_task_import_generic_error_notifies_coordinators(fake_app, mocker):
+    fake_app.mode = 'prod'
+    stm = make_manager(fake_app)
+    stm.task_types = {'CHECK_SYSTEM': 'CheckSystem'}
+    notify = mocker.patch('task_managers._system_task_manager.notify_coordinators', return_value=0)
+    mocker.patch('builtins.__import__', side_effect=RuntimeError('kaboom'))
+
+    result = stm.process_task({'task_type': 'CHECK_SYSTEM'})
+
+    assert result == -1
+    notify.assert_called_once()
+    message = notify.call_args[0][1]
+    assert 'CHECK_SYSTEM' in message
+    assert 'kaboom' in message

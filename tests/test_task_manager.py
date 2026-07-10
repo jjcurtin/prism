@@ -127,3 +127,31 @@ def test_process_task_not_implemented_by_base_class(fake_app):
     tm = make_manager(fake_app)
     with pytest.raises(NotImplementedError):
         tm.process_task({})
+
+
+def test_run_outer_catch_all_notifies_coordinators(fake_app, mocker):
+    """run()'s outer `except Exception` is a safety net around
+    process_task() itself raising (e.g. threading/queue-level issues
+    escaping the task's own error handling) -- shared by both
+    SystemTaskManager and ParticipantManager's background threads, so this
+    represents a genuine system-level malfunction and should alert
+    coordinators.
+    """
+    fake_app.mode = 'prod'
+    tm = make_manager(fake_app)
+    tm.running = True
+    notify = mocker.patch('task_managers._task_manager.notify_coordinators', return_value=0)
+
+    def failing_process_task(task):
+        tm.running = False  # stop run()'s loop right after this task is handled
+        raise RuntimeError('boom')
+
+    tm.process_task = failing_process_task
+    tm.task_queue.put({'task_type': 'CHECK_SYSTEM'})
+
+    tm.run()
+
+    notify.assert_called_once()
+    message = notify.call_args[0][1]
+    assert 'CHECK_SYSTEM' in message
+    assert 'boom' in message

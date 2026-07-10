@@ -1,9 +1,9 @@
 # Navigation & Commands
 
 This is the machinery behind every menu in PRISM — you won't open a menu
-called "utils," but everything here is what makes typed commands, command
-chaining, and saved shortcuts work throughout the app. This README explains
-that shared behavior once instead of repeating it in every other menu.
+called "utils," but everything here is what makes typed commands and command
+chaining work throughout the app. This README explains that shared behavior
+once instead of repeating it in every other menu.
 
 ## Two ways to navigate
 
@@ -33,21 +33,12 @@ schedules it for `00:00:00` — all in one line, instead of navigating each
 screen by hand. Commands and inputs can be in any order; each `?` input
 attaches to the command immediately to its left.
 
-## Saving shortcuts (macros)
+## Jumping back to the main menu
 
-If you find yourself typing the same chain repeatedly, save it:
-
-- `$my_shortcut = /participants/sort?name` — save a chain under the name
-  `my_shortcut`
-- `my_shortcut` — run it later just by typing its name
-- `-my_shortcut` — delete a saved shortcut
-- `!my_shortcut` — search your saved shortcuts by name
-
-A few shortcuts already come built in — for example, typing `sort_name`,
-`sort_id`, or `sort_on_study` re-sorts the participant list without having
-to go into `participants/sort` yourself. There's also a `test_all` chain
-that walks through participants, tasks, and settings menus back-to-back —
-useful as a quick tour of the app or as a smoke test after a PRISM update.
+`ENTER` only backs out one menu level at a time, so getting back to the main
+menu from several levels deep normally takes one `ENTER` per level. Type
+`home` instead to jump straight back to the main menu from anywhere, in one
+step.
 
 ## The three prompts
 

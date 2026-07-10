@@ -5,6 +5,7 @@ import importlib
 from datetime import datetime
 
 from task_managers._task_manager import TaskManager
+from _helper import notify_coordinators
 
 class SystemTaskManager(TaskManager):
     def __init__(self, app, name = "SystemTaskManager"):
@@ -105,9 +106,11 @@ class SystemTaskManager(TaskManager):
                 task_class = getattr(module, task_type)
             except ImportError as e:
                 self.app.add_to_transcript(f"Failed to import task {task_type}: {e}", "ERROR")
+                notify_coordinators(self.app, f"PRISM system failure: failed to import task {task_type}. Error: {e}")
                 return -1
             except Exception as e:
                 self.app.add_to_transcript(f"An error occurred while importing task {task_type}: {e}", "ERROR")
+                notify_coordinators(self.app, f"PRISM system failure: an error occurred while importing task {task_type}. Error: {e}")
                 return -1
             r_script_path = task.get('r_script_path')
             if r_script_path:
