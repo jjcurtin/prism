@@ -75,6 +75,12 @@ def participant_management_menu(self: Interface) -> None:
             return sorted(participants, key = lambda x: (x['subid'].lower(), x['initials'].lower()))
         elif self.participant_display_mode == "unique_id":
             return sorted(participants, key = lambda x: int(x['unique_id']))
+        elif self.participant_display_mode == "subid":
+            # numeric, not lexicographic -- subid is validated as numeric on
+            # both add (_add_participant_menu.py) and update
+            # (update_field_menu's isnumeric() check), same as unique_id
+            # above, so int() is always safe here.
+            return sorted(participants, key = lambda x: int(x['subid']))
         elif self.participant_display_mode == "on_study":
             on_study_true = sorted([p for p in participants if p['on_study']], key = lambda x: int(x['unique_id']))
             on_study_false = sorted([p for p in participants if not p['on_study']], key = lambda x: int(x['unique_id']))
@@ -83,7 +89,7 @@ def participant_management_menu(self: Interface) -> None:
             return participants
 
     def change_display_mode(self: Interface) -> None:
-        modes = ["name", "unique_id", "on_study"]
+        modes = ["name", "unique_id", "subid", "on_study"]
         print("Select display mode:")
         for mode in modes:
             print(f"{yellow(mode)}")

@@ -291,6 +291,27 @@ def test_participant_management_menu_sort_by_name(fake_interface, monkeypatch):
     assert menu_options['2']['description'] == 'Baker (Amy, 200)'
 
 
+def test_participant_management_menu_sort_by_subid(fake_interface, monkeypatch):
+    """Numeric, not lexicographic -- subid is validated as numeric on both
+    add and update, so 9 must sort before 10, not after it."""
+    fake_interface.participant_display_mode = 'subid'
+    participants = [
+        _participant('300', 'Charlie', '10'),
+        _participant('100', 'Alice', '2'),
+        _participant('200', 'Bob', '9'),
+    ]
+    fake_interface.api = MagicMock(return_value=(True, {'participants': participants}))
+    mock_pmo = MagicMock(return_value=True)
+    monkeypatch.setattr(pmm, 'print_menu_options', mock_pmo)
+
+    pmm.participant_management_menu(fake_interface)
+
+    menu_options = mock_pmo.call_args[0][1]
+    assert [menu_options[str(i)]['description'] for i in (1, 2, 3)] == [
+        '2 (Alice, 100)', '9 (Bob, 200)', '10 (Charlie, 300)',
+    ]
+
+
 def test_participant_management_menu_sort_by_on_study(fake_interface, monkeypatch):
     fake_interface.participant_display_mode = 'on_study'
     participants = [
@@ -422,6 +443,14 @@ def test_participant_management_menu_change_display_mode_valid(fake_interface, m
     menu_options['sort']['menu_caller'](fake_interface)
     assert fake_interface.participant_display_mode == 'name'
     assert 'Display mode changed to name.' in capsys.readouterr().out
+
+
+def test_participant_management_menu_change_display_mode_subid(fake_interface, monkeypatch, capsys):
+    menu_options = _build_menu_options(fake_interface, monkeypatch)
+    fake_interface.inputs_queue.put('subid')
+    menu_options['sort']['menu_caller'](fake_interface)
+    assert fake_interface.participant_display_mode == 'subid'
+    assert 'Display mode changed to subid.' in capsys.readouterr().out
 
 
 def test_participant_management_menu_change_display_mode_invalid(fake_interface, monkeypatch, capsys):
