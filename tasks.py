@@ -9,11 +9,12 @@ script and is left as-is.
 
 `setup` must be invoked with the SYSTEM python (no venv exists yet) and
 computes the venv's interpreter paths itself, mirroring the old Makefile's
-OS-branch exactly (Windows: plain pip install; Linux: apt-installed pandas +
-`--system-site-packages` venv, since pandas has no prebuilt wheel for
-cp313/aarch64). Every other subcommand assumes it's already being run via
-the venv's python (so `sys.executable` correctly points at the venv) and
-just relays to the right script/subprocess.
+OS-branch exactly (Windows: plain pip install, since pandas ships a
+prebuilt wheel for every Windows-supported CPython version we target;
+Linux: apt-installed pandas + `--system-site-packages` venv, since pandas
+has no prebuilt wheel for cp313/aarch64). Every other subcommand assumes
+it's already being run via the venv's python (so `sys.executable`
+correctly points at the venv) and just relays to the right script/subprocess.
 """
 
 import argparse
@@ -39,7 +40,10 @@ def cmd_setup(args):
 
     if sys.platform == "win32":
         # Windows has prebuilt wheels for every requirement (including
-        # pandas), so a plain venv + pip install is enough.
+        # pandas, as of the 2.2.3 pin -- earlier pins had no cp313 wheel
+        # and pip would silently fall back to a from-source build that
+        # fails without MSVC Build Tools installed), so a plain venv +
+        # pip install is enough.
         subprocess.run([sys.executable, "-m", "venv", str(VENV_DIR)], check=True)
         subprocess.run([str(venv_pip), "install", "--upgrade", "pip"], check=True)
         subprocess.run([str(venv_pip), "install", "-r", "requirements.txt"], check=True)

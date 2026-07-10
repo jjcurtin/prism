@@ -65,9 +65,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          # pandas==2.2.1 (pinned in requirements.txt) has no prebuilt wheel
-          # for cp313 — pip would build it from source, which is slow even
-          # on x86_64. 3.12 has wheels for every pin in requirements.txt.
           python-version: '3.12'
       - name: Install dependencies
         run: |

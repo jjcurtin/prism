@@ -3,6 +3,6 @@ Flask-Cors==4.0.1
 Flask-Limiter==3.8.0
 waitress==3.0.2
 requests==2.31.0
-pandas==2.2.1
+pandas==2.2.3
 twilio==9.0.5
 pytz==2024.1
