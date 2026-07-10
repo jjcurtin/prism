@@ -88,13 +88,26 @@ class TaskManager():
             self.tasks.append(task_dict)
         return task_dict
     
-    def save_to_csv(self, data: list[Task], file_path: str) -> None:
+    def save_to_csv(self, data: list[Task], file_path: str, headers: list[str] | None = None) -> None:
+        """`headers` should be passed explicitly by any caller with a
+        documented on-disk schema to persist (e.g. SystemTaskManager's
+        system_task_schedule.csv, config/README.md) -- deriving it from
+        `data[0].keys()` instead is fragile: every task dict does carry
+        `one_time` (unconditionally set in add_task above), but only tasks
+        given an explicit r_script_path/participant_id carry those keys, so
+        the inferred header set silently depends on which task happens to
+        be first and can drift out of sync with whatever reads this file
+        back (a real bug: load_task_schedule()'s reader hardcoded a fixed
+        4-column schema and broke the moment a saved row picked up
+        `one_time` as a 5th column from this inference).
+        """
         try:
-            headers = data[0].keys() if data else []
+            if headers is None:
+                headers = list(data[0].keys()) if data else []
             with open(file_path, 'w') as f:
                 f.write(','.join(f'"{header}"' for header in headers) + '\n')
                 for row in data:
-                    f.write(','.join(f'"{str(row[header])}"' for header in headers) + '\n')
+                    f.write(','.join(f'"{str(row.get(header, ""))}"' for header in headers) + '\n')
         except Exception as e:
             self.app.add_to_transcript(f"Failed to save data to CSV at {file_path}: {e}", "ERROR")
 

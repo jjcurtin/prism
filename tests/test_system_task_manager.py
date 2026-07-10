@@ -59,6 +59,34 @@ def test_load_task_schedule_parses_valid_rows(tmp_path, fake_app):
     assert stm.tasks[0]['task_time'] == time(3, 0, 0)
 
 
+def test_load_task_schedule_tolerates_extra_columns(tmp_path, fake_app):
+    """Regression test for the exact crash reported in practice: a
+    system_task_schedule.csv with a 5th `one_time` column (written by the
+    old save_to_csv default-header inference -- see save_tasks() docstring)
+    used to blow up load_task_schedule() with `UnboundLocalError: cannot
+    access local variable 'task_type'`, raised from inside the except
+    ValueError handler itself after the fixed-width positional unpack
+    failed on 5 fields instead of 4. csv.DictReader maps by column name, so
+    an unexpected extra column is simply ignored rather than corrupting the
+    whole row.
+    """
+    schedule_file = tmp_path / 'system_task_schedule.csv'
+    schedule_file.write_text(
+        '"task_type","task_time","r_script_path","run_today","one_time"\n'
+        '"CHECK_SYSTEM","17:59:30","None","True","False"\n'
+        '"RUN_R_SCRIPT","18:02:30","Test.R","False","False"\n'
+    )
+    fake_app.system_task_schedule_path = str(schedule_file)
+    stm = make_manager(fake_app)
+    stm.task_types = {'CHECK_SYSTEM': 'CheckSystem', 'RUN_R_SCRIPT': 'RunRScript'}
+    stm.file_path = str(schedule_file)
+
+    stm.load_task_schedule()
+
+    assert len(stm.tasks) == 2
+    assert not any('cannot access local variable' in msg for _, msg in fake_app.transcript)
+
+
 def test_load_task_schedule_skips_blank_lines(tmp_path, fake_app):
     schedule_file = tmp_path / 'system_task_schedule.csv'
     schedule_file.write_text(
@@ -148,8 +176,40 @@ def test_save_tasks_sorts_before_writing(tmp_path, fake_app):
     stm.save_tasks()
 
     lines = schedule_file.read_text().splitlines()
-    assert lines[1] == '"A","03:00:00"'
-    assert lines[2] == '"B","09:00:00"'
+    assert lines[0] == '"task_type","task_time","r_script_path","run_today"'
+    assert lines[1] == '"A","03:00:00","",""'
+    assert lines[2] == '"B","09:00:00","",""'
+
+
+def test_save_tasks_writes_fixed_schema_regardless_of_task_dict_keys(tmp_path, fake_app):
+    """Regression test for a fixed bug: save_tasks() used to derive CSV
+    headers from whichever task happened to be data[0] (save_to_csv's old
+    default), so a task carrying extra TaskManager-generic keys (e.g.
+    one_time, unconditionally set by add_task) would silently make every
+    row gain an extra column -- load_task_schedule()'s reader, which
+    expected a fixed 4-column schema, then crashed with
+    `UnboundLocalError: cannot access local variable 'task_type'` on the
+    very next load. save_tasks() now always writes exactly
+    SCHEDULE_CSV_HEADERS, independent of what's actually in the dicts.
+    """
+    schedule_file = tmp_path / 'system_task_schedule.csv'
+    fake_app.system_task_schedule_path = str(schedule_file)
+    stm = make_manager(fake_app)
+    stm.file_path = str(schedule_file)
+    stm.tasks = [
+        {'task_type': 'CHECK_SYSTEM', 'task_time': time(3, 0, 0), 'run_today': False, 'one_time': False},
+        {'task_type': 'RUN_R_SCRIPT', 'task_time': time(4, 0, 0), 'r_script_path': 'Test.R', 'run_today': False, 'one_time': False},
+    ]
+
+    stm.save_tasks()
+
+    header, *rows = schedule_file.read_text().splitlines()
+    assert header == '"task_type","task_time","r_script_path","run_today"'
+    assert all(line.count(',') == 3 for line in rows)  # exactly 4 columns, every row
+
+    stm.task_types = {'CHECK_SYSTEM': 'CheckSystem', 'RUN_R_SCRIPT': 'RunRScript'}
+    stm.load_task_schedule()
+    assert len(stm.tasks) == 2
 
 
 def test_remove_task_removes_matching_task_and_saves(tmp_path, fake_app):

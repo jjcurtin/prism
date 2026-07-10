@@ -1,5 +1,6 @@
 """task management logic"""
 
+import csv
 import os
 from datetime import datetime
 from typing import Any
@@ -18,6 +19,15 @@ TASK_CLASSES: dict[str, type[SystemTask]] = {
     'CHECK_SYSTEM': CheckSystem,
     'RUN_R_SCRIPT': RunRScript,
 }
+
+# The documented on-disk schema for system_task_schedule.csv (config/
+# README.md) -- deliberately excludes `one_time`/`participant_id`, which
+# every task dict may carry (TaskManager.add_task) but which aren't part of
+# this file's persisted format. Named here, once, so save_tasks() (write)
+# and load_task_schedule() (read, via DictReader's header row) can't drift
+# out of sync with each other the way they did before (see save_to_csv's
+# docstring in _task_manager.py for the bug this fixes).
+SCHEDULE_CSV_HEADERS = ['task_type', 'task_time', 'r_script_path', 'run_today']
 
 class SystemTaskManager(TaskManager):
     def __init__(self, app: App, name: str = "SystemTaskManager") -> None:
@@ -50,20 +60,32 @@ class SystemTaskManager(TaskManager):
             return {}
     
     def load_task_schedule(self) -> None:
+        """Uses csv.DictReader (maps by the file's own header row) rather
+        than a naive line.split(',') + fixed-width positional unpack --
+        immune both to an embedded comma corrupting every subsequent field,
+        and to a column-count mismatch against the writer (save_tasks()),
+        which used to crash this whole method with `UnboundLocalError:
+        cannot access local variable 'task_type'` the moment the file
+        picked up an extra column save_to_csv had silently started writing
+        (see SCHEDULE_CSV_HEADERS/save_to_csv's docstring) -- task_type/
+        task_time_str come from row.get(..., '') below, so they're always
+        bound before the try block even for a malformed row.
+        """
         self.tasks.clear()
         try:
-            with open(self.file_path, 'r') as file:
-                next(file)  # skip header
-                for line in file:
-                    if not line.strip():
-                        continue
+            with open(self.file_path, 'r', newline = '') as file:
+                reader = csv.DictReader(file)
+                for row in reader:
+                    task_type = (row.get('task_type') or '').strip()
+                    task_time_str = (row.get('task_time') or '').strip()
+                    if not task_type and not task_time_str:
+                        continue  # blank line
                     try:
-                        task_type, task_time_str, r_script_path, run_today = [x.strip('"') for x in line.strip().split(',')]
                         task_time = datetime.strptime(task_time_str, '%H:%M:%S').time()
                         if task_type not in self.task_types:
                             self.app.add_to_transcript(f"Unknown task type: {task_type}", "ERROR")
                             continue
-                        self.add_task(task_type, task_time, r_script_path = r_script_path)
+                        self.add_task(task_type, task_time, r_script_path = row.get('r_script_path', ''))
                     except ValueError:
                         self.app.add_to_transcript(f"Invalid time format for task {task_type}: {task_time_str}", "ERROR")
                     except Exception as e:
@@ -94,7 +116,7 @@ class SystemTaskManager(TaskManager):
 
     def save_tasks(self) -> None:
         self.tasks.sort(key = lambda x: x['task_time'])
-        self.save_to_csv(self.tasks, self.file_path)
+        self.save_to_csv(self.tasks, self.file_path, headers = SCHEDULE_CSV_HEADERS)
 
     def remove_task(
         self,
