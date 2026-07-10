@@ -7,7 +7,6 @@ import requests
 from requests.exceptions import RequestException
 
 from system_tasks._system_task import SystemTask
-from system_tasks._push_data_to_research_drive import PushDataToResearchDrive
 
 class CheckSystem(SystemTask):
     def run(self):
@@ -133,11 +132,24 @@ class CheckSystem(SystemTask):
     def check_research_drive(self):
         if self.app.mode == "prod":
             self.app.add_to_transcript(f"INFO: Now checking Research Drive connection...")
-            researchdrivetest = PushDataToResearchDrive(self.app)
-            researchdrivetest.task_type = "PUSH_DATA_TO_RESEARCH_DRIVE"
-            result = researchdrivetest.map_network_drive()
-            if result != 0:
-                self.app.add_to_transcript("Failed to connect to Research Drive.", "ERROR")
+            drive_mount = getattr(self.app, 'drive_mount', None)
+            if not drive_mount:
+                self.app.add_to_transcript("Failed to connect to Research Drive: drive_mount is not set.", "ERROR")
+                return 1
+            # The research drive is assumed pre-mounted (config/README.md) --
+            # this just confirms the mount point is actually there and
+            # listable, rather than attempting to mount it ourselves.
+            # os.path.ismount() alone isn't reliable for network shares on
+            # every platform/filesystem, so also fail if the directory can't
+            # be listed (e.g. present but not actually connected/stale).
+            try:
+                mounted = os.path.ismount(drive_mount) or os.path.isdir(drive_mount)
+                if not mounted:
+                    self.app.add_to_transcript(f"Failed to connect to Research Drive: {drive_mount} does not exist.", "ERROR")
+                    return 1
+                os.listdir(drive_mount)
+            except Exception as e:
+                self.app.add_to_transcript(f"Failed to connect to Research Drive: {e}", "ERROR")
                 return 1
             self.app.add_to_transcript("INFO: Successfully connected to Research Drive.")
         return 0

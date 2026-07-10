@@ -73,6 +73,46 @@ def test_check_file_system_missing_drive_sourced_file_returns_1(tmp_path, fake_a
     assert any('study_coordinators_path' in msg for _, msg in fake_app.transcript)
 
 
+def test_check_research_drive_skipped_in_test_mode(fake_app):
+    fake_app.mode = 'test'
+
+    result = CheckSystem(fake_app).check_research_drive()
+
+    assert result == 0
+    assert fake_app.transcript == []
+
+
+def test_check_research_drive_prod_mode_mounted_and_listable_returns_0(tmp_path, fake_app):
+    fake_app.mode = 'prod'
+    drive_mount = tmp_path / 'drive'
+    drive_mount.mkdir()
+    fake_app.drive_mount = str(drive_mount)
+
+    result = CheckSystem(fake_app).check_research_drive()
+
+    assert result == 0
+    assert any('Successfully connected to Research Drive' in msg for _, msg in fake_app.transcript)
+
+
+def test_check_research_drive_prod_mode_missing_mount_returns_1(tmp_path, fake_app):
+    fake_app.mode = 'prod'
+    fake_app.drive_mount = str(tmp_path / 'not_actually_mounted')
+
+    result = CheckSystem(fake_app).check_research_drive()
+
+    assert result == 1
+    assert any('Failed to connect to Research Drive' in msg for _, msg in fake_app.transcript)
+
+
+def test_check_research_drive_prod_mode_unset_drive_mount_returns_1(fake_app):
+    fake_app.mode = 'prod'
+
+    result = CheckSystem(fake_app).check_research_drive()
+
+    assert result == 1
+    assert any('drive_mount is not set' in msg for _, msg in fake_app.transcript)
+
+
 def test_check_file_system_missing_drive_sourced_attr_returns_1(tmp_path, fake_app, monkeypatch):
     """Regression test for a fixed bug: check_file_system used to look for
     system_task_schedule.csv/study_coordinators.csv/script_pipeline.csv/

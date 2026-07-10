@@ -179,12 +179,7 @@ class PRISM():
             'coordinator_alert_message': 'coordinator_alert_message'
         }, "Twilio")
         load_keys('research_drive.api', {
-            'destination_path': 'destination_path',
-            'drive_letter': 'drive_letter',
-            'network_domain': 'network_domain',
-            'network_username': 'network_username',
-            'wisc_netid': 'wisc_netid',
-            'wisc_password': 'wisc_password'
+            'destination_path': 'destination_path'
         }, "Research Drive")
 
     def add_to_transcript(self, message, message_type = "INFO"):

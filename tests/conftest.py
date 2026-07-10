@@ -19,8 +19,8 @@ TWILIO_API = (
     '"fake_sid","fake_token","+15555550100","fake coordinator alert msg"\n'
 )
 RESEARCH_DRIVE_API = (
-    '"destination_path","drive_letter","network_domain","network_username","wisc_netid","wisc_password"\n'
-    '"fake_dest","Z","fake_domain","fake_netuser","fake_netid","fake_password"\n'
+    '"destination_path"\n'
+    '"fake_dest"\n'
 )
 
 STUDY_COORDINATORS_CSV = '"name","phone_number"\n"Test Coordinator","5555550100"\n'

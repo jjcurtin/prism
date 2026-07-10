@@ -10,7 +10,7 @@ def developer_documentation(self):
                 f'1. {green("qualtrics.api")}: "api_token","datacenter","ema_survey_id","feedback_survey_id"',
                 f'2. {green("followmee.api")}: "username","api_token"',
                 f'3. {green("twilio.api")}: "account_sid","auth_token","from_number","coordinator_alert_message"',
-                f'4. {green("research_drive.api")}: "destination_path","drive_letter","network_domain","network_username","wisc_netid","wisc_password"'
+                f'4. {green("research_drive.api")}: "destination_path" (the research drive is assumed already mounted -- see config/README.md)'
             ], title = "help dev start api")
 
         def config_setup(self):
