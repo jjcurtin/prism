@@ -1,4 +1,3 @@
-import os
 import queue
 from datetime import time
 
@@ -18,22 +17,16 @@ def make_manager(fake_app):
     return stm
 
 
-def test_get_task_types_lists_task_files_excluding_base_class():
-    from task_managers._system_task_manager import SystemTaskManager
+def test_get_task_types_derived_from_static_registry():
+    from task_managers._system_task_manager import SystemTaskManager, TASK_CLASSES
 
     stm = SystemTaskManager.__new__(SystemTaskManager)
-    src_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'src')
-    cwd = os.getcwd()
-    try:
-        os.chdir(src_dir)
-        task_types = stm.get_task_types()
-    finally:
-        os.chdir(cwd)
 
-    assert 'CHECK_SYSTEM' in task_types
+    task_types = stm.get_task_types()
+
+    assert set(task_types) == set(TASK_CLASSES)
     assert task_types['CHECK_SYSTEM'] == 'CheckSystem'
-    assert '_SYSTEM_TASK' not in task_types  # base class file excluded
-    assert 'SYSTEM_TASK' not in task_types
+    assert task_types['RUN_R_SCRIPT'] == 'RunRScript'
 
 
 def test_get_r_script_tasks_lists_only_R_files(tmp_path, fake_app):
@@ -182,41 +175,42 @@ def test_remove_task_not_found_returns_1(fake_app):
     assert any('not found' in msg for _, msg in fake_app.transcript)
 
 
-# --- process_task dispatch-failure coordinator notification ---------------
+# --- process_task dispatch --------------------------------------------
 
-def test_process_task_import_failure_notifies_coordinators(fake_app, mocker):
-    """A dynamic-import/dispatch failure happens before any SystemTask
-    instance exists (so there's no risk of double-notifying against
-    SystemTask.execute()'s own SMS) -- this represents broken system
-    functionality (e.g. a corrupted/missing task module), so it should
-    alert coordinators via the shared notify_coordinators() helper.
+def test_process_task_unknown_task_type_logs_and_returns_neg1(fake_app):
+    """A task_type absent from TASK_CLASSES (e.g. a stale schedule-CSV row)
+    just logs and returns -1 -- not a coordinator-alert-worthy system
+    failure, since a task type that was never registered here could never
+    have run successfully before either.
     """
-    fake_app.mode = 'prod'
     stm = make_manager(fake_app)
-    stm.task_types = {'CHECK_SYSTEM': 'CheckSystem'}
-    notify = mocker.patch('task_managers._system_task_manager.notify_coordinators', return_value=0)
-    mocker.patch('builtins.__import__', side_effect=ImportError('boom'))
+
+    result = stm.process_task({'task_type': 'NOT_A_REAL_TASK'})
+
+    assert result == -1
+    assert any('Unknown task type: NOT_A_REAL_TASK' in msg for _, msg in fake_app.transcript)
+
+
+def test_process_task_dispatches_to_registered_class_without_r_script(fake_app, mocker):
+    stm = make_manager(fake_app)
+    fake_task_class = mocker.MagicMock()
+    fake_task_class.return_value.execute.return_value = 0
+    mocker.patch.dict('task_managers._system_task_manager.TASK_CLASSES', {'CHECK_SYSTEM': fake_task_class})
 
     result = stm.process_task({'task_type': 'CHECK_SYSTEM'})
 
-    assert result == -1
-    notify.assert_called_once()
-    message = notify.call_args[0][1]
-    assert 'CHECK_SYSTEM' in message
-    assert 'boom' in message
+    assert result == 0
+    fake_task_class.assert_called_once_with(fake_app)
 
 
-def test_process_task_import_generic_error_notifies_coordinators(fake_app, mocker):
-    fake_app.mode = 'prod'
+def test_process_task_dispatches_with_r_script_path(fake_app, mocker):
     stm = make_manager(fake_app)
-    stm.task_types = {'CHECK_SYSTEM': 'CheckSystem'}
-    notify = mocker.patch('task_managers._system_task_manager.notify_coordinators', return_value=0)
-    mocker.patch('builtins.__import__', side_effect=RuntimeError('kaboom'))
+    fake_task_class = mocker.MagicMock()
+    fake_task_class.return_value.execute.return_value = 1
 
-    result = stm.process_task({'task_type': 'CHECK_SYSTEM'})
+    mocker.patch.dict('task_managers._system_task_manager.TASK_CLASSES', {'RUN_R_SCRIPT': fake_task_class})
 
-    assert result == -1
-    notify.assert_called_once()
-    message = notify.call_args[0][1]
-    assert 'CHECK_SYSTEM' in message
-    assert 'kaboom' in message
+    result = stm.process_task({'task_type': 'RUN_R_SCRIPT', 'r_script_path': 'cleanup.R'})
+
+    assert result == 1
+    fake_task_class.assert_called_once_with(fake_app, 'cleanup.R')

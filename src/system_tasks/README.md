@@ -36,6 +36,6 @@ by hand:
   `run()` must also set `self.task_type` (e.g.
   `self.task_type = "CHECK_SYSTEM"`) — that string is what
   `config/system_task_schedule.csv` and the `tasks` menu use to refer to it.
-- PRISM reloads this folder every time the task list is requested and
-  before each scheduled task runs, so new/edited task files take effect
-  without restarting the server.
+- Task types are discovered once at startup by listing this folder's
+  files — a new task file becomes available on the next PRISM restart,
+  same as any other Python import (no hot-reload).
