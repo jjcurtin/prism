@@ -86,3 +86,30 @@ def test_run_subprocess_raises_returns_1_and_restores_cwd(tmp_path, fake_app, mo
     assert result == 1
     assert os.getcwd() == original_cwd
     assert any('Rscript not found' in msg for _, msg in fake_app.transcript)
+
+
+def test_run_rscript_executable_missing_gives_actionable_message(tmp_path, fake_app, mocker):
+    """Regression test for a real-world failure: subprocess.run raises
+    FileNotFoundError (not a generic OSError) specifically when the
+    executable itself -- 'Rscript', not the .R script file, which is
+    already confirmed to exist by this point -- can't be found on PATH.
+    On Windows this is the well-known gotcha where installing R doesn't
+    add its bin/ directory to PATH automatically. This must be called out
+    explicitly rather than falling into the generic failure message.
+    """
+    (tmp_path / 'Test.R').write_text('# fake R script')
+    fake_app.r_scripts_dir = str(tmp_path)
+    original_cwd = os.getcwd()
+    mocker.patch(
+        'system_tasks._run_r_script.subprocess.run',
+        side_effect=FileNotFoundError(2, 'The system cannot find the file specified'),
+    )
+
+    result = RunRScript(fake_app, 'Test.R').run()
+
+    assert result == 1
+    assert os.getcwd() == original_cwd
+    assert any(
+        "could not launch the 'Rscript' executable" in msg and 'is R installed' in msg
+        for _, msg in fake_app.transcript
+    )

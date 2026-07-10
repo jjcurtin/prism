@@ -53,6 +53,22 @@ class RunRScript(SystemTask):
             self.app.add_to_transcript(f"{self.task_type} #{self.task_number} script run complete. Output: {result.stdout.strip()}", "SUCCESS")
             self.change_directory(initial_dir)
             return 0
+        except FileNotFoundError as e:
+            # subprocess.run raises this (not OSError generically) when the
+            # executable itself -- 'Rscript', not self.r_script_path, which
+            # was already confirmed to exist above -- can't be found on
+            # PATH. On Windows this is the well-known R gotcha: installing
+            # R doesn't add its bin/ directory (where Rscript.exe lives) to
+            # PATH automatically. Named explicitly so this reads as an
+            # actionable environment problem, not a generic script failure.
+            self.app.add_to_transcript(
+                f"ERROR: {self.task_type} #{self.task_number} could not launch the 'Rscript' executable -- "
+                f"is R installed on this machine, and is its bin/ directory (containing Rscript.exe) on PATH? "
+                f"System error: {e}",
+                "ERROR",
+            )
+            self.change_directory(initial_dir)
+            return 1
         except Exception as e:
             self.app.add_to_transcript(f"ERROR: {self.task_type} #{self.task_number} failed to properly run script. Error message: {e}", "ERROR")
             self.change_directory(initial_dir)

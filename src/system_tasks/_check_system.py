@@ -1,6 +1,7 @@
 """This file checks the system to make sure components work"""
 
 import os
+import shutil
 
 from system_tasks._system_task import SystemTask
 
@@ -9,8 +10,9 @@ class CheckSystem(SystemTask):
         self.task_type = "CHECK_SYSTEM"
         self.app.add_to_transcript(f"{self.task_type} #{self.task_number} initiated.")
         research_drive_check = self.check_research_drive()
+        rscript_check = self.check_rscript_available()
         participant_check = self.check_participants()
-        return research_drive_check + participant_check
+        return research_drive_check + rscript_check + participant_check
 
     def check_research_drive(self) -> int:
         if self.app.mode == "prod":
@@ -36,7 +38,32 @@ class CheckSystem(SystemTask):
                 return 1
             self.app.add_to_transcript("INFO: Successfully connected to Research Drive.")
         return 0
-    
+
+    def check_rscript_available(self) -> int:
+        """Unlike check_research_drive above, not gated on mode == "prod" --
+        RUN_R_SCRIPT tasks can be scheduled and tested in either mode, and
+        this is genuinely a live runtime-environment concern (is R actually
+        installed and is its bin/ directory, containing the Rscript
+        executable, on PATH), not a static local-file check the way the
+        removed check_file_system was -- same class of dependency as the
+        research drive connection, just for a local binary instead of a
+        network mount. shutil.which() uses the same PATH-resolution logic
+        subprocess.run(['Rscript', ...]) itself relies on (_run_r_script.py),
+        so this catches the exact failure mode before a scheduled script
+        ever tries to run and fails with a Windows [WinError 2]/POSIX
+        FileNotFoundError instead.
+        """
+        self.app.add_to_transcript("INFO: Now checking Rscript availability...")
+        if shutil.which('Rscript') is None:
+            self.app.add_to_transcript(
+                "Rscript executable not found on PATH -- RUN_R_SCRIPT tasks will fail. "
+                "Is R installed on this machine, and is its bin/ directory (containing "
+                "Rscript.exe) on PATH?",
+                "ERROR",
+            )
+            return 1
+        return 0
+
     def check_participants(self) -> int:
         self.app.add_to_transcript("INFO: Now checking participants...")
 
