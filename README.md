@@ -93,6 +93,47 @@ expects the research drive to already be mounted with dev credentials in
 place. **Never run PRISM in `prod` mode unless you mean to send real texts
 to real participants** — see `config/README.md`.
 
+## Setting up the files PRISM needs
+
+Beyond the code (installed above), PRISM reads several files and folders
+at startup. Most of these need no action from you — they're either already
+in the repo, created automatically, or delivered by the research drive
+once it's mounted. Only one is yours to create by hand.
+
+- **`environment`** *(repo root, git-ignored)* — a one-line file containing
+  `dev` or `prod`. Nothing to do: PRISM creates this automatically the
+  first time it runs, defaulting to `dev`. Only relevant if you're
+  intentionally switching a checkout to `prod`.
+- **`config/repo_paths.csv`** and **`config/uiconfig.txt`** *(tracked,
+  already in your checkout)* — resolution facts for this checkout (where
+  logs live locally, how the research drive mounts, interface display
+  defaults). Nothing to do unless the maintainer specifically tells you
+  this checkout's drive mount is nonstandard.
+- **`api/`** *(git-ignored — not present in a fresh checkout)* — Qualtrics
+  and Twilio credentials plus SMS message text. This comes entirely from
+  the research drive once it's mounted; you never create or edit these
+  files yourself. If PRISM's transcript says something like "Failed to
+  load Qualtrics API keys," that almost always means the drive isn't
+  mounted or reachable yet, not that a local file is missing.
+- **The rest of `config/`** (`study_coordinators.csv`,
+  `system_task_schedule.csv`) **and participant data**
+  (`study_participants.csv`, `reminders.csv`) — same story as `api/`:
+  drive-sourced, appear automatically once you're connected, not something
+  you author by hand. Prefer editing participants/tasks through the RA
+  interface's menus over touching these CSVs directly — the interface
+  validates formats (phone numbers, times, IDs) before writing, so a typo
+  gets caught immediately instead of failing silently later. See
+  `config/README.md` for the full schema of every drive-sourced file, useful
+  if you ever need to sanity-check one by eye.
+- **`scripts/`** *(git-ignored — the one thing you create yourself)* — R
+  scripts for the `RUN_R_SCRIPT` task type live here, auto-detected by
+  filename; nothing creates this directory automatically, and a
+  `RUN_R_SCRIPT` task fails with a clear "does not exist" error until it's
+  there. Create it once at the repo root (`mkdir scripts` — or whatever
+  name your `config/repo_paths.csv`/the drive's `paths.csv` actually
+  configures, ask your PI if unsure) and drop `.R` script files in
+  directly; no further registration step needed.
+
 ## Running PRISM
 
 PRISM has two separate pieces you'll typically run in two separate
@@ -193,8 +234,9 @@ target, prints the same list.
   here were removed; PRISM does not pull down or store any Qualtrics survey
   data). See `data/README.md`.
 - **logs/** — transcripts and activity logs. See `logs/README.md`.
-- **scripts/** *(git-ignored, created at runtime)* — R scripts for the script
-  pipeline; auto-detected by the task system.
+- **scripts/** *(git-ignored, create this yourself — see "Setting up the
+  files PRISM needs" above)* — R scripts for the script pipeline;
+  auto-detected by the task system.
 - **src/** — the PRISM server, interface, and system tasks. See
   `src/README.md`, which links onward to each subfolder's own README
   (`system_tasks/`, `task_managers/`, `user_interface_menus/` and its 6
