@@ -973,6 +973,36 @@ def test_process_task_reminders_file_failure_pages_again_next_day(fake_app, mock
     assert notify.call_count == 2
 
 
+def test_process_task_reminders_file_failure_three_tasks_two_days_pages_twice(fake_app, mocker):
+    """Integration-shaped regression test: the once-per-day rate limit is
+    unit-tested above one call pair at a time; this drives 3 reminder
+    tasks across 2 fake-clock days (2 tasks on day 1, 1 on day 2) through
+    the same process_task() entry point a real scheduler tick would use,
+    to confirm the once/day gate holds across more than a single pair of
+    calls -- notify_coordinators is mocked at the seam (not test-mode
+    gated away, since notify_coordinators itself no-ops outside
+    mode == 'prod') so the rate-limit path is actually exercised rather
+    than skipped.
+    """
+    fake_app.mode = 'prod'
+    fake_app.reminders_path = '/nonexistent/reminders.csv'
+    fake_app.ema_survey_id = 'fake_survey'
+    fake_app.ema_reminder_message = "reminder"
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+    mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
+    notify = mocker.patch('task_managers._participant_manager.notify_coordinators', return_value=0)
+
+    pm._now = lambda: datetime(2026, 1, 1, 9, 0, 0)
+    pm.process_task({'task_type': 'ema_reminder', 'participant_id': '000000000'})
+    pm._now = lambda: datetime(2026, 1, 1, 15, 0, 0)  # same day, later
+    pm.process_task({'task_type': 'ema_reminder', 'participant_id': '000000000'})
+    pm._now = lambda: datetime(2026, 1, 2, 9, 0, 0)  # next day
+    pm.process_task({'task_type': 'ema_reminder', 'participant_id': '000000000'})
+
+    assert notify.call_count == 2
+
+
 def test_process_task_reminders_file_readable_does_not_page(tmp_path, fake_app, mocker):
     """Control case: a healthy reminders.csv never triggers the fail-open
     WARNING/page path -- locks in that the happy path is unaffected."""
