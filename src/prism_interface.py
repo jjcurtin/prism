@@ -66,7 +66,26 @@ class PRISMInterface:
 
             if r.status_code == 200:
                 return True, r.json()
-            print(f"PRISM server returned an error (status {r.status_code}).")
+            # Reads the server's own {"error": "..."} body (_routes.py's
+            # consistent error-response shape) when present -- found by an
+            # external adversarial review: this session's own Finding 2 fix
+            # (b72cbd6) gave _routes.py distinguishable statuses/messages
+            # (409 duplicate, 403 immutable, 400 invalid value, etc.), but
+            # this method discarded the whole response body on any non-200
+            # status, so the specific reason never reached the menu that
+            # asked -- every menu printed its own generic "Failed to
+            # update participant." regardless of why. Guarded: a non-JSON
+            # or unexpectedly-shaped body (e.g. a proxy's own HTML error
+            # page) must not raise here on top of the original failure.
+            server_message = None
+            try:
+                server_message = r.json().get('error')
+            except Exception:
+                pass
+            if server_message:
+                print(f"PRISM server returned an error (status {r.status_code}): {server_message}")
+            else:
+                print(f"PRISM server returned an error (status {r.status_code}).")
         except requests.ConnectionError:
             print("Connection error occurred while trying to reach the PRISM server.")
         except requests.Timeout:
