@@ -71,52 +71,63 @@ class SystemTaskManager(TaskManager):
         task_time_str come from row.get(..., '') below, so they're always
         bound before the try block even for a malformed row.
         """
-        self.tasks.clear()
-        try:
-            with open(self.file_path, 'r', newline = '') as file:
-                reader = csv.DictReader(file)
-                for row in reader:
-                    task_type = (row.get('task_type') or '').strip()
-                    task_time_str = (row.get('task_time') or '').strip()
-                    if not task_type and not task_time_str:
-                        continue  # blank line
-                    try:
-                        task_time = datetime.strptime(task_time_str, '%H:%M:%S').time()
-                        if task_type not in self.task_types:
-                            self.app.add_to_transcript(f"Unknown task type: {task_type}", "ERROR")
-                            continue
-                        self.add_task(task_type, task_time, r_script_path = row.get('r_script_path', ''))
-                    except ValueError:
-                        self.app.add_to_transcript(f"Invalid time format for task {task_type}: {task_time_str}", "ERROR")
-                    except Exception as e:
-                        self.app.add_to_transcript(f"Error scheduling task {task_type}: {e}", "ERROR")
-                self.tasks.sort(key = lambda x: x['task_time'])
-        except FileNotFoundError:
-            self.app.add_to_transcript(f"Task schedule file not found at: {self.file_path}", "ERROR")
-        except Exception as e:
-            self.app.add_to_transcript(f"An error occurred while loading the task schedule: {e}", "ERROR")
-    
+        with self._tasks_lock:
+            self.tasks.clear()
+            try:
+                with open(self.file_path, 'r', newline = '') as file:
+                    reader = csv.DictReader(file)
+                    for row in reader:
+                        task_type = (row.get('task_type') or '').strip()
+                        task_time_str = (row.get('task_time') or '').strip()
+                        if not task_type and not task_time_str:
+                            continue  # blank line
+                        try:
+                            task_time = datetime.strptime(task_time_str, '%H:%M:%S').time()
+                            if task_type not in self.task_types:
+                                self.app.add_to_transcript(f"Unknown task type: {task_type}", "ERROR")
+                                continue
+                            self.add_task(task_type, task_time, r_script_path = row.get('r_script_path', ''))
+                        except ValueError:
+                            self.app.add_to_transcript(f"Invalid time format for task {task_type}: {task_time_str}", "ERROR")
+                        except Exception as e:
+                            self.app.add_to_transcript(f"Error scheduling task {task_type}: {e}", "ERROR")
+                    self.tasks.sort(key = lambda x: x['task_time'])
+            except FileNotFoundError:
+                self.app.add_to_transcript(f"Task schedule file not found at: {self.file_path}", "ERROR")
+            except Exception as e:
+                self.app.add_to_transcript(f"An error occurred while loading the task schedule: {e}", "ERROR")
+
     def clear_schedule(self) -> None:
-        self.tasks.clear()
+        with self._tasks_lock:
+            self.tasks.clear()
         self.save_tasks()
 
     def get_task_schedule(self) -> list[dict[str, Any]]:
         try:
-            return [
-                {
-                    "task_type": task['task_type'],
-                    "task_time": task['task_time'].strftime('%H:%M:%S'),
-                    "r_script_path": task.get('r_script_path', ''),
-                    "run_today": task.get('run_today', False)
-                } for task in self.tasks
-            ]
+            with self._tasks_lock:
+                return [
+                    {
+                        "task_type": task['task_type'],
+                        "task_time": task['task_time'].strftime('%H:%M:%S'),
+                        "r_script_path": task.get('r_script_path', ''),
+                        "run_today": task.get('run_today', False)
+                    } for task in self.tasks
+                ]
         except Exception as e:
             self.app.add_to_transcript(f"Failed to retrieve system task schedule: {e}", "ERROR")
             return []
 
     def save_tasks(self) -> None:
-        self.tasks.sort(key = lambda x: x['task_time'])
-        self.save_to_csv(self.tasks, self.file_path, headers = SCHEDULE_CSV_HEADERS)
+        # Snapshot (a shallow copy) taken under the lock, then written
+        # outside it -- file I/O should never happen while holding
+        # _tasks_lock, even though this particular write is small/fast, to
+        # keep the "never block other threads on I/O while holding this
+        # lock" rule exception-free rather than "except when it's probably
+        # fine".
+        with self._tasks_lock:
+            self.tasks.sort(key = lambda x: x['task_time'])
+            snapshot = list(self.tasks)
+        self.save_to_csv(snapshot, self.file_path, headers = SCHEDULE_CSV_HEADERS)
 
     def remove_task(
         self,
@@ -131,14 +142,20 @@ class SystemTaskManager(TaskManager):
         # real None here would already fail inside strptime() at runtime
         # (TypeError) exactly as before -- this ignore doesn't change that.
         parsed_task_time = datetime.strptime(task_time, '%H:%M:%S').time()  # type: ignore[arg-type]
-        for task in self.tasks:
-            if task['task_type'] == task_type and task['task_time'] == parsed_task_time:
-                if r_script_path and task.get('r_script_path') != r_script_path:
-                    continue
-                self.tasks.remove(task)
-                self.save_tasks()
-                self.app.add_to_transcript(f"Removed system task: {task_type} at {parsed_task_time.strftime('%H:%M:%S')}", "INFO")
-                return 0
+        with self._tasks_lock:
+            for task in self.tasks:
+                if task['task_type'] == task_type and task['task_time'] == parsed_task_time:
+                    if r_script_path and task.get('r_script_path') != r_script_path:
+                        continue
+                    self.tasks.remove(task)
+                    found = True
+                    break
+            else:
+                found = False
+        if found:
+            self.save_tasks()
+            self.app.add_to_transcript(f"Removed system task: {task_type} at {parsed_task_time.strftime('%H:%M:%S')}", "INFO")
+            return 0
         self.app.add_to_transcript(f"Task {task_type} at {parsed_task_time.strftime('%H:%M:%S')} not found.", "ERROR")
         return 1
 

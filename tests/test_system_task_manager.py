@@ -1,4 +1,5 @@
 import queue
+import threading
 from datetime import time
 
 
@@ -12,6 +13,7 @@ def make_manager(fake_app):
     stm.app = fake_app
     stm.name = 'SystemTaskManager'
     stm.tasks = []
+    stm._tasks_lock = threading.RLock()
     stm.task_queue = queue.Queue()
     stm.task_types = {}
     return stm

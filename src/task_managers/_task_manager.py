@@ -23,6 +23,28 @@ class TaskManager():
         self.name = name
         self.running = True
         self.tasks: list[Task] = []
+        # self.tasks is mutated/iterated from at least two threads: this
+        # manager's own background run() thread (check_tasks()/
+        # finish_task()'s removal), and every Flask request-handling thread
+        # (add_task()/remove_task()/etc., via _routes.py). Python's GIL
+        # prevents literal memory corruption, but it does NOT prevent a
+        # read-then-write race -- e.g. finish_task()'s `self.tasks[:] = [t
+        # for t in self.tasks if t is not task]` snapshots self.tasks via
+        # the list comprehension, then overwrites it; a concurrent
+        # add_task() append landing in that window is silently dropped,
+        # with no error or log line anywhere. An RLock (not a plain Lock)
+        # because finish_task() calls process_task() -- a subclass method
+        # that, for ParticipantManager, calls back into methods that also
+        # need this same protection (get_participant() et al) -- while
+        # already holding it in some call paths.
+        #
+        # Deliberately NOT held across process_task() itself (see
+        # finish_task() below) -- that can include a real network call
+        # (SMS send, up to _helper.SMS_SEND_TIMEOUT_SECONDS) or an R script
+        # execution, and holding a lock across either would block every
+        # other thread trying to touch self.tasks for that entire duration
+        # -- trading one hang for another.
+        self._tasks_lock = threading.RLock()
         self.task_queue: queue.Queue[Task] = queue.Queue()
         self.thread = threading.Thread(target = self.run)
         self.thread.start()
@@ -85,7 +107,8 @@ class TaskManager():
         if participant_id is not None:
             task_dict['participant_id'] = participant_id
         if track:
-            self.tasks.append(task_dict)
+            with self._tasks_lock:
+                self.tasks.append(task_dict)
         return task_dict
     
     def save_to_csv(self, data: list[Task], file_path: str, headers: list[str] | None = None) -> None:
@@ -118,15 +141,16 @@ class TaskManager():
         at the next midnight tick.
         """
         current_time = datetime.now().time()
-        if current_time.hour == 0 and current_time.minute == 0 and current_time.second == 0:
+        with self._tasks_lock:
+            if current_time.hour == 0 and current_time.minute == 0 and current_time.second == 0:
+                for task in self.tasks:
+                    task['run_today'] = False
             for task in self.tasks:
-                task['run_today'] = False
-        for task in self.tasks:
-            task_time = task['task_time']
-            diff = abs((datetime.combine(datetime.today(), current_time) - datetime.combine(datetime.today(), task_time)).total_seconds())
-            if diff <= 1 and not task['run_today']:
-                self.task_queue.put(task)
-                task['run_today'] = True
+                task_time = task['task_time']
+                diff = abs((datetime.combine(datetime.today(), current_time) - datetime.combine(datetime.today(), task_time)).total_seconds())
+                if diff <= 1 and not task['run_today']:
+                    self.task_queue.put(task)
+                    task['run_today'] = True
 
     def process_task(self, task: Task) -> int:
         raise NotImplementedError("Subclasses must implement this method.")
@@ -149,9 +173,14 @@ class TaskManager():
         recurring 'ema' task sitting alongside a one-time 'ema' send for
         that same participant).
         """
+        # process_task() runs outside the lock deliberately -- it can
+        # perform a real network call (SMS send) or R script execution,
+        # and holding _tasks_lock across that would block every other
+        # thread trying to touch self.tasks for the entire duration.
         result = self.process_task(task)
         if task.get('one_time'):
-            self.tasks[:] = [t for t in self.tasks if t is not task]
+            with self._tasks_lock:
+                self.tasks[:] = [t for t in self.tasks if t is not task]
         return result
 
     def run(self) -> None:

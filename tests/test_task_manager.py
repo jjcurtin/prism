@@ -13,6 +13,8 @@ def make_manager(fake_app):
     tm.name = 'TestManager'
     tm.tasks = []
     import queue
+    import threading
+    tm._tasks_lock = threading.RLock()
     tm.task_queue = queue.Queue()
     return tm
 
@@ -367,3 +369,88 @@ def test_run_outer_catch_all_notifies_coordinators(fake_app, mocker):
     assert message.startswith('[3001] ')
     assert 'CHECK_SYSTEM' in message
     assert 'boom' in message
+
+
+# ------------------------------------------------------------
+# _tasks_lock: real multi-threaded concurrency (not single-threaded
+# interleaving simulation) -- these are the tests that actually validate
+# the lock does what it exists for. Kept fast (small iteration counts) so
+# they don't slow the suite down, but genuinely spin real OS threads.
+# ------------------------------------------------------------
+
+def test_concurrent_add_task_no_lost_appends(fake_app):
+    """Regression test for the underlying class of bug _tasks_lock exists
+    to close: self.tasks is mutated from the background run() thread and
+    every Flask request thread. Without a lock, concurrent list.append()
+    calls interleaved with check_tasks()'s iteration/mutation could lose
+    an append. Hammers add_task() from many threads simultaneously and
+    confirms every single one survives.
+    """
+    import threading
+
+    tm = make_manager(fake_app)
+    num_threads = 10
+    tasks_per_thread = 20
+    stop_checking = threading.Event()
+
+    def add_many():
+        for _ in range(tasks_per_thread):
+            tm.add_task('CHECK_SYSTEM', '03:00:00')
+
+    def check_repeatedly():
+        # Concurrently hammers the same lock via check_tasks()'s own
+        # iteration, same as the real background thread would.
+        while not stop_checking.is_set():
+            tm.check_tasks()
+
+    checker = threading.Thread(target=check_repeatedly)
+    checker.start()
+    adders = [threading.Thread(target=add_many) for _ in range(num_threads)]
+    for t in adders:
+        t.start()
+    for t in adders:
+        t.join()
+    stop_checking.set()
+    checker.join()
+
+    assert len(tm.tasks) == num_threads * tasks_per_thread
+
+
+def test_concurrent_finish_task_removal_does_not_drop_concurrent_add(fake_app):
+    """The exact race _tasks_lock exists to close: finish_task()'s
+    `self.tasks[:] = [t for t in self.tasks if t is not task]` snapshots
+    self.tasks (via the list comprehension) and then overwrites it --
+    without a lock, a concurrent add_task() landing between that read and
+    write is silently dropped, with no error anywhere. Repeats many times
+    (real thread interleaving is non-deterministic) so this would reliably
+    fail if the lock weren't actually preventing the race.
+    """
+    import threading
+
+    tm = make_manager(fake_app)
+    tm.process_task = lambda task: 0
+    iterations = 200
+    lost_updates = 0
+
+    for _ in range(iterations):
+        one_time_task = tm.add_task('ema', '09:00:00', one_time=True)
+        added = {}
+
+        def finish():
+            tm.finish_task(one_time_task)
+
+        def add_concurrently():
+            added['task'] = tm.add_task('CHECK_SYSTEM', '03:00:00')
+
+        t1 = threading.Thread(target=finish)
+        t2 = threading.Thread(target=add_concurrently)
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+
+        if added['task'] not in tm.tasks:
+            lost_updates += 1
+        tm.tasks.clear()  # reset for the next iteration
+
+    assert lost_updates == 0

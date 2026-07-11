@@ -25,48 +25,59 @@ class ParticipantManager(TaskManager):
                 'feedback_reminder': 'feedback_reminder_time'
             }
             self.participants: list[Participant] = []
+            # Reuses TaskManager.__init__'s _tasks_lock rather than a
+            # second, separate lock -- self.participants and self.tasks are
+            # frequently mutated together in the same logical operation
+            # here (load_participants() clears both; remove_participant()
+            # removes from participants then removes each of that
+            # participant's tasks), and a single lock means there's no
+            # lock-ordering to get wrong between two locks. Never held
+            # across process_task()/send_sms() (the network call), same
+            # rule as the base class.
             self.file_path = self.app.participants_path
             self.load_participants()
         except Exception as e:
             self.app.add_to_transcript(f"Failed to initialize ParticipantManager: {e}", "ERROR")
 
     def load_participants(self) -> int:
-        try:
-            self.participants.clear()
-            self.tasks.clear()
-            with open(self.file_path, 'r') as file:
-                lines = file.readlines()
-        except Exception as e:
-            self.app.add_to_transcript(f"Failed to load participants from CSV: {e}", "ERROR")
-            return 1
-
-        for row_number, line in enumerate(lines[1:], start = 2):
-            if not line.strip():
-                continue
+        with self._tasks_lock:
             try:
-                parts = line.strip().split(',')
-                participant: Participant = {
-                    'initials': parts[0].strip('"'),
-                    'subid': parts[1].strip('"'),
-                    'unique_id': parts[2].strip('"'),
-                    'on_study': parts[3].strip('"').lower() == 'yes',
-                    'phone_number': parts[4].strip('"'),
-                    'ema_time': parts[5].strip('"'),
-                    'ema_reminder_time': parts[6].strip('"'),
-                    'feedback_time': parts[7].strip('"'),
-                    'feedback_reminder_time': parts[8].strip('"')
-                }
-                self.participants.append(participant)
-                self.schedule_participant_tasks(participant)
+                self.participants.clear()
+                self.tasks.clear()
+                with open(self.file_path, 'r') as file:
+                    lines = file.readlines()
             except Exception as e:
-                self.app.add_to_transcript(f"Skipping malformed participant row {row_number}: {e}", "ERROR")
-        return 0
-        
+                self.app.add_to_transcript(f"Failed to load participants from CSV: {e}", "ERROR")
+                return 1
+
+            for row_number, line in enumerate(lines[1:], start = 2):
+                if not line.strip():
+                    continue
+                try:
+                    parts = line.strip().split(',')
+                    participant: Participant = {
+                        'initials': parts[0].strip('"'),
+                        'subid': parts[1].strip('"'),
+                        'unique_id': parts[2].strip('"'),
+                        'on_study': parts[3].strip('"').lower() == 'yes',
+                        'phone_number': parts[4].strip('"'),
+                        'ema_time': parts[5].strip('"'),
+                        'ema_reminder_time': parts[6].strip('"'),
+                        'feedback_time': parts[7].strip('"'),
+                        'feedback_reminder_time': parts[8].strip('"')
+                    }
+                    self.participants.append(participant)
+                    self.schedule_participant_tasks(participant)
+                except Exception as e:
+                    self.app.add_to_transcript(f"Skipping malformed participant row {row_number}: {e}", "ERROR")
+            return 0
+
     def get_participant(self, unique_id: str) -> Participant | None:
         try:
-            for participant in self.participants:
-                if participant['unique_id'] == unique_id:
-                    return participant
+            with self._tasks_lock:
+                for participant in self.participants:
+                    if participant['unique_id'] == unique_id:
+                        return participant
             self.app.add_to_transcript(f"Participant with ID {unique_id} not found.", "ERROR")
             return None
         except Exception as e:
@@ -86,71 +97,84 @@ class ParticipantManager(TaskManager):
     
     def get_participants(self) -> list[Participant]:
         try:
-            return [
-                {
-                    'unique_id': participant['unique_id'],
-                    'subid': participant['subid'],
-                    'initials': participant['initials'],
-                    'on_study': participant['on_study'],
-                } for participant in self.participants
-            ]
+            with self._tasks_lock:
+                return [
+                    {
+                        'unique_id': participant['unique_id'],
+                        'subid': participant['subid'],
+                        'initials': participant['initials'],
+                        'on_study': participant['on_study'],
+                    } for participant in self.participants
+                ]
         except Exception as e:
             self.app.add_to_transcript(f"Failed to retrieve participants: {e}", "ERROR")
             return []
 
     def save_participants(self) -> int | None:
+        # Snapshot taken under the lock, file write happens outside it --
+        # same "never hold this lock across I/O" rule as
+        # SystemTaskManager.save_tasks(), even though this write is small.
+        with self._tasks_lock:
+            snapshot = list(self.participants)
         try:
             with open(self.file_path, 'w') as file:
                 file.write('"initials","subid","unique_id","on_study","phone_number","ema_time","ema_reminder_time","feedback_time","feedback_reminder_time"\n')
-                for participant in self.participants:
+                for participant in snapshot:
                     on_study_str = 'yes' if participant['on_study'] else 'no'
                     file.write(f'"{participant["initials"]}","{participant["subid"]}","{participant["unique_id"]}","{on_study_str}","{participant["phone_number"]}","{participant["ema_time"]}","{participant["ema_reminder_time"]}","{participant["feedback_time"]}","{participant["feedback_reminder_time"]}"\n')
             return None
         except Exception as e:
             self.app.add_to_transcript(f"Failed to save participants to CSV: {e}", "ERROR")
             return 1
-        
+
     def update_participant(self, unique_id: str, field: str, value: Any) -> int:
         try:
-            participant = self.get_participant(unique_id)
-            if participant:
-                if field in participant:
-                    if field == 'on_study':
-                        if str(value).strip().lower() in ('true', 'yes'):
-                            value = True
-                        elif str(value).strip().lower() in ('false', 'no'):
-                            value = False
-                        else:
-                            self.app.add_to_transcript(f"Invalid value '{value}' for on_study; expected true/false.", "ERROR")
-                            return 1
-                    participant[field] = value
-                    self.save_participants()
-                    for task_type, field_name in self.survey_types.items():
-                        if field_name == field:
-                            self.remove_task(task_type, participant_id = unique_id)
-                            self.add_task(task_type, value, participant_id = unique_id)
-                    self.app.add_to_transcript(f"Updated {field} for participant {unique_id} to {value}.", "INFO")
-                    return 0
+            # Locked as one unit: field mutation + persist + reschedule
+            # must be atomic, not three independently-interleavable steps
+            # -- get_participant()/save_participants()/remove_task()/
+            # add_task() below all reacquire this same lock themselves
+            # (it's an RLock, so that's safe from this same thread).
+            with self._tasks_lock:
+                participant = self.get_participant(unique_id)
+                if participant:
+                    if field in participant:
+                        if field == 'on_study':
+                            if str(value).strip().lower() in ('true', 'yes'):
+                                value = True
+                            elif str(value).strip().lower() in ('false', 'no'):
+                                value = False
+                            else:
+                                self.app.add_to_transcript(f"Invalid value '{value}' for on_study; expected true/false.", "ERROR")
+                                return 1
+                        participant[field] = value
+                        self.save_participants()
+                        for task_type, field_name in self.survey_types.items():
+                            if field_name == field:
+                                self.remove_task(task_type, participant_id = unique_id)
+                                self.add_task(task_type, value, participant_id = unique_id)
+                        self.app.add_to_transcript(f"Updated {field} for participant {unique_id} to {value}.", "INFO")
+                        return 0
+                    else:
+                        self.app.add_to_transcript(f"Field {field} does not exist for participant {unique_id}.", "ERROR")
+                        return 1
                 else:
-                    self.app.add_to_transcript(f"Field {field} does not exist for participant {unique_id}.", "ERROR")
+                    self.app.add_to_transcript(f"Failed to update participant {unique_id}: Participant not found.", "ERROR")
                     return 1
-            else:
-                self.app.add_to_transcript(f"Failed to update participant {unique_id}: Participant not found.", "ERROR")
-                return 1
         except Exception as e:
             self.app.add_to_transcript(f"An error occurred while updating participant {unique_id}: {e}", "ERROR")
             return 1
-        
+
     def add_participant(self, participant: Participant) -> int:
         """Rolls back the in-memory append if save_participants() fails, so
         self.participants stays in sync with what's actually on disk.
         """
-        self.participants.append(participant)
-        if self.save_participants():
-            self.participants.remove(participant)
-            return 1
-        self.schedule_participant_tasks(participant)
-        return 0
+        with self._tasks_lock:
+            self.participants.append(participant)
+            if self.save_participants():
+                self.participants.remove(participant)
+                return 1
+            self.schedule_participant_tasks(participant)
+            return 0
 
     def schedule_participant_tasks(self, participant: Participant) -> None:
         for task_type, field_name in self.survey_types.items():
@@ -159,51 +183,54 @@ class ParticipantManager(TaskManager):
                 self.add_task(task_type, task_time_str, participant_id = participant['unique_id'])
 
     def remove_participant(self, unique_id: str) -> int:
-        participant = self.get_participant(unique_id)
-        if participant:
-            self.participants.remove(participant)
-            self.save_participants()
-            for task_type, field_name in self.survey_types.items():
-                self.remove_task(task_type, participant_id = unique_id)
-            self.app.add_to_transcript(f"Removed participant {unique_id}.", "INFO")
-            return 0
-        return 1
-        
-    def remove_task(self, task_type: str, task_time: str | None = None, participant_id: str | None = None) -> int:
-        for task in self.tasks:
-            if task['participant_id'] == participant_id and task['task_type'] == task_type:
-                self.tasks.remove(task)
-                self.app.add_to_transcript(f"Removed SMS task: {task_type} for participant {participant_id}", "INFO")
+        with self._tasks_lock:
+            participant = self.get_participant(unique_id)
+            if participant:
+                self.participants.remove(participant)
+                self.save_participants()
+                for task_type, field_name in self.survey_types.items():
+                    self.remove_task(task_type, participant_id = unique_id)
+                self.app.add_to_transcript(f"Removed participant {unique_id}.", "INFO")
                 return 0
+            return 1
+
+    def remove_task(self, task_type: str, task_time: str | None = None, participant_id: str | None = None) -> int:
+        with self._tasks_lock:
+            for task in self.tasks:
+                if task['participant_id'] == participant_id and task['task_type'] == task_type:
+                    self.tasks.remove(task)
+                    self.app.add_to_transcript(f"Removed SMS task: {task_type} for participant {participant_id}", "INFO")
+                    return 0
         self.app.add_to_transcript(f"SMS task {task_type} for participant {participant_id} not found.", "ERROR")
         return 1
-    
+
     def get_task_schedule(self) -> list[dict[str, Any]]:
         try:
             data: list[dict[str, Any]] = []
-            for task in self.tasks:
-                participant_id = task.get('participant_id')
-                if participant_id is not None:
-                    # get_participant() can return None (e.g. a task
-                    # lingering for a since-removed participant); such a
-                    # task can no longer run meaningfully, so it's excluded
-                    # from the returned schedule rather than crashing this
-                    # whole lookup (get_participant() itself already logs
-                    # the "not found" error -- see process_task()'s
-                    # equivalent handling of a missing participant).
-                    participant = self.get_participant(participant_id)
-                    if participant is None:
-                        continue
-                    on_study: Any = participant['on_study']
-                else:
-                    on_study = 'N/A'
-                data.append({
-                    "participant_id": task.get('participant_id', 'N/A'),
-                    "on_study": on_study,
-                    "task_type": task['task_type'],
-                    "task_time": task['task_time'].strftime('%H:%M:%S'),
-                    "run_today": task.get('run_today', False)
-                })
+            with self._tasks_lock:
+                for task in self.tasks:
+                    participant_id = task.get('participant_id')
+                    if participant_id is not None:
+                        # get_participant() can return None (e.g. a task
+                        # lingering for a since-removed participant); such a
+                        # task can no longer run meaningfully, so it's excluded
+                        # from the returned schedule rather than crashing this
+                        # whole lookup (get_participant() itself already logs
+                        # the "not found" error -- see process_task()'s
+                        # equivalent handling of a missing participant).
+                        participant = self.get_participant(participant_id)
+                        if participant is None:
+                            continue
+                        on_study: Any = participant['on_study']
+                    else:
+                        on_study = 'N/A'
+                    data.append({
+                        "participant_id": task.get('participant_id', 'N/A'),
+                        "on_study": on_study,
+                        "task_type": task['task_type'],
+                        "task_time": task['task_time'].strftime('%H:%M:%S'),
+                        "run_today": task.get('run_today', False)
+                    })
             data.sort(key = lambda x: (x['participant_id'], x['task_time']))
             return data
         except Exception as e:

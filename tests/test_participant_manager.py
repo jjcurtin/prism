@@ -1,4 +1,5 @@
 import queue
+import threading
 
 from task_managers._participant_manager import ParticipantManager
 
@@ -12,6 +13,7 @@ def make_manager(fake_app):
     pm.app = fake_app
     pm.name = 'ParticipantManager'
     pm.tasks = []
+    pm._tasks_lock = threading.RLock()
     pm.task_queue = queue.Queue()
     pm.participants = []
     pm.survey_types = {
