@@ -2,6 +2,8 @@
 
 import os
 import platform
+import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 from types import FrameType
@@ -40,8 +42,41 @@ from task_managers._participant_manager import ParticipantManager
 # a precise, PID-targeted alternative to the old pattern-matching
 # `pkill -f run_prism.py`, which would also kill any unrelated process
 # whose command line merely contained that string (e.g. `vim run_prism.py`,
-# a second checkout's server, a grep).
+# a second checkout's server, a grep). Also read at startup itself (see
+# PRISM._acquire_pid_file) to refuse a second launch while a first is
+# still live, rather than just overwriting it.
 PID_FILE_NAME = '.run_prism.pid'
+
+
+def _pid_is_alive(pid: int) -> bool:
+    """Cross-platform liveness check for a PID recorded in PID_FILE_NAME.
+
+    POSIX: os.kill(pid, 0) sends no signal, just probes existence --
+    raises ProcessLookupError for a dead PID, succeeds (or raises
+    PermissionError, still "exists") for a live one.
+
+    Windows has no os.kill(pid, 0) equivalent; `tasklist` is already this
+    codebase's convention for Windows process inspection (see
+    stop_server.py's Windows branch).
+    """
+    if sys.platform == "win32":
+        try:
+            result = subprocess.run(
+                ["tasklist", "/FI", f"PID eq {pid}"],
+                capture_output = True, text = True, timeout = 5,
+            )
+            return str(pid) in result.stdout
+        except Exception:
+            return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # exists, just owned by someone else
+    except OSError:
+        return False
+    return True
 
 
 class PRISM():
@@ -82,7 +117,7 @@ class PRISM():
         self.mode = mode
         self.start_time = datetime.now()
         self.load_paths()
-        self._write_pid_file()
+        self._acquire_pid_file()
         self.add_to_transcript("Initializing PRISM application...", "INFO")
 
         self.load_api_keys()
@@ -311,9 +346,54 @@ class PRISM():
             self.add_to_transcript(f"Failed to read {target}: {e}", "ERROR")
             return False, None
 
-    def _write_pid_file(self) -> None:
+    def _acquire_pid_file(self) -> None:
+        """Refuses to start if the PID file already names a live process --
+        the actual fix for a double-launch producing a headless zombie, not
+        just a nice-to-have: called before self.system_task_manager/
+        self.participant_manager are constructed (see __init__ below), so a
+        refused start never spins up their background threads at all.
+
+        Found by an external adversarial review: a second launch used to
+        just overwrite the PID file and continue constructing everything.
+        If its own later launch_web_app() then failed (port already bound
+        by the first instance), nothing caught that failure (a separate,
+        following fix wraps launch_web_app() itself as defense in depth
+        for the cases this check can't prevent -- e.g. a port held by an
+        unrelated process, not another PRISM instance): the second
+        instance's main thread died while its two non-daemon manager
+        threads -- already fully loaded with the participant schedule --
+        kept running headless, silently duplicate-firing every scheduled
+        SMS to every participant at the next midnight run_today reset.
+        Refusing to construct the managers at all, here, is what actually
+        closes this off for the common case (two launches of the same
+        PRISM instance).
+
+        A stale file (naming a PID that's no longer running -- e.g. a
+        prior crash that skipped clean shutdown) is tolerated: logged as a
+        WARNING and overwritten with this process's own PID, same as
+        before this check existed.
+        """
+        pid_file = Path(self.repo_root, PID_FILE_NAME)
         try:
-            (self.repo_root / PID_FILE_NAME).write_text(str(os.getpid()))
+            recorded_pid: int | None = int(pid_file.read_text().strip())
+        except (FileNotFoundError, ValueError, OSError):
+            recorded_pid = None
+
+        if recorded_pid is not None and _pid_is_alive(recorded_pid):
+            self.add_to_transcript(
+                f"Refusing to start: {pid_file} names process {recorded_pid}, which is "
+                "still running. Stop it first (stop_server.py), or remove the PID file "
+                "yourself if you're certain it's stale.", "ERROR"
+            )
+            exit(1)
+
+        if recorded_pid is not None:
+            self.add_to_transcript(
+                f"PID file named a no-longer-running process ({recorded_pid}) -- replacing it.", "WARNING"
+            )
+
+        try:
+            pid_file.write_text(str(os.getpid()))
         except Exception as e:
             self.add_to_transcript(
                 f"Failed to write PID file (stop_server.py will fall back to pattern-matching): {e}", "WARNING"
@@ -328,12 +408,15 @@ class PRISM():
 
         Found by an external adversarial review of the double-launch
         scenario: the old unconditional unlink() meant a second instance
-        launched while a first was still running -- which clobbers the
-        first's PID file at write time (see _write_pid_file) -- would,
-        on its own later shutdown, delete a file that had already stopped
-        being "its" file, leaving the ORIGINAL still-live instance with no
-        PID file at all and untargetable by stop_server.py's precise path,
-        forcing it onto the blind pattern-match fallback instead.
+        launched while a first was still running -- which, before
+        _acquire_pid_file's liveness check existed, clobbered the first's
+        PID file unconditionally -- would, on its own later shutdown,
+        delete a file that had already stopped being "its" file, leaving
+        the ORIGINAL still-live instance with no PID file at all and
+        untargetable by stop_server.py's precise path, forcing it onto the
+        blind pattern-match fallback instead. _acquire_pid_file now
+        prevents the clobber itself; this check is defense in depth for
+        any other path that still leaves a stale/foreign PID recorded.
         """
         pid_file = Path(self.repo_root, PID_FILE_NAME)
         try:

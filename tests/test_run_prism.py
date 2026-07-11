@@ -216,3 +216,88 @@ def test_init_succeeds_regardless_of_invocation_directory(monkeypatch, fake_pris
             p.participant_manager.stop()
     finally:
         os.chdir(real_repo_root)
+
+
+# ------------------------------------------------------------
+# _pid_is_alive / _acquire_pid_file -- refuse a double launch
+# ------------------------------------------------------------
+#
+# Regression tests for the actual fix to the zombie-manager-threads bug: a
+# second launch used to just overwrite the PID file and construct
+# everything (managers included) regardless of whether a first instance
+# was still running. Verified directly (see the plan/commit message) that
+# a non-daemon background thread survives an uncaught exception in the
+# main thread -- so once launch_web_app() fails on the port-already-bound
+# second launch, its manager threads kept running headless, fully loaded
+# with the schedule. Refusing to construct the managers at all, here,
+# closes that off for the common case (two launches of the same instance).
+
+def test_pid_is_alive_true_for_the_current_process():
+    import os
+    from run_prism import _pid_is_alive
+
+    assert _pid_is_alive(os.getpid()) is True
+
+
+def test_pid_is_alive_false_for_a_dead_pid():
+    import subprocess
+    import sys
+    from run_prism import _pid_is_alive
+
+    proc = subprocess.Popen([sys.executable, '-c', 'pass'])
+    proc.wait(timeout=5)
+
+    assert _pid_is_alive(proc.pid) is False
+
+
+def test_acquire_pid_file_refuses_to_start_when_a_live_pid_is_recorded(tmp_path):
+    import os
+    import pytest
+    from run_prism import PID_FILE_NAME
+
+    p = _make_bare_prism(tmp_path)
+    pid_file = tmp_path / PID_FILE_NAME
+    pid_file.write_text(str(os.getpid()))  # this test process is definitely alive
+
+    with pytest.raises(SystemExit):
+        p._acquire_pid_file()
+
+    # Refused before overwriting -- the file must still name the "other"
+    # (in this test, coincidentally the same, but unmodified) live process,
+    # not silently get replaced on the way to refusing.
+    assert pid_file.read_text() == str(os.getpid())
+    transcript_text = (tmp_path / 'logs' / 'transcripts' / 'test_transcript.txt').read_text()
+    assert 'Refusing to start' in transcript_text
+
+
+def test_acquire_pid_file_overwrites_a_stale_pid_and_warns(tmp_path):
+    import subprocess
+    import sys
+    from run_prism import PID_FILE_NAME
+
+    proc = subprocess.Popen([sys.executable, '-c', 'pass'])
+    proc.wait(timeout=5)
+
+    p = _make_bare_prism(tmp_path)
+    pid_file = tmp_path / PID_FILE_NAME
+    pid_file.write_text(str(proc.pid))
+
+    p._acquire_pid_file()  # must not raise -- stale, not live
+
+    import os
+    assert pid_file.read_text() == str(os.getpid())
+    transcript_text = (tmp_path / 'logs' / 'transcripts' / 'test_transcript.txt').read_text()
+    assert 'no-longer-running' in transcript_text
+
+
+def test_acquire_pid_file_writes_fresh_when_no_file_exists(tmp_path):
+    import os
+    from run_prism import PID_FILE_NAME
+
+    p = _make_bare_prism(tmp_path)
+    pid_file = tmp_path / PID_FILE_NAME
+    assert not pid_file.exists()
+
+    p._acquire_pid_file()  # must not raise
+
+    assert pid_file.read_text() == str(os.getpid())
