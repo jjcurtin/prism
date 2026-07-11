@@ -98,41 +98,63 @@ def test_prism_still_serves_requests_when_research_drive_is_unmounted(booted_pri
 
 
 # ------------------------------------------------------------
-# _verify_invocation_directory / the __init__ startup guard
+# cwd independence: __init__ has no startup-directory guard
 # ------------------------------------------------------------
+#
+# There used to be one, in two versions: the original compared __file__'s
+# fixed on-disk location (could never actually fail, regardless of
+# invocation cwd -- a no-op that happened to never fire), and a later
+# replacement did a real os.getcwd() check -- which DID fire, and broke
+# `python src/run_prism.py` run from the repo root, a previously-working
+# (if only by the first version's accident) invocation style. Removed
+# entirely: cwd genuinely doesn't matter here (sys.path[0] is the script's
+# own directory regardless of launch cwd; every path this app touches is
+# repo_root/drive-anchored, never cwd-relative).
+#
+# This test deliberately reuses fake_prism_env_no_drive (drive_root never
+# created) rather than pointing at the real repo's config/repo_paths.csv --
+# that file's real drive_mount_posix (/mnt/research_drive) can hang for a
+# long time off-VPN (the exact slow-automount hazard check_research_drive()
+# elsewhere in this codebase already works around with a timeout;
+# load_paths()/load_api_keys() have no equivalent protection), which would
+# make this test flaky/slow specifically in the environment that most needs
+# to run it quickly (CI, or a laptop off VPN). A nonexistent *local* path
+# fails instantly with FileNotFoundError instead.
 
-def test_verify_invocation_directory_wrong_cwd_exits_cleanly(monkeypatch, tmp_path, capsys):
-    import run_prism
-
-    monkeypatch.chdir(tmp_path)  # anywhere but src/
-
-    with pytest.raises(SystemExit):
-        run_prism._verify_invocation_directory()
-
-    assert 'Please run this script from' in capsys.readouterr().out
-
-
-def test_verify_invocation_directory_correct_cwd_does_not_exit(monkeypatch):
-    import os
-    import run_prism
-
-    monkeypatch.chdir(os.path.dirname(os.path.abspath(run_prism.__file__)))
-
-    run_prism._verify_invocation_directory()  # must not raise
-
-
-def test_init_wrong_cwd_raises_systemexit_not_attributeerror(monkeypatch, tmp_path):
-    """Regression test for a fixed bug: the old inline guard called
-    self.add_to_transcript(...) before self.mode (and self.logs_dir, which
-    add_to_transcript itself reads) were ever set on the instance -- hitting
-    it raised AttributeError instead of the intended clean startup error.
-    Constructs a real PRISM() (not the __new__-bypassing fixtures used
-    elsewhere in this file) specifically to prove __init__ itself now fails
-    the right way.
+def test_no_startup_directory_guard_exists():
+    """Direct regression test for the removal itself: locks in that
+    _verify_invocation_directory (and any equivalent check) is gone from
+    the module, not just that its old effects don't manifest -- so a
+    future change can't silently reintroduce it under a new name without
+    this test being touched.
     """
+    import run_prism
+
+    assert not hasattr(run_prism, '_verify_invocation_directory')
+
+
+def test_init_succeeds_regardless_of_invocation_directory(monkeypatch, fake_prism_env_no_drive):
+    import os
     from run_prism import PRISM
+    from task_managers._system_task_manager import SystemTaskManager
+    from task_managers._participant_manager import ParticipantManager
 
-    monkeypatch.chdir(tmp_path)
-
-    with pytest.raises(SystemExit):
-        PRISM(mode='test')
+    original_cwd = os.getcwd()
+    real_repo_root = original_cwd  # this test file's own cwd at collection time
+    try:
+        for cwd in (fake_prism_env_no_drive, fake_prism_env_no_drive / 'config'):
+            monkeypatch.chdir(cwd)
+            # Mirrors booted_prism_no_drive's construction sequence (__init__
+            # can't be pointed at a fake repo_root directly), but repeated
+            # per-cwd to prove the outcome doesn't depend on it.
+            p = PRISM.__new__(PRISM)
+            p.mode = 'test'
+            p.repo_root = fake_prism_env_no_drive
+            p.load_paths()  # must not raise regardless of cwd
+            p.load_api_keys()
+            p.system_task_manager = SystemTaskManager(p)
+            p.participant_manager = ParticipantManager(p)
+            p.system_task_manager.stop()
+            p.participant_manager.stop()
+    finally:
+        os.chdir(real_repo_root)

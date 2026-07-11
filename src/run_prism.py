@@ -17,30 +17,24 @@ from task_managers._system_task_manager import SystemTaskManager
 from task_managers._participant_manager import ParticipantManager
 
 
-def _verify_invocation_directory() -> None:
-    """Exits cleanly if launched with a cwd other than src/. A standalone
-    function, not a PRISM method: it runs before anything on `self` is
-    initialized (see __init__ below), so it must not touch `self` at all --
-    the old inline version called self.add_to_transcript(...) here, which
-    itself reads self.mode/self.logs_dir, neither set yet at this point;
-    hitting this guard raised AttributeError instead of the intended clean
-    error message.
-
-    Also a real cwd check now, not just reordering that old call: the
-    previous version only ever compared __file__'s own on-disk location
-    (os.path.dirname(os.path.abspath(__file__)).endswith('src')), which is
-    fixed by the checkout layout regardless of the launching shell's
-    working directory -- it could essentially never fail in practice, so
-    it never actually caught the "wrong directory invocation" its message
-    implied.
-    """
-    expected_dir = os.path.dirname(os.path.abspath(__file__))
-    actual_dir = os.path.abspath(os.getcwd())
-    if actual_dir != expected_dir:
-        print(f"ERROR - Please run this script from the '{expected_dir}' directory (src/); current directory is '{actual_dir}'.")
-        exit(1)
-
-
+# There is deliberately no "must run from src/" startup guard. There used
+# to be two versions of one: the original compared __file__'s own on-disk
+# location (fixed by the checkout layout, so it could never actually fail
+# regardless of invocation directory -- a no-op that happened to never
+# fire), and a later replacement did a real os.getcwd() check that DID
+# fire -- and broke `python src/run_prism.py` run from the repo root,
+# which used to "work" (i.e. never hit the no-op guard). Neither version's
+# underlying premise holds: Python puts a script's own directory on
+# sys.path[0] regardless of the launching shell's cwd (verified), so every
+# sibling import below (`from _routes import ...`, `from _helper import
+# ...`, `task_managers.*`) already resolves the same way no matter where
+# this is launched from. And every filesystem path this program touches is
+# anchored to `repo_root` (derived from `__file__`, see load_paths() below)
+# or to the drive-mount config, never to a bare cwd-relative literal
+# (verified: no relative `open(...)`/`Path('...')`/`os.path.join('...` in
+# src/). cwd is not a real requirement of this program. If a genuinely
+# cwd-relative path is ever found, that path is the bug -- anchor it,
+# don't reintroduce this guard to paper over it.
 
 # Written to repo_root on startup, read (and removed) by stop_server.py --
 # a precise, PID-targeted alternative to the old pattern-matching
@@ -84,8 +78,6 @@ class PRISM():
     flask_app: Any  # Flask app instance; see launch_web_app()
 
     def __init__(self, mode: str = "test") -> None:
-        _verify_invocation_directory()
-
         clear()
         self.mode = mode
         self.start_time = datetime.now()
