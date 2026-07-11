@@ -1,5 +1,6 @@
 """This file checks the system to make sure components work"""
 
+import csv
 import os
 import shutil
 import threading
@@ -17,6 +18,11 @@ from system_tasks._system_task import SystemTask
 # of passively waiting minutes.
 DRIVE_CHECK_TIMEOUT_SECONDS = 20
 
+# config/README.md's documented reminders.csv schema. Named here so
+# check_reminders_file() (below) and _participant_manager.py's own reading
+# of this file are checking/reading the same columns.
+REMINDERS_CSV_EXPECTED_COLUMNS = {'subid', 'unique_id', 'on_study', 'remind_ema', 'remind_feedback'}
+
 class CheckSystem(SystemTask):
     def run(self) -> int:
         self.task_type = "CHECK_SYSTEM"
@@ -24,7 +30,8 @@ class CheckSystem(SystemTask):
         research_drive_check = self.check_research_drive()
         rscript_check = self.check_rscript_available()
         participant_check = self.check_participants()
-        return research_drive_check + rscript_check + participant_check
+        reminders_file_check = self.check_reminders_file()
+        return research_drive_check + rscript_check + participant_check + reminders_file_check
 
     def check_research_drive(self) -> int:
         if self.app.mode == "prod":
@@ -149,5 +156,34 @@ class CheckSystem(SystemTask):
             for uid, names in duplicates.items():
                 self.app.add_to_transcript(f"Unique ID: {uid}, Participants: {', '.join(names)}", "ERROR")
             self.app.add_to_transcript("Please remedy these issues either through this interface or in the CSV file and refresh from CSV when you are ready.", "ERROR")
+            return 1
+        return 0
+
+    def check_reminders_file(self) -> int:
+        """Surfaces a missing/malformed reminders.csv at the morning
+        CHECK_SYSTEM run rather than only at reminder send time -- the
+        actual reminder-suppression check (_participant_manager.py's
+        process_task) already fails open on this (sends the reminder
+        anyway, pages coordinators, rate-limited to once/day), but that
+        page only fires when a reminder task happens to run against the
+        broken file. This probe catches the problem proactively even on a
+        day with no reminder tasks due yet.
+        """
+        self.app.add_to_transcript("INFO: Now checking reminders.csv...")
+        reminders_path = getattr(self.app, 'reminders_path', None)
+        if not reminders_path:
+            self.app.add_to_transcript("Failed to check reminders.csv: reminders_path is not set.", "ERROR")
+            return 1
+        try:
+            with open(reminders_path, 'r', newline = '') as file:
+                fieldnames = set(csv.DictReader(file).fieldnames or [])
+        except Exception as e:
+            self.app.add_to_transcript(f"Failed to read reminders.csv at {reminders_path}: {e}", "ERROR")
+            return 1
+        missing = REMINDERS_CSV_EXPECTED_COLUMNS - fieldnames
+        if missing:
+            self.app.add_to_transcript(
+                f"reminders.csv at {reminders_path} is missing expected columns: {sorted(missing)}", "ERROR"
+            )
             return 1
         return 0

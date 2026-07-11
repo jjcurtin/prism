@@ -1,6 +1,6 @@
 """participant management logic"""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from _helper import send_sms, notify_coordinators
@@ -51,6 +51,10 @@ class ParticipantManager(TaskManager):
                 'feedback_reminder': 'feedback_reminder_time'
             }
             self.participants: list[Participant] = []
+            # Rate-limits the coordinator page in process_task() for a
+            # broken reminders.csv to once/day -- see that method's own
+            # comment for why the fail-open policy pages at all.
+            self._last_reminders_failure_page_date: date | None = None
             # Reuses TaskManager.__init__'s _tasks_lock rather than a
             # second, separate lock -- self.participants and self.tasks are
             # frequently mutated together in the same logical operation
@@ -415,7 +419,29 @@ class ParticipantManager(TaskManager):
         except Exception as e:
             self.app.add_to_transcript(f"Failed to retrieve system task schedule: {e}", "ERROR")
             return []
-    
+
+    def _maybe_page_reminders_csv_failure(self) -> None:
+        """Pages coordinators about a broken reminders.csv at most once per
+        calendar day -- process_task() calls this on every single reminder
+        task it processes while the file stays broken (potentially many
+        times a day across participants), and paging on every occurrence
+        would just be alert-fatigue noise for a condition that's already
+        being fixed or not.
+        """
+        today = self._now().date()
+        if self._last_reminders_failure_page_date == today:
+            return
+        self._last_reminders_failure_page_date = today
+        try:
+            notify_coordinators(
+                self.app,
+                code_prefix('2003') + "PRISM system failure: reminders.csv is missing or unreadable; "
+                "reminder-suppression checks are being skipped (participants may get a duplicate "
+                "reminder) until this is fixed."
+            )
+        except Exception as notify_error:
+            self.app.add_to_transcript(f"Also failed to notify coordinators about that error: {notify_error}", "ERROR")
+
     def process_task(self, task: Task) -> int:
         try:
             participant_id = task.get('participant_id')
@@ -459,13 +485,34 @@ class ParticipantManager(TaskManager):
             column_name = task_column_map.get(task_type)
 
             if column_name:
-                with open(self.app.reminders_path, "r", newline="") as file:
-                    reader = csv.DictReader(file)
-                    for row in reader:
-                        if row["unique_id"] == str(participant_id):
-                            if row.get(column_name, "").strip().lower() == "no":
-                                return 0  # Already opened
-                            break
+                # Isolated in its own try/except, not the method-wide one
+                # below -- this is a deliberate fail-OPEN policy, not a
+                # missing try/except. A missing/unreadable/malformed
+                # reminders.csv means this gate can't be evaluated one way
+                # or the other; the choice of what to do then is a policy
+                # decision (suppress the reminder, or send it anyway), not
+                # an implementation detail to fall out of whichever branch
+                # an exception happens to unwind into. Landed here fail-open
+                # -- on failure, log and send the reminder anyway -- because
+                # a duplicate reminder is recoverable (the participant gets
+                # texted twice) while a wrongly-suppressed one is data loss
+                # (they never get texted, and nothing else notices). The
+                # suppression logic itself, when the file IS readable, is
+                # unaffected and unchanged.
+                try:
+                    with open(self.app.reminders_path, "r", newline="") as file:
+                        reader = csv.DictReader(file)
+                        for row in reader:
+                            if row["unique_id"] == str(participant_id):
+                                if row.get(column_name, "").strip().lower() == "no":
+                                    return 0  # Already opened
+                                break
+                except Exception as e:
+                    self.app.add_to_transcript(
+                        f"Could not read reminders.csv to check {column_name} for participant "
+                        f"{participant_id}; sending the reminder anyway (fail-open). Error: {e}", "WARNING"
+                    )
+                    self._maybe_page_reminders_csv_failure()
 
             participant_phone_number = participant['phone_number']
             self.app.add_to_transcript(f"Processing SMS task: {task_type} for participant {participant_id}", "INFO")

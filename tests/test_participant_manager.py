@@ -18,6 +18,7 @@ def make_manager(fake_app):
     pm._tasks_lock = threading.RLock()
     pm._now = datetime.now
     pm._last_reset_date = datetime.now().date()
+    pm._last_reminders_failure_page_date = None
     pm.task_queue = queue.Queue()
     pm.participants = []
     pm.survey_types = {
@@ -811,6 +812,91 @@ def test_process_task_ema_reminder_sent_when_not_yet_opened(tmp_path, fake_app, 
 
     assert result == 0
     send_sms.assert_called_once_with(fake_app, ['5555550100'], mocker.ANY)
+
+
+def test_process_task_reminders_file_missing_sends_reminder_anyway(fake_app, mocker):
+    """Regression test for a fixed bug: the reminders.csv read used to sit
+    inside process_task's single whole-method try block, so a missing/
+    unreadable file made the whole task return -1 -- the reminder was
+    suppressed (not sent) and coordinators got paged on every occurrence,
+    with no rate limit. The fail-open policy: on a read failure, log a
+    WARNING and send the reminder anyway (a duplicate reminder is
+    recoverable; a wrongly-suppressed one is data loss), and page
+    coordinators, rate-limited to once/day (see the pair of tests below).
+    """
+    fake_app.mode = 'prod'
+    fake_app.reminders_path = '/nonexistent/reminders.csv'
+    fake_app.ema_survey_id = 'fake_survey'
+    fake_app.ema_reminder_message = "Hello, you have not yet completed your daily survey for today."
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+    send_sms = mocker.patch('task_managers._participant_manager.send_sms')
+    notify = mocker.patch('task_managers._participant_manager.notify_coordinators', return_value=0)
+
+    result = pm.process_task({'task_type': 'ema_reminder', 'participant_id': '000000000'})
+
+    assert result == 0
+    send_sms.assert_called_once()
+    notify.assert_called_once()
+    assert any('WARNING' == level and 'fail-open' in msg for level, msg in fake_app.transcript)
+
+
+def test_process_task_reminders_file_failure_pages_coordinators_once_per_day(fake_app, mocker):
+    fake_app.mode = 'prod'
+    fake_app.reminders_path = '/nonexistent/reminders.csv'
+    fake_app.ema_survey_id = 'fake_survey'
+    fake_app.ema_reminder_message = "reminder"
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+    pm._now = lambda: datetime(2026, 1, 1, 9, 0, 0)
+    mocker.patch('task_managers._participant_manager.send_sms')
+    notify = mocker.patch('task_managers._participant_manager.notify_coordinators', return_value=0)
+
+    pm.process_task({'task_type': 'ema_reminder', 'participant_id': '000000000'})
+    pm.process_task({'task_type': 'ema_reminder', 'participant_id': '000000000'})
+
+    notify.assert_called_once()
+
+
+def test_process_task_reminders_file_failure_pages_again_next_day(fake_app, mocker):
+    fake_app.mode = 'prod'
+    fake_app.reminders_path = '/nonexistent/reminders.csv'
+    fake_app.ema_survey_id = 'fake_survey'
+    fake_app.ema_reminder_message = "reminder"
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+    mocker.patch('task_managers._participant_manager.send_sms')
+    notify = mocker.patch('task_managers._participant_manager.notify_coordinators', return_value=0)
+
+    pm._now = lambda: datetime(2026, 1, 1, 9, 0, 0)
+    pm.process_task({'task_type': 'ema_reminder', 'participant_id': '000000000'})
+    pm._now = lambda: datetime(2026, 1, 2, 9, 0, 0)
+    pm.process_task({'task_type': 'ema_reminder', 'participant_id': '000000000'})
+
+    assert notify.call_count == 2
+
+
+def test_process_task_reminders_file_readable_does_not_page(tmp_path, fake_app, mocker):
+    """Control case: a healthy reminders.csv never triggers the fail-open
+    WARNING/page path -- locks in that the happy path is unaffected."""
+    reminders_file = tmp_path / 'reminders.csv'
+    reminders_file.write_text(
+        'subid,unique_id,on_study,remind_ema,remind_feedback\n'
+        '3000,000000000,yes,yes,no\n'
+    )
+    fake_app.reminders_path = str(reminders_file)
+    fake_app.mode = 'prod'
+    fake_app.ema_survey_id = 'fake_survey'
+    fake_app.ema_reminder_message = "reminder"
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+    mocker.patch('task_managers._participant_manager.send_sms')
+    notify = mocker.patch('task_managers._participant_manager.notify_coordinators')
+
+    pm.process_task({'task_type': 'ema_reminder', 'participant_id': '000000000'})
+
+    notify.assert_not_called()
+    assert not any(level == 'WARNING' for level, _ in fake_app.transcript)
 
 
 def test_process_task_send_sms_failure_notifies_coordinators_and_returns_neg1(fake_app, mocker):

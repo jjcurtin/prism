@@ -14,6 +14,7 @@ ERROR_CODES: dict[str, str] = {
     '1001': "system task run failed",
     '2001': "participant SMS send failed",
     '2002': "unexpected error processing participant SMS task",
+    '2003': "reminders.csv unreadable during reminder-suppression check",
     '3001': "unhandled exception escaped task manager's own error handling",
     '4001': "unhandled exception in a Flask route",
 }
