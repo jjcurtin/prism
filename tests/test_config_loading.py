@@ -142,3 +142,22 @@ def test_load_api_keys_missing_file_does_not_crash_other_files(prism_instance):
 
     assert not hasattr(prism_instance, 'twilio_account_sid')
     assert prism_instance.ema_survey_id == 'fake_ema_survey'
+
+
+def test_load_api_keys_header_only_file_does_not_crash(prism_instance):
+    """Regression test for a real bug (external adversarial review,
+    confirmed live via a direct pandas repro): pd.read_csv on a header-only
+    CSV (columns but zero data rows) succeeds and returns an empty
+    DataFrame -- df.loc[0, column] then raises KeyError: 0, uncaught (only
+    the pd.read_csv call itself was inside load_keys's try), crashing
+    PRISM.__init__ and the whole server at startup. Must degrade to the
+    same WARNING path as a missing column instead.
+    """
+    prism_instance.load_paths()
+    header_only_twilio = '"account_sid","auth_token","from_number"\n'
+    Path(prism_instance.config_base, 'api', 'twilio.api').write_text(header_only_twilio)
+
+    prism_instance.load_api_keys()  # must not raise
+
+    assert not hasattr(prism_instance, 'twilio_account_sid')
+    assert prism_instance.ema_survey_id == 'fake_ema_survey'

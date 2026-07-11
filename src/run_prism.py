@@ -281,6 +281,15 @@ class PRISM():
             except Exception as e:
                 self.add_to_transcript(f"Failed to load {label} API keys from {file_name}: {e}", "ERROR")
                 return
+            if len(df) == 0:
+                # A header-only CSV (no data row) has every column but no
+                # row 0 -- df.loc[0, column] below would raise KeyError: 0,
+                # uncaught (this whole method is called bare from
+                # __init__), crashing server startup entirely. Treated the
+                # same as a missing column: every field in this file left
+                # at its default/unset, same WARNING path.
+                self.add_to_transcript(f"{label} API file {file_name} has no data row — all its fields left unset.", "WARNING")
+                return
             for attr, column in field_map.items():
                 if column in df.columns:
                     setattr(self, attr, df.loc[0, column])
