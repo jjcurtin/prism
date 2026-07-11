@@ -573,6 +573,29 @@ def test_get_phone_numbers_returns_a_copy_not_a_live_reference(fake_app):
     assert numbers == [PARTICIPANT['phone_number']]
 
 
+def test_get_participant_ids_and_phone_numbers_on_study_only_filters(fake_app):
+    pm = make_manager(fake_app)
+    pm.participants = [
+        dict(PARTICIPANT, unique_id='1', phone_number='5555550100', on_study=True),
+        dict(PARTICIPANT, unique_id='2', phone_number='5555550101', on_study=False),
+    ]
+
+    assert pm.get_participant_ids_and_phone_numbers(on_study_only=True) == [('1', '5555550100')]
+    assert set(pm.get_participant_ids_and_phone_numbers(on_study_only=False)) == {
+        ('1', '5555550100'), ('2', '5555550101')
+    }
+
+
+def test_get_participant_ids_and_phone_numbers_returns_a_copy_not_a_live_reference(fake_app):
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+
+    pairs = pm.get_participant_ids_and_phone_numbers(on_study_only=False)
+    pm.participants.clear()
+
+    assert pairs == [(PARTICIPANT['unique_id'], PARTICIPANT['phone_number'])]
+
+
 def test_concurrent_get_phone_numbers_and_load_participants_no_race(tmp_path, fake_app):
     """Real-thread regression test for the race get_phone_numbers() exists
     to close: one thread repeatedly reloads self.participants from disk

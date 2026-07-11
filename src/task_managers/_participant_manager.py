@@ -302,6 +302,17 @@ class ParticipantManager(TaskManager):
                 return [p['phone_number'] for p in self.participants if p['on_study']]
             return [p['phone_number'] for p in self.participants]
 
+    def get_participant_ids_and_phone_numbers(self, on_study_only: bool) -> list[tuple[str, str]]:
+        """Same locked-copy contract as get_phone_numbers(), pairing each
+        phone number with its owning unique_id -- for callers (e.g. the
+        study_announcement route) that need to log which participant a
+        message was sent/simulated for, not just the phone number itself.
+        """
+        with self._tasks_lock:
+            if on_study_only:
+                return [(p['unique_id'], p['phone_number']) for p in self.participants if p['on_study']]
+            return [(p['unique_id'], p['phone_number']) for p in self.participants]
+
     def save_participants(self) -> int:
         """Returns 0 on success, 1 on failure -- same convention as every
         other mutation method in this class. (Used to return None on

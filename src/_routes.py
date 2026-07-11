@@ -315,25 +315,34 @@ def create_flask_app(app_instance: App) -> Flask:
         # Goes through the locked accessor rather than touching
         # .participants directly -- the old code read it 3 separate times
         # here with no lock, racing a concurrent refresh_participants()
-        # clearing the list mid-iteration.
-        phone_numbers = app_instance.participant_manager.get_phone_numbers(
-            on_study_only = (require_on_study.lower() == 'yes')
+        # clearing the list mid-iteration. Paired with unique_id (not just
+        # phone_number) so both the prod send log and the test-mode
+        # simulated-send log can name which participant a message was
+        # sent/simulated for.
+        on_study_only = require_on_study.lower() == 'yes'
+        participants = app_instance.participant_manager.get_participant_ids_and_phone_numbers(
+            on_study_only = on_study_only
         )
-        if not phone_numbers:
+        if not participants:
             app_instance.add_to_transcript("Study announcement failed: no participants found", "ERROR")
             return jsonify({"error": "No participants found"}), 404
+
+        scope = "on-study participants only" if on_study_only else "all participants"
+        app_instance.add_to_transcript(
+            f"Study announcement ({scope}): {len(participants)} participant(s).", "INFO"
+        )
 
         if app_instance.mode == "prod":
             send_start = datetime.now()
             attempted = 0
             failed = 0
-            for phone_number in phone_numbers:
+            for unique_id, phone_number in participants:
                 if phone_number.strip():
                     attempted += 1
                     if send_sms(app_instance, [phone_number], [data['message']]) != 0:
                         failed += 1
                     else:
-                        app_instance.add_to_transcript(f"Study announcement sent to {phone_number}", "INFO")
+                        app_instance.add_to_transcript(f"Study announcement sent to participant {unique_id}", "INFO")
             elapsed_seconds = (datetime.now() - send_start).total_seconds()
             app_instance.add_to_transcript(
                 f"Study announcement send finished in {elapsed_seconds:.1f}s "
@@ -344,7 +353,11 @@ def create_flask_app(app_instance: App) -> Flask:
             if failed:
                 return jsonify({"message": f"Study announcement sent, but failed for {failed} of {attempted} participants."}), 200
         else:
-            app_instance.add_to_transcript(f"Simulated sending messages.")
+            for unique_id, phone_number in participants:
+                if phone_number.strip():
+                    app_instance.add_to_transcript(
+                        f"Simulated study announcement send to participant {unique_id} (test mode).", "INFO"
+                    )
         return jsonify({"message": f"Study announcement sent to all participants, require on study: {require_on_study}"}), 200
 
     ########################

@@ -562,38 +562,88 @@ def test_study_announcement_missing_message(routes_client):
 
 
 def test_study_announcement_no_participants(routes_client, routes_app_instance):
-    routes_app_instance.participant_manager.get_phone_numbers.return_value = []
+    routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.return_value = []
     resp = routes_client.post('/participants/study_announcement/yes', json={'message': 'hi'})
     assert resp.status_code == 404
 
 
 def test_study_announcement_passes_on_study_only_flag_through(routes_client, routes_app_instance, monkeypatch):
     """Filtering by on_study now happens inside ParticipantManager's locked
-    get_phone_numbers() (see its own tests), not in the route -- this just
-    confirms the route passes the right flag through and never touches
-    .participants directly.
+    get_participant_ids_and_phone_numbers() (see its own tests), not in the
+    route -- this just confirms the route passes the right flag through
+    and never touches .participants directly.
     """
-    routes_app_instance.participant_manager.get_phone_numbers.return_value = ['5555550100']
+    routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.return_value = [
+        ('000000000', '5555550100')
+    ]
     send_sms_mock = MagicMock(return_value=0)
     monkeypatch.setattr('_routes.send_sms', send_sms_mock)
 
     resp = routes_client.post('/participants/study_announcement/yes', json={'message': 'hi'})
 
     assert resp.status_code == 200
-    routes_app_instance.participant_manager.get_phone_numbers.assert_called_once_with(on_study_only=True)
+    routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.assert_called_once_with(
+        on_study_only=True
+    )
     # test mode -- send_sms should never be invoked regardless of filtering
     send_sms_mock.assert_not_called()
 
 
+def test_study_announcement_test_mode_logs_simulated_send_per_participant(routes_client, routes_app_instance):
+    """Regression test for a real gap: the test-mode transcript line used
+    to be a single generic "Simulated sending messages." with no per-
+    participant detail and no indication of the announcement's scope
+    (on-study-only vs. all participants). Now names each recipient by
+    unique_id and logs the scope separately.
+    """
+    routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.return_value = [
+        ('000000000', '5555550100'), ('000000001', '5555550101')
+    ]
+
+    resp = routes_client.post('/participants/study_announcement/yes', json={'message': 'hi'})
+
+    assert resp.status_code == 200
+    transcript_messages = [msg for _, msg in routes_app_instance.transcript]
+    assert any(
+        'Study announcement' in msg and 'on-study participants only' in msg for msg in transcript_messages
+    )
+    assert any(
+        'Simulated study announcement send to participant 000000000' in msg and 'test mode' in msg
+        for msg in transcript_messages
+    )
+    assert any(
+        'Simulated study announcement send to participant 000000001' in msg and 'test mode' in msg
+        for msg in transcript_messages
+    )
+
+
+def test_study_announcement_logs_all_participants_scope(routes_client, routes_app_instance):
+    routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.return_value = [
+        ('000000000', '5555550100')
+    ]
+
+    resp = routes_client.post('/participants/study_announcement/no', json={'message': 'hi'})
+
+    assert resp.status_code == 200
+    assert any(
+        'Study announcement' in msg and 'all participants' in msg for _, msg in routes_app_instance.transcript
+    )
+
+
 def test_study_announcement_prod_mode_all_succeed(routes_client, routes_app_instance, monkeypatch):
     routes_app_instance.mode = 'prod'
-    routes_app_instance.participant_manager.get_phone_numbers.return_value = ['5555550100', '5555550101']
+    routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.return_value = [
+        ('000000000', '5555550100'), ('000000001', '5555550101')
+    ]
     monkeypatch.setattr('_routes.send_sms', MagicMock(return_value=0))
 
     resp = routes_client.post('/participants/study_announcement/yes', json={'message': 'hi'})
 
     assert resp.status_code == 200
     assert 'message' in resp.get_json()
+    assert any(
+        'Study announcement sent to participant 000000000' in msg for _, msg in routes_app_instance.transcript
+    )
 
 
 def test_study_announcement_prod_mode_all_fail_is_502(routes_client, routes_app_instance, monkeypatch):
@@ -602,7 +652,9 @@ def test_study_announcement_prod_mode_all_fail_is_502(routes_client, routes_app_
     every single SMS failed to send.
     """
     routes_app_instance.mode = 'prod'
-    routes_app_instance.participant_manager.get_phone_numbers.return_value = ['5555550100', '5555550101']
+    routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.return_value = [
+        ('000000000', '5555550100'), ('000000001', '5555550101')
+    ]
     monkeypatch.setattr('_routes.send_sms', MagicMock(return_value=1))
 
     resp = routes_client.post('/participants/study_announcement/yes', json={'message': 'hi'})
@@ -612,7 +664,9 @@ def test_study_announcement_prod_mode_all_fail_is_502(routes_client, routes_app_
 
 def test_study_announcement_prod_mode_partial_failure_notes_count(routes_client, routes_app_instance, monkeypatch):
     routes_app_instance.mode = 'prod'
-    routes_app_instance.participant_manager.get_phone_numbers.return_value = ['5555550100', '5555550101']
+    routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.return_value = [
+        ('000000000', '5555550100'), ('000000001', '5555550101')
+    ]
     monkeypatch.setattr('_routes.send_sms', MagicMock(side_effect=[0, 1]))
 
     resp = routes_client.post('/participants/study_announcement/yes', json={'message': 'hi'})
@@ -623,7 +677,9 @@ def test_study_announcement_prod_mode_partial_failure_notes_count(routes_client,
 
 def test_study_announcement_prod_mode_logs_elapsed_send_time(routes_client, routes_app_instance, monkeypatch):
     routes_app_instance.mode = 'prod'
-    routes_app_instance.participant_manager.get_phone_numbers.return_value = ['5555550100']
+    routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.return_value = [
+        ('000000000', '5555550100')
+    ]
     monkeypatch.setattr('_routes.send_sms', MagicMock(return_value=0))
 
     resp = routes_client.post('/participants/study_announcement/yes', json={'message': 'hi'})
