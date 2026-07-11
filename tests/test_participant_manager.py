@@ -842,6 +842,43 @@ def test_process_task_link_parsing_failure_returns_neg1_no_crash(fake_app, mocke
     assert any('Error parsing link' in msg for _, msg in fake_app.transcript)
 
 
+def test_process_task_blank_survey_id_returns_neg1_no_send(fake_app, mocker):
+    """Regression test for a real bug (external adversarial review,
+    confirmed live): a blank/NaN or unfilled-in "REPLACE_WITH_..."
+    placeholder survey_id used to be interpolated straight into the
+    outbound Qualtrics link with no check at all -- e.g. NaN produces a
+    literal ".../form/nan?Q_ExternalData=..." link texted to a real
+    participant. process_task now applies the same _is_real_value() guard
+    send_sms already applies to Twilio credentials.
+    """
+    fake_app.mode = 'prod'
+    fake_app.ema_survey_id = float('nan')
+    fake_app.ema_message = 'Time for your survey.'
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+    send_sms = mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
+
+    result = pm.process_task({'task_type': 'ema', 'participant_id': '000000000'})
+
+    assert result == -1
+    send_sms.assert_not_called()
+    assert any('Error parsing link' in msg for _, msg in fake_app.transcript)
+
+
+def test_process_task_placeholder_survey_id_returns_neg1_no_send(fake_app, mocker):
+    fake_app.mode = 'prod'
+    fake_app.ema_survey_id = 'REPLACE_WITH_QUALTRICS_EMA_SURVEY_ID'
+    fake_app.ema_message = 'Time for your survey.'
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+    send_sms = mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
+
+    result = pm.process_task({'task_type': 'ema', 'participant_id': '000000000'})
+
+    assert result == -1
+    send_sms.assert_not_called()
+
+
 def test_process_task_unknown_sms_task_type_does_not_notify_coordinators(fake_app, mocker):
     """Judgment call: an unrecognized task_type reaching this code is a
     data-shape/config-drift issue (e.g. survey_types gained a new key that

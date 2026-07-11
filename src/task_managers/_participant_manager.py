@@ -3,7 +3,7 @@
 from datetime import date, datetime
 from typing import Any
 
-from _helper import is_valid_phone_number, send_sms, notify_coordinators
+from _helper import is_valid_phone_number, send_sms, notify_coordinators, _is_real_value
 from _error_codes import code_prefix
 from _types import App
 from task_managers._task_manager import TaskManager, Task
@@ -695,6 +695,17 @@ class ParticipantManager(TaskManager):
                 survey_id_attr, message_attr = task_attr_map[task_type]
                 survey_id = getattr(self.app, survey_id_attr)
                 message = getattr(self.app, message_attr)
+                # _is_real_value(), not a bare presence check -- same guard
+                # send_sms already applies to Twilio credentials. Found by
+                # an external adversarial review, confirmed live: a blank
+                # or unfilled-in "REPLACE_WITH_..." placeholder survey_id
+                # (qualtrics.api never loaded, or never filled in) used to
+                # be interpolated straight into the outbound link with no
+                # check at all -- e.g. NaN produces a literal
+                # ".../form/nan?Q_ExternalData=..." link texted to a real
+                # participant.
+                if not _is_real_value(survey_id):
+                    raise ValueError(f"{survey_id_attr} is not set to a real value (got {survey_id!r})")
                 survey_link = f"https://uwmadison.co1.qualtrics.com/jfe/form/{survey_id}?Q_ExternalData={participant_id}"
                 body = f"{message} {survey_link}"
             except Exception as e:
