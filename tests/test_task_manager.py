@@ -277,6 +277,25 @@ def test_save_to_csv_empty_data_writes_no_header(tmp_path, fake_app):
     assert out_file.read_text() == '\n'
 
 
+def test_save_to_csv_escapes_embedded_quote_in_field(tmp_path, fake_app):
+    """Locks in a correctness improvement from switching to csv.writer: the
+    old f-string writer (f'"{value}"') never escaped an embedded quote,
+    corrupting the row. csv.writer doubles it per RFC4180, and the matching
+    reader (csv.reader) round-trips it correctly.
+    """
+    import csv as csv_module
+
+    tm = make_manager(fake_app)
+    out_file = tmp_path / 'out.csv'
+    data = [{'task_type': 'Smith, "Bob"', 'task_time': time(3, 0, 0)}]
+
+    tm.save_to_csv(data, str(out_file))
+
+    with open(out_file, newline='') as f:
+        rows = list(csv_module.reader(f))
+    assert rows[1][0] == 'Smith, "Bob"'
+
+
 def test_save_to_csv_failure_logs_error_instead_of_raising(fake_app):
     tm = make_manager(fake_app)
 

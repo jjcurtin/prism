@@ -3,6 +3,7 @@
 from twilio.rest import Client
 from twilio.http.http_client import TwilioHttpClient
 from twilio.base.exceptions import TwilioRestException
+import csv
 import os
 
 from _types import App
@@ -167,8 +168,12 @@ def notify_coordinators(app: App, message: str) -> int:
         return 0
 
     try:
-        with open(app.study_coordinators_path, 'r') as f:
-            lines = f.readlines()[1:]
+        with open(app.study_coordinators_path, 'r', newline = '') as f:
+            # csv.DictReader (maps by the file's own header row) rather
+            # than a naive line.split(',') + strip('"') -- immune to an
+            # embedded comma or quote in a coordinator's name corrupting
+            # the phone_number field alongside it.
+            rows = list(csv.DictReader(f))
     except FileNotFoundError:
         app.add_to_transcript("No study coordinators found. SMS notifications will not be sent.", "WARNING")
         return 1
@@ -178,14 +183,16 @@ def notify_coordinators(app: App, message: str) -> int:
 
     phone_numbers: list[str] = []
     bodies: list[str] = []
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
+    for row in rows:
         try:
-            name, phone_number = line.split(',')
-            name = name.strip('"')
-            phone_number = phone_number.strip('"')
+            # DictReader fills a row shorter than the header with None for
+            # its missing trailing columns (restval) -- distinct from a
+            # column that's present but genuinely blank (""), which is a
+            # normal "no phone number on file" case, not malformed.
+            if row.get('name') is None or row.get('phone_number') is None:
+                raise ValueError(f"row is missing a column: {row}")
+            name = row['name'].strip()
+            phone_number = row['phone_number'].strip()
             if phone_number:
                 try:
                     body = message.format(name=name)

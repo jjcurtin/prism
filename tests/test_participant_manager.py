@@ -329,6 +329,32 @@ def test_load_participants_on_study_parses_yes_no(tmp_path, fake_app):
     assert pm.participants[1]['on_study'] is False
 
 
+def test_load_participants_reads_file_written_by_old_naive_serializer(tmp_path, fake_app):
+    """"Verify, don't assume" compatibility check: the old hand-rolled
+    writer's output (every field quoted, no embedded metacharacters in this
+    sample) happens to already be valid CSV -- confirms the new
+    csv.DictReader-based load_participants() still accepts it."""
+    csv_file = tmp_path / 'study_participants.csv'
+    csv_file.write_text(
+        '"initials","subid","unique_id","on_study","phone_number","ema_time",'
+        '"ema_reminder_time","feedback_time","feedback_reminder_time"\n'
+        '"JD","3000","000000000","yes","5555550100","09:00:00","10:00:00","19:00:00","20:00:00"\n'
+    )
+    fake_app.participants_path = str(csv_file)
+    pm = make_manager(fake_app)
+    pm.file_path = str(csv_file)
+
+    result = pm.load_participants()
+
+    assert result == 0
+    participant = pm.participants[0]
+    assert participant == {
+        'initials': 'JD', 'subid': '3000', 'unique_id': '000000000', 'on_study': True,
+        'phone_number': '5555550100', 'ema_time': '09:00:00', 'ema_reminder_time': '10:00:00',
+        'feedback_time': '19:00:00', 'feedback_reminder_time': '20:00:00',
+    }
+
+
 # --- process_task ----------------------------------------------------------
 
 def test_process_task_missing_participant_id_returns_neg1(fake_app):
@@ -648,3 +674,23 @@ def test_save_participants_round_trips_through_load(tmp_path, fake_app):
     assert pm.participants[0]['initials'] == 'JD'
     assert pm.participants[0]['subid'] == '3000'
     assert pm.participants[0]['on_study'] is True
+
+
+def test_save_participants_then_load_participants_round_trips_embedded_comma_and_quote(tmp_path, fake_app):
+    """Regression test for a fixed bug: the old hand-rolled writer/reader
+    (line.split(',') + strip('"'), and f-string quoting with no escaping)
+    corrupted any field containing a comma or embedded quote. csv.DictWriter/
+    DictReader are immune to both.
+    """
+    csv_file = tmp_path / 'study_participants.csv'
+    fake_app.participants_path = str(csv_file)
+    pm = make_manager(fake_app)
+    pm.file_path = str(csv_file)
+    tricky_participant = dict(PARTICIPANT, initials='Smith, "Bob"')
+    pm.participants = [tricky_participant]
+
+    pm.save_participants()
+    pm.load_participants()
+
+    assert pm.participants[0]['initials'] == 'Smith, "Bob"'
+    assert pm.participants[0]['subid'] == PARTICIPANT['subid']

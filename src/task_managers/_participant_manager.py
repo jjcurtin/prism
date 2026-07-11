@@ -14,6 +14,16 @@ import csv
 # convention in _task_manager.py.
 Participant = dict[str, Any]
 
+# The documented on-disk schema for study_participants.csv (config/
+# README.md). Named once here so save_participants() (write) and
+# load_participants() (read, via DictReader's header row) can't drift out
+# of sync with each other -- same reasoning as SystemTaskManager's
+# SCHEDULE_CSV_HEADERS.
+PARTICIPANT_CSV_HEADERS = [
+    'initials', 'subid', 'unique_id', 'on_study', 'phone_number',
+    'ema_time', 'ema_reminder_time', 'feedback_time', 'feedback_reminder_time',
+]
+
 class ParticipantManager(TaskManager):
     def __init__(self, app: App, name: str = "ParticipantManager") -> None:
         try:
@@ -40,31 +50,36 @@ class ParticipantManager(TaskManager):
             self.app.add_to_transcript(f"Failed to initialize ParticipantManager: {e}", "ERROR")
 
     def load_participants(self) -> int:
+        """Uses csv.DictReader (maps by the file's own header row) rather
+        than a naive line.split(',') + strip('"') positional unpack --
+        immune to an embedded comma or quote in a field corrupting every
+        subsequent field, unlike the old parser.
+        """
         with self._tasks_lock:
             try:
                 self.participants.clear()
                 self.tasks.clear()
-                with open(self.file_path, 'r') as file:
-                    lines = file.readlines()
+                with open(self.file_path, 'r', newline = '') as file:
+                    reader = csv.DictReader(file)
+                    rows = list(reader)
             except Exception as e:
                 self.app.add_to_transcript(f"Failed to load participants from CSV: {e}", "ERROR")
                 return 1
 
-            for row_number, line in enumerate(lines[1:], start = 2):
-                if not line.strip():
-                    continue
+            for row_number, row in enumerate(rows, start = 2):
+                if not any((row.get(col) or '').strip() for col in PARTICIPANT_CSV_HEADERS):
+                    continue  # blank line
                 try:
-                    parts = line.strip().split(',')
                     participant: Participant = {
-                        'initials': parts[0].strip('"'),
-                        'subid': parts[1].strip('"'),
-                        'unique_id': parts[2].strip('"'),
-                        'on_study': parts[3].strip('"').lower() == 'yes',
-                        'phone_number': parts[4].strip('"'),
-                        'ema_time': parts[5].strip('"'),
-                        'ema_reminder_time': parts[6].strip('"'),
-                        'feedback_time': parts[7].strip('"'),
-                        'feedback_reminder_time': parts[8].strip('"')
+                        'initials': row.get('initials') or '',
+                        'subid': row.get('subid') or '',
+                        'unique_id': row.get('unique_id') or '',
+                        'on_study': (row.get('on_study') or '').strip().lower() == 'yes',
+                        'phone_number': row.get('phone_number') or '',
+                        'ema_time': row.get('ema_time') or '',
+                        'ema_reminder_time': row.get('ema_reminder_time') or '',
+                        'feedback_time': row.get('feedback_time') or '',
+                        'feedback_reminder_time': row.get('feedback_reminder_time') or '',
                     }
                     self.participants.append(participant)
                     self.schedule_participant_tasks(participant)
@@ -114,14 +129,18 @@ class ParticipantManager(TaskManager):
         # Snapshot taken under the lock, file write happens outside it --
         # same "never hold this lock across I/O" rule as
         # SystemTaskManager.save_tasks(), even though this write is small.
+        # Return contract (None on success, 1 on failure) is unchanged in
+        # this phase -- normalized to 0/1 separately, see that commit.
         with self._tasks_lock:
             snapshot = list(self.participants)
         try:
-            with open(self.file_path, 'w') as file:
-                file.write('"initials","subid","unique_id","on_study","phone_number","ema_time","ema_reminder_time","feedback_time","feedback_reminder_time"\n')
+            with open(self.file_path, 'w', newline = '') as file:
+                writer = csv.DictWriter(file, fieldnames = PARTICIPANT_CSV_HEADERS, quoting = csv.QUOTE_ALL)
+                writer.writeheader()
                 for participant in snapshot:
-                    on_study_str = 'yes' if participant['on_study'] else 'no'
-                    file.write(f'"{participant["initials"]}","{participant["subid"]}","{participant["unique_id"]}","{on_study_str}","{participant["phone_number"]}","{participant["ema_time"]}","{participant["ema_reminder_time"]}","{participant["feedback_time"]}","{participant["feedback_reminder_time"]}"\n')
+                    row = dict(participant)
+                    row['on_study'] = 'yes' if participant['on_study'] else 'no'
+                    writer.writerow(row)
             return None
         except Exception as e:
             self.app.add_to_transcript(f"Failed to save participants to CSV: {e}", "ERROR")

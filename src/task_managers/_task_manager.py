@@ -2,6 +2,7 @@
 
 from datetime import date, datetime, time as dt_time
 from typing import Any, Callable
+import csv
 import queue
 import threading
 
@@ -157,10 +158,11 @@ class TaskManager():
         try:
             if headers is None:
                 headers = list(data[0].keys()) if data else []
-            with open(file_path, 'w') as f:
-                f.write(','.join(f'"{header}"' for header in headers) + '\n')
+            with open(file_path, 'w', newline = '') as f:
+                writer = csv.writer(f, quoting = csv.QUOTE_ALL, lineterminator = '\n')
+                writer.writerow(headers)
                 for row in data:
-                    f.write(','.join(f'"{str(row.get(header, ""))}"' for header in headers) + '\n')
+                    writer.writerow([row.get(header, '') for header in headers])
         except Exception as e:
             self.app.add_to_transcript(f"Failed to save data to CSV at {file_path}: {e}", "ERROR")
 

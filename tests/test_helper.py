@@ -252,3 +252,39 @@ def test_notify_coordinators_no_coordinators_returns_0_no_send(tmp_path, fake_ap
 
     assert result == 0
     send_sms.assert_not_called()
+
+
+def test_notify_coordinators_round_trips_embedded_comma_and_quote_in_name(tmp_path, fake_app, mocker):
+    """Regression test for a fixed bug: the old naive line.split(',') +
+    strip('"') parser corrupted a coordinator name containing a comma or
+    embedded quote (and everything after it on that line). csv.DictReader
+    is immune to both.
+    """
+    coordinators_file = tmp_path / 'study_coordinators.csv'
+    coordinators_file.write_text('"name","phone_number"\n"Smith, ""Bob""","5555550101"\n')
+    fake_app.study_coordinators_path = str(coordinators_file)
+    fake_app.mode = 'prod'
+    send_sms = mocker.patch('_helper.send_sms', return_value=0)
+
+    notify_coordinators(fake_app, 'Hi {name}, something broke.')
+
+    send_sms.assert_called_once_with(
+        fake_app, ['5555550101'], ['Hi Smith, "Bob", something broke.'], is_coordinator_message = True
+    )
+
+
+def test_notify_coordinators_reads_old_naive_serializer_output(tmp_path, fake_app, mocker):
+    """"Verify, don't assume" compatibility check: the old writer always
+    quoted every field with no embedded metacharacters in this sample, so
+    its output happens to already be valid CSV -- confirms the new
+    csv.DictReader-based reader still accepts it."""
+    coordinators_file = tmp_path / 'study_coordinators.csv'
+    coordinators_file.write_text('"name","phone_number"\n"Alice","5555550100"\n')
+    fake_app.study_coordinators_path = str(coordinators_file)
+    fake_app.mode = 'prod'
+    send_sms = mocker.patch('_helper.send_sms', return_value=0)
+
+    result = notify_coordinators(fake_app, 'system failure message')
+
+    assert result == 0
+    send_sms.assert_called_once_with(fake_app, ['5555550100'], mocker.ANY, is_coordinator_message = True)
