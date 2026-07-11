@@ -133,6 +133,64 @@ def test_no_startup_directory_guard_exists():
     assert not hasattr(run_prism, '_verify_invocation_directory')
 
 
+# ------------------------------------------------------------
+# _unlink_pid_file_if_owned -- ownership-checked shutdown unlink
+# ------------------------------------------------------------
+#
+# Regression tests for a bug found by an external adversarial review of the
+# double-launch scenario: handle_shutdown() used to unlink() the PID file
+# unconditionally. A second instance launched while a first was still
+# running clobbers the first's PID file at write time (_write_pid_file has
+# no liveness check yet -- see the B4b fix); if that second instance later
+# receives SIGTERM, its old unconditional unlink would delete a file that
+# had already stopped being "its" file, leaving the ORIGINAL still-live
+# instance with no PID file at all.
+
+def _make_bare_prism(repo_root):
+    from run_prism import PRISM
+    p = PRISM.__new__(PRISM)
+    p.repo_root = repo_root
+    p.mode = 'test'
+    p.logs_dir = str(repo_root / 'logs')
+    return p
+
+
+def test_unlink_pid_file_if_owned_removes_its_own_pid(tmp_path):
+    import os
+    from run_prism import PID_FILE_NAME
+
+    p = _make_bare_prism(tmp_path)
+    pid_file = tmp_path / PID_FILE_NAME
+    pid_file.write_text(str(os.getpid()))
+
+    p._unlink_pid_file_if_owned()
+
+    assert not pid_file.exists()
+
+
+def test_unlink_pid_file_if_owned_leaves_a_mismatched_pid_file(tmp_path):
+    import os
+    from run_prism import PID_FILE_NAME
+
+    p = _make_bare_prism(tmp_path)
+    pid_file = tmp_path / PID_FILE_NAME
+    other_pid = os.getpid() + 1  # guaranteed not to be this test process
+    pid_file.write_text(str(other_pid))
+
+    p._unlink_pid_file_if_owned()
+
+    assert pid_file.exists()
+    assert pid_file.read_text() == str(other_pid)
+    transcript_text = (tmp_path / 'logs' / 'transcripts' / 'test_transcript.txt').read_text()
+    assert 'WARNING' in transcript_text and str(other_pid) in transcript_text
+
+
+def test_unlink_pid_file_if_owned_tolerates_a_missing_file(tmp_path):
+    p = _make_bare_prism(tmp_path)
+
+    p._unlink_pid_file_if_owned()  # must not raise
+
+
 def test_init_succeeds_regardless_of_invocation_directory(monkeypatch, fake_prism_env_no_drive):
     import os
     from run_prism import PRISM

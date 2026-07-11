@@ -323,11 +323,36 @@ class PRISM():
         self.flask_app = create_flask_app(self)
         serve(self.flask_app, host = '127.0.0.1', port = 5000)
 
+    def _unlink_pid_file_if_owned(self) -> None:
+        """Only removes the PID file if it currently names THIS process.
+
+        Found by an external adversarial review of the double-launch
+        scenario: the old unconditional unlink() meant a second instance
+        launched while a first was still running -- which clobbers the
+        first's PID file at write time (see _write_pid_file) -- would,
+        on its own later shutdown, delete a file that had already stopped
+        being "its" file, leaving the ORIGINAL still-live instance with no
+        PID file at all and untargetable by stop_server.py's precise path,
+        forcing it onto the blind pattern-match fallback instead.
+        """
+        pid_file = Path(self.repo_root, PID_FILE_NAME)
+        try:
+            recorded_pid = int(pid_file.read_text().strip())
+        except (FileNotFoundError, ValueError, OSError):
+            return
+        if recorded_pid != os.getpid():
+            self.add_to_transcript(
+                f"PID file names process {recorded_pid}, not this process ({os.getpid()}) -- "
+                "leaving it in place; a later-launched instance must have overwritten it.", "WARNING"
+            )
+            return
+        pid_file.unlink(missing_ok = True)
+
     def handle_shutdown(self, signum: int, frame: FrameType | None) -> None:
         self.add_to_transcript("Received shutdown signal. Stopping PRISM application...", "INFO")
         self.system_task_manager.stop()
         self.participant_manager.stop()
-        Path(self.repo_root, PID_FILE_NAME).unlink(missing_ok = True)
+        self._unlink_pid_file_if_owned()
         os._exit(0)
 
     def shutdown(self) -> None:
