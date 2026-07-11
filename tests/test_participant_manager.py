@@ -736,6 +736,36 @@ def test_load_participants_reads_file_written_by_old_naive_serializer(tmp_path, 
     }
 
 
+def test_load_participants_skips_row_with_unrecognized_on_study_value(tmp_path, fake_app):
+    """Regression test for a real bug (external adversarial review,
+    confirmed live): the old `(row.get('on_study') or '').strip().lower()
+    == 'yes'` check silently mapped EVERY value other than "yes" to False
+    with no transcript line -- a typo like "TRUE" (a spelling
+    add_participant/update_participant already recognize) or "1" would
+    silently stop that participant's surveys with no visible error.
+    """
+    csv_file = tmp_path / 'study_participants.csv'
+    csv_file.write_text(
+        'initials,subid,unique_id,on_study,phone_number,ema_time,'
+        'ema_reminder_time,feedback_time,feedback_reminder_time\n'
+        'JD,3000,000000000,TRUE,5555550100,09:00:00,10:00:00,19:00:00,20:00:00\n'
+        'AB,3001,000000001,typo,5555550101,09:00:00,10:00:00,19:00:00,20:00:00\n'
+    )
+    fake_app.participants_path = str(csv_file)
+    pm = make_manager(fake_app)
+    pm.file_path = str(csv_file)
+
+    result = pm.load_participants()
+
+    assert result == 0
+    assert len(pm.participants) == 1
+    assert pm.participants[0]['unique_id'] == '000000000'
+    assert pm.participants[0]['on_study'] is True  # recognized spelling, coerced not rejected
+    assert any(
+        'invalid on_study value' in msg and "'typo'" in msg for _, msg in fake_app.transcript
+    )
+
+
 def test_load_participants_skips_row_with_duplicate_unique_id(tmp_path, fake_app):
     """Regression test for a real bug (external adversarial review,
     confirmed live): load_participants() had no duplicate-unique_id guard,

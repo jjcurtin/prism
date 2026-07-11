@@ -159,11 +159,34 @@ class ParticipantManager(TaskManager):
                 if not any((row.get(col) or '').strip() for col in PARTICIPANT_CSV_HEADERS):
                     continue  # blank line
                 try:
+                    # Rejected below (not silently coerced) for anything
+                    # other than the two recognized spellings -- same
+                    # true/yes -> True, false/no -> False coercion
+                    # add_participant/update_participant already apply
+                    # (ADD_INVALID_VALUE/UPDATE_INVALID_VALUE), just never
+                    # mirrored onto the load path. Found by an external
+                    # adversarial review, confirmed live: the old
+                    # `== 'yes'` check silently mapped EVERY other value
+                    # (a typo, "TRUE", "1", a blank cell) to False with no
+                    # transcript line at all -- an operator could believe a
+                    # participant was on-study while PRISM had silently
+                    # stopped scheduling their surveys.
+                    on_study_str = (row.get('on_study') or '').strip().lower()
+                    if on_study_str in ('true', 'yes'):
+                        on_study = True
+                    elif on_study_str in ('false', 'no'):
+                        on_study = False
+                    else:
+                        self.app.add_to_transcript(
+                            f"Skipping participant row {row_number}: invalid on_study value "
+                            f"{row.get('on_study')!r}; expected yes/no.", "ERROR"
+                        )
+                        continue
                     participant: Participant = {
                         'initials': row.get('initials') or '',
                         'subid': row.get('subid') or '',
                         'unique_id': row.get('unique_id') or '',
-                        'on_study': (row.get('on_study') or '').strip().lower() == 'yes',
+                        'on_study': on_study,
                         'phone_number': row.get('phone_number') or '',
                         'ema_time': row.get('ema_time') or '',
                         'ema_reminder_time': row.get('ema_reminder_time') or '',
