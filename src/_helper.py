@@ -226,7 +226,23 @@ def notify_coordinators(app: App, message: str) -> int:
             if phone_number:
                 try:
                     body = message.format(name=name)
-                except (KeyError, IndexError):
+                except (KeyError, IndexError, ValueError):
+                    # str.format() also raises ValueError for a malformed
+                    # format string (e.g. an unbalanced "{") -- confirmed
+                    # live, not just documented. Realistic trigger: callers
+                    # build `message` by interpolating an exception's own
+                    # text into an f-string before calling here (e.g.
+                    # _participant_manager.py's
+                    # code_prefix('2001') + f"...Error: {e}"), so any
+                    # error message containing a literal "{" (a dict repr,
+                    # a stack trace fragment, a Windows path artifact) used
+                    # to trip this. Since `message` is the same string for
+                    # every row in this loop, an uncaught ValueError here
+                    # escaped to the outer `except Exception`, mislabeled a
+                    # real page as "malformed study coordinator entry", and
+                    # -- because it hit on the FIRST row and skipped every
+                    # row after it too -- silently paged nobody at all for
+                    # what was actually a real system failure.
                     body = message
                 phone_numbers.append(phone_number)
                 bodies.append(body)

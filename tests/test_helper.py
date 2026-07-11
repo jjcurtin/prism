@@ -228,6 +228,42 @@ def test_notify_coordinators_fills_in_name_placeholder_per_coordinator(tmp_path,
     assert bodies == ['Hi Alice, something broke.', 'Hi Bob, something broke.']
 
 
+def test_notify_coordinators_stray_brace_in_message_still_pages_everyone(tmp_path, fake_app, mocker):
+    """Regression test for a real bug (external adversarial review,
+    confirmed live): str.format() raises ValueError (not just KeyError/
+    IndexError) for a malformed format string, e.g. an unbalanced "{".
+    Realistic trigger: callers build `message` by interpolating an
+    exception's own text into an f-string before calling here (e.g.
+    code_prefix('2001') + f"...Error: {e}"), so any error message
+    containing a literal "{" -- a dict repr, a stack trace fragment --
+    used to trip this. Since `message` is the same string for every row
+    in the loop, the ValueError escaped to the outer `except Exception`
+    on the FIRST row, mislabeled a real page as a "malformed study
+    coordinator entry", and -- by raising before phone_numbers/bodies
+    were appended to on every subsequent row too -- silently paged NOBODY
+    for what was actually a real system failure.
+    """
+    coordinators_file = tmp_path / 'study_coordinators.csv'
+    coordinators_file.write_text('"name","phone_number"\n"Alice","5555550100"\n"Bob","5555550101"\n')
+    fake_app.study_coordinators_path = str(coordinators_file)
+    fake_app.mode = 'prod'
+    send_sms = mocker.patch('_helper.send_sms', return_value=0)
+
+    result = notify_coordinators(fake_app, 'PRISM system failure: {stack trace with a stray brace')
+
+    assert result == 0
+    send_sms.assert_called_once_with(
+        fake_app,
+        ['5555550100', '5555550101'],
+        [
+            'PRISM system failure: {stack trace with a stray brace',
+            'PRISM system failure: {stack trace with a stray brace',
+        ],
+        is_coordinator_message = True,
+    )
+    assert not any('Skipping malformed study coordinator entry' in msg for _, msg in fake_app.transcript)
+
+
 def test_notify_coordinators_missing_file_returns_1_and_warns(fake_app):
     fake_app.mode = 'prod'
     fake_app.study_coordinators_path = '/nonexistent/study_coordinators.csv'
