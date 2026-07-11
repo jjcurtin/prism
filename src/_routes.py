@@ -290,6 +290,19 @@ def create_flask_app(app_instance: App) -> Flask:
         if app_instance.mode == "prod":
             if send_sms(app_instance, [participant['phone_number']], [data['message']]) != 0:
                 return jsonify({"error": f"Failed to send SMS to participant {unique_id}"}), 502
+        else:
+            # Found by an external adversarial review: unlike
+            # study_announcement's own test-mode branch just below (which
+            # logs "Simulated sending messages."), this route had no
+            # test-mode transcript line at all -- nothing here or in
+            # send_sms() (only called in the prod branch above) ever
+            # recorded that a "Custom SMS sent" response was actually a
+            # no-op simulation, not a real send. The HTTP response message
+            # itself is unchanged (matches study_announcement's own
+            # precedent of leaving the response text identical between
+            # modes) -- only the transcript, server-side, now tells them
+            # apart.
+            app_instance.add_to_transcript(f"Simulated custom SMS send to participant {unique_id} (test mode).", "INFO")
         return jsonify({"message": f"Custom SMS sent to participant {unique_id}"}), 200
     
     @flask_app.route('/participants/study_announcement/<require_on_study>', methods = ['POST'])

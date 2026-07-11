@@ -515,6 +515,24 @@ def test_send_custom_sms_test_mode_does_not_send(routes_client, routes_app_insta
     send_sms_mock.assert_not_called()
 
 
+def test_send_custom_sms_test_mode_logs_simulated_send(routes_client, routes_app_instance, monkeypatch):
+    """Regression test for a real bug (external adversarial review,
+    confirmed by inspection): this route had no test-mode transcript line
+    at all -- unlike study_announcement's own test-mode branch, which logs
+    "Simulated sending messages." Nothing anywhere recorded that a "Custom
+    SMS sent" response was actually a no-op simulation, not a real send.
+    """
+    routes_app_instance.participant_manager.get_participant.return_value = {'phone_number': '5555550100'}
+    monkeypatch.setattr('_routes.send_sms', MagicMock())
+
+    resp = routes_client.post('/participants/send_custom_sms/1', json={'message': 'hi'})
+
+    assert resp.status_code == 200
+    assert any(
+        'Simulated' in msg and 'test mode' in msg for _, msg in routes_app_instance.transcript
+    )
+
+
 def test_send_custom_sms_prod_mode_success(routes_client, routes_app_instance, monkeypatch):
     routes_app_instance.mode = 'prod'
     routes_app_instance.participant_manager.get_participant.return_value = {'phone_number': '5555550100'}
