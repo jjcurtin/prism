@@ -619,6 +619,68 @@ def test_concurrent_add_task_no_lost_appends(fake_app):
     assert len(tm.tasks) == num_threads * tasks_per_thread
 
 
+# ------------------------------------------------------------
+# stop() -- bounded join, not an unconditional wait
+# ------------------------------------------------------------
+#
+# Regression tests for a real bug found by an external adversarial review:
+# stop() used to be a bare `self.thread.join()` with no timeout. run()'s
+# loop only notices self.running=False on its next iteration, which can be
+# blocked for a long time inside finish_task() (a real subprocess.run()
+# call for a RUN_R_SCRIPT task, bounded at 3h). handle_shutdown() calls
+# this synchronously from the SIGTERM/SIGINT signal handler -- an unbounded
+# join meant a SIGTERM during a long task could block the entire shutdown
+# sequence for up to that same 3h.
+
+def test_stop_returns_promptly_when_thread_is_blocked_on_a_long_task(fake_app, monkeypatch):
+    import threading
+    import time as time_module
+    from task_managers import _task_manager as task_manager_module
+
+    monkeypatch.setattr(task_manager_module, 'STOP_JOIN_TIMEOUT_SECONDS', 0.2)
+
+    tm = make_manager(fake_app)
+    tm.running = True
+    still_blocked = threading.Event()
+    release = threading.Event()
+
+    def blocking_finish_task(task):
+        still_blocked.set()
+        release.wait(timeout=5)  # simulates a long-running task
+        return 0
+
+    tm.finish_task = blocking_finish_task
+    tm.thread = threading.Thread(target=tm.run)
+    tm.thread.start()
+    tm.task_queue.put({'task_type': 'RUN_R_SCRIPT'})
+    assert still_blocked.wait(timeout=5)  # thread is now genuinely stuck in finish_task
+
+    start = time_module.monotonic()
+    tm.stop()
+    elapsed = time_module.monotonic() - start
+
+    assert elapsed < 2  # bounded by the (monkeypatched, short) timeout, not the blocked task
+    assert tm.thread.is_alive()  # stop() didn't (and can't) kill the thread, just stopped waiting
+    assert any('did not stop within' in msg for _, msg in fake_app.transcript)
+
+    release.set()  # let the blocked thread finish so it doesn't leak past this test
+    tm.thread.join(timeout=5)
+
+
+def test_stop_joins_cleanly_when_thread_is_idle(fake_app):
+    import threading
+
+    tm = make_manager(fake_app)
+    tm.running = True
+    tm.thread = threading.Thread(target=tm.run)
+    tm.thread.start()
+
+    tm.stop()
+
+    assert not tm.thread.is_alive()
+    assert not any('did not stop within' in msg for _, msg in fake_app.transcript)
+
+
 def test_concurrent_finish_task_removal_does_not_drop_concurrent_add(fake_app):
     """The exact race _tasks_lock exists to close: finish_task()'s
     `self.tasks[:] = [t for t in self.tasks if t is not task]` snapshots

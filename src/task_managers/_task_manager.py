@@ -18,6 +18,14 @@ from _types import App
 # system_tasks/, and _routes.py.
 Task = dict[str, Any]
 
+# Bounds stop()'s thread.join() -- see stop()'s own comment for why this
+# can't just wait indefinitely. Comfortably above run()'s own 1s
+# task_queue.get(timeout=1) poll interval (the common case: the loop is idle
+# or between tasks, and notices self.running=False on its very next poll),
+# nowhere close to system_tasks/_run_r_script.py's R_SCRIPT_TIMEOUT_SECONDS
+# (3h) -- that gap is the whole point.
+STOP_JOIN_TIMEOUT_SECONDS = 10
+
 class TaskManager():
     def __init__(self, app: App, name: str) -> None:
         self.app = app
@@ -295,5 +303,31 @@ class TaskManager():
         self.app.add_to_transcript(f"{self.name} processor stopped.", "INFO")
 
     def stop(self) -> None:
+        """Bounded join, not an unconditional wait -- found by an external
+        adversarial review: this used to be a bare `self.thread.join()`
+        with no timeout. run()'s loop only notices self.running=False on
+        its next iteration, which can be blocked for a long time inside
+        finish_task()->process_task() (a real subprocess.run() call for a
+        RUN_R_SCRIPT task, bounded at R_SCRIPT_TIMEOUT_SECONDS = 3h in
+        system_tasks/_run_r_script.py). handle_shutdown() (run_prism.py)
+        calls this synchronously from the SIGTERM/SIGINT signal handler,
+        before unlinking the PID file and os._exit()-ing -- an unbounded
+        join here meant a SIGTERM during a long R script could block the
+        entire shutdown sequence for up to that same 3h, defeating the
+        whole point of sending a termination signal.
+
+        A timeout does not kill the thread (Python threads can't be force-
+        killed) -- it just stops *this call* from waiting past
+        STOP_JOIN_TIMEOUT_SECONDS, so a caller like handle_shutdown can
+        still proceed with the rest of its own shutdown sequence (which
+        ends in os._exit(), which DOES terminate every thread, non-daemon
+        or not) instead of hanging indefinitely on this one.
+        """
         self.running = False
-        self.thread.join()
+        self.thread.join(timeout = STOP_JOIN_TIMEOUT_SECONDS)
+        if self.thread.is_alive():
+            self.app.add_to_transcript(
+                f"{self.name} did not stop within {STOP_JOIN_TIMEOUT_SECONDS}s -- likely still "
+                "processing a long-running task; continuing shutdown without waiting further.",
+                "WARNING",
+            )

@@ -14,6 +14,8 @@ plan/
 
 environment
 
+.run_prism.pid
+
 api/*
 
 config/*.csv
