@@ -48,9 +48,19 @@ def _stop_via_pid_file() -> bool:
     except ProcessLookupError:
         pass  # already dead -- still a successful "stop"
     except OSError:
+        # Found by an external adversarial review: the old `finally:
+        # PID_FILE.unlink(missing_ok=True)` ran on THIS path too (finally
+        # always runs, including when the except body itself returns) --
+        # so a failed kill attempt (e.g. PermissionError, if this script is
+        # run as a different user than the one that started run_prism.py)
+        # still deleted the PID file. The next launch would then see no
+        # PID file, believe nothing was running, and start a second live
+        # instance alongside the still-running first one -- silently
+        # recreating the exact double-launch scenario _acquire_pid_file()
+        # exists to prevent. Only unlink on an actual stop (the two
+        # fallthrough paths below), never on this one.
         return False
-    finally:
-        PID_FILE.unlink(missing_ok=True)
+    PID_FILE.unlink(missing_ok=True)
     return True
 
 

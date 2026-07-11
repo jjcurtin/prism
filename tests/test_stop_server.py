@@ -59,6 +59,32 @@ def test_stop_via_pid_file_stale_pid_does_not_raise(tmp_path, monkeypatch):
     assert not stop_server.PID_FILE.exists()
 
 
+def test_stop_via_pid_file_failed_kill_does_not_unlink_pid_file(tmp_path, monkeypatch):
+    """Regression test for a real bug (external adversarial review,
+    confirmed via a standalone repro of Python's finally-block ordering
+    semantics): the old `finally: PID_FILE.unlink(missing_ok=True)` ran
+    even when the kill itself failed (e.g. PermissionError, if this script
+    runs as a different user than the one that started run_prism.py) --
+    deleting the PID file on a FAILED stop. The next launch would then see
+    no PID file, believe nothing was running, and start a second live
+    instance alongside the still-running first one -- silently recreating
+    the exact double-launch scenario _acquire_pid_file() exists to
+    prevent.
+    """
+    monkeypatch.setattr(stop_server, 'PID_FILE', tmp_path / '.run_prism.pid')
+    stop_server.PID_FILE.write_text('12345')
+
+    def raise_permission_error(pid, sig):
+        raise PermissionError("kill not permitted")
+
+    monkeypatch.setattr(stop_server.os, 'kill', raise_permission_error)
+
+    result = stop_server._stop_via_pid_file()
+
+    assert result is False
+    assert stop_server.PID_FILE.exists()  # NOT deleted -- the kill failed
+
+
 def test_stop_via_pid_file_returns_false_when_no_pid_file(tmp_path, monkeypatch):
     monkeypatch.setattr(stop_server, 'PID_FILE', tmp_path / '.run_prism.pid')
 
