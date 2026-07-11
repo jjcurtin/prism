@@ -36,6 +36,9 @@ def add_participant_menu(self: Interface) -> None:
                 unique_id = new_unique_id
     on_study = prompt_confirmation(self, prompt = "On study?")
     phone_number = get_input(self, prompt = "Phone number (press enter to skip): ")
+    if phone_number and not PHONE_NUMBER_RE.fullmatch(phone_number):
+        error("Phone number must be exactly 10 digits (or press enter to skip).", self)
+        return
     times = {}
     default_times = {
         'ema_time': '16:00:00',

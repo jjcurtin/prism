@@ -1,5 +1,14 @@
 """globals and global editing functions"""
 
+import re
+
+# config/README.md's documented phone_number format: 10 digits, no
+# separators. Kept in sync by hand with _helper.py's PHONE_NUMBER_RE -- the
+# interface layer never imports backend modules from src/ (see
+# prism_interface.py's own self.api() chokepoint), so this is a deliberate
+# second copy, not a shared import, matching that existing boundary.
+PHONE_NUMBER_RE = re.compile(r'^\d{10}$')
+
 # UIState/ui_state actually live in the tiny dependency-free _ui_state.py
 # leaf module, not here -- see that module's docstring for why: _display.py/
 # _menu_navigation.py/_menu_display.py (imported below, directly or

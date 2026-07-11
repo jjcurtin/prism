@@ -346,6 +346,31 @@ def test_update_participant_updates_field_and_reschedules_task(fake_app):
     assert task_types.count('ema') == 1  # old one removed, new one added, no duplicate
 
 
+def test_update_participant_phone_number_rejects_malformed_value_returns_1(fake_app):
+    pm = make_manager(fake_app)
+    participant = dict(PARTICIPANT)
+    pm.participants = [participant]
+    pm.save_participants = lambda: 0  # should never be reached
+
+    result = pm.update_participant('000000000', 'phone_number', '555-555-0100')
+
+    assert result == 1
+    assert participant['phone_number'] == PARTICIPANT['phone_number']  # unchanged
+    assert any('Invalid phone_number' in msg for _, msg in fake_app.transcript)
+
+
+def test_update_participant_phone_number_accepts_well_formed_value(fake_app):
+    pm = make_manager(fake_app)
+    participant = dict(PARTICIPANT)
+    pm.participants = [participant]
+    pm.save_participants = lambda: 0
+
+    result = pm.update_participant('000000000', 'phone_number', '5555559999')
+
+    assert result == 0
+    assert participant['phone_number'] == '5555559999'
+
+
 def test_remove_participant_write_failure_rolls_back_and_returns_1(fake_app):
     """Regression test for a fixed bug: remove_participant() used to call
     save_participants() and discard the result entirely -- a write failure

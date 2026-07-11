@@ -1,4 +1,4 @@
-from _helper import SMS_SEND_TIMEOUT_SECONDS, notify_coordinators, send_sms
+from _helper import SMS_SEND_TIMEOUT_SECONDS, is_valid_phone_number, notify_coordinators, send_sms
 
 
 def _mock_twilio_client(mocker, fake_app):
@@ -288,3 +288,25 @@ def test_notify_coordinators_reads_old_naive_serializer_output(tmp_path, fake_ap
 
     assert result == 0
     send_sms.assert_called_once_with(fake_app, ['5555550100'], mocker.ANY, is_coordinator_message = True)
+
+
+# ------------------------------------------------------------
+# is_valid_phone_number
+# ------------------------------------------------------------
+
+def test_is_valid_phone_number_accepts_10_digits():
+    assert is_valid_phone_number('5555550100') is True
+
+
+def test_is_valid_phone_number_rejects_wrong_length():
+    assert is_valid_phone_number('555555010') is False  # 9 digits
+    assert is_valid_phone_number('55555501000') is False  # 11 digits
+
+
+def test_is_valid_phone_number_rejects_non_digit_characters():
+    assert is_valid_phone_number('555-555-0100') is False
+    assert is_valid_phone_number('(555)5550100') is False
+
+
+def test_is_valid_phone_number_rejects_empty_string():
+    assert is_valid_phone_number('') is False

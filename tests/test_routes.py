@@ -311,6 +311,24 @@ def test_add_participant_malformed_json_is_clean_400(routes_client):
     assert resp.status_code == 400
 
 
+def test_add_participant_malformed_phone_number_is_400(routes_client, routes_app_instance):
+    payload = dict(ADD_PARTICIPANT_PAYLOAD, phone_number='555-555-0100')
+    resp = routes_client.post('/participants/add_participant', json=payload)
+    assert resp.status_code == 400
+    assert 'phone_number' in resp.get_json()['error']
+    routes_app_instance.participant_manager.add_participant.assert_not_called()
+
+
+def test_add_participant_blank_phone_number_still_accepted(routes_client, routes_app_instance):
+    """Matches the interface's existing "press enter to skip" behavior --
+    a blank phone_number is allowed, only a non-empty malformed one is
+    rejected."""
+    routes_app_instance.participant_manager.add_participant.return_value = 0
+    payload = dict(ADD_PARTICIPANT_PAYLOAD, phone_number='')
+    resp = routes_client.post('/participants/add_participant', json=payload)
+    assert resp.status_code == 200
+
+
 def test_remove_participant_success(routes_client, routes_app_instance):
     routes_app_instance.participant_manager.remove_participant.return_value = 0
     resp = routes_client.delete('/participants/remove_participant/1')

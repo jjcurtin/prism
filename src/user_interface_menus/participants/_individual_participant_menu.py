@@ -51,6 +51,10 @@ def individual_participant_menu(self: Interface, participant_id: str) -> None:
             if not new_val.isnumeric():
                 error("Sub ID must be a number.")
                 return
+        elif field == 'phone_number':
+            if new_val and not PHONE_NUMBER_RE.fullmatch(new_val):
+                error("Phone number must be exactly 10 digits.")
+                return
 
         ok, _ = self.api("PUT", f"participants/update_participant/{participant_id}/{field}/{new_val}")
         if ok:

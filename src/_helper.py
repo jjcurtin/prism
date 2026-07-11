@@ -5,8 +5,19 @@ from twilio.http.http_client import TwilioHttpClient
 from twilio.base.exceptions import TwilioRestException
 import csv
 import os
+import re
 
 from _types import App
+
+# config/README.md's documented phone_number format: 10 digits, no
+# separators. Kept as a single source of truth server-side; the interface
+# layer (user_interface_menus/_menu_helper.py) keeps its own copy since it
+# never imports backend modules from src/ (see that module's own comment).
+PHONE_NUMBER_RE = re.compile(r'^\d{10}$')
+
+
+def is_valid_phone_number(value: str) -> bool:
+    return bool(PHONE_NUMBER_RE.fullmatch(value.strip()))
 
 # twilio-python's TwilioHttpClient defaults to timeout=None (confirmed
 # against the installed 9.0.5 package) -- an unbounded requests call. Since

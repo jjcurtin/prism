@@ -580,13 +580,28 @@ def test_add_participant_menu_unique_id_collision_regenerates(fake_interface, mo
     assert payload['unique_id'] == '222222222'
 
 
+def test_add_participant_menu_rejects_malformed_phone_number(fake_interface, capsys):
+    fake_interface.commands_queue = deque(['x'])
+    fake_interface.inputs_queue.put('Alice')
+    fake_interface.inputs_queue.put('3000')
+    fake_interface.inputs_queue.put('123456789')
+    fake_interface.inputs_queue.put('y')  # on_study
+    fake_interface.inputs_queue.put('555-555-0100')  # malformed phone number
+    fake_interface.api = MagicMock(return_value=(False, None))  # the dedup GET check
+
+    apm.add_participant_menu(fake_interface)
+
+    assert 'Phone number must be exactly 10 digits' in capsys.readouterr().out
+    fake_interface.api.assert_called_once()  # only the dedup GET -- never reaches the add POST
+
+
 def test_add_participant_menu_default_times_used_when_blank(fake_interface):
     fake_interface.commands_queue = deque(['x'])
     fake_interface.inputs_queue.put('Alice')
     fake_interface.inputs_queue.put('3000')
     fake_interface.inputs_queue.put('123456789')
     fake_interface.inputs_queue.put('y')
-    fake_interface.inputs_queue.put('5551234')
+    fake_interface.inputs_queue.put('5555551234')
     for _ in range(4):
         fake_interface.inputs_queue.put('')
     fake_interface.api = MagicMock(side_effect=[(False, None), (True, True)])
@@ -601,7 +616,7 @@ def test_add_participant_menu_default_times_used_when_blank(fake_interface):
     assert payload['initials'] == 'Alice'
     assert payload['subid'] == '3000'
     assert payload['on_study'] is True
-    assert payload['phone_number'] == '5551234'
+    assert payload['phone_number'] == '5555551234'
 
 
 def test_add_participant_menu_invalid_time_format_falls_back_to_default(fake_interface, capsys):
@@ -704,6 +719,20 @@ def test_individual_participant_menu_update_field_text_success(fake_interface, m
 
     fake_interface.api.assert_called_once_with('PUT', 'participants/update_participant/1/initials/Alicia')
     assert 'Participant updated.' in capsys.readouterr().out
+
+
+def test_individual_participant_menu_update_field_rejects_malformed_phone_number(fake_interface, monkeypatch, capsys):
+    participant = {'unique_id': '1', 'initials': 'Alice', 'subid': '3000', 'on_study': True,
+                    'phone_number': '5555550100', 'ema_time': '16:00:00', 'ema_reminder_time': '19:00:00',
+                    'feedback_time': '07:00:00', 'feedback_reminder_time': '12:00:00'}
+    menu_options = _open_individual_menu(fake_interface, monkeypatch, participant)
+
+    fake_interface.inputs_queue.put('555-555-0100')
+    fake_interface.api = MagicMock(return_value=(True, True))
+    menu_options['5']['menu_caller'](fake_interface)  # '5' == phone_number, see field_map
+
+    assert 'Phone number must be exactly 10 digits.' in capsys.readouterr().out
+    fake_interface.api.assert_not_called()
 
 
 def test_individual_participant_menu_update_field_failure(fake_interface, monkeypatch, capsys):

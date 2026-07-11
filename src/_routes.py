@@ -9,7 +9,7 @@ from werkzeug.exceptions import HTTPException
 import time
 from datetime import datetime
 
-from _helper import send_sms, notify_coordinators
+from _helper import is_valid_phone_number, send_sms, notify_coordinators
 from _error_codes import code_prefix
 from _types import App
 
@@ -187,6 +187,13 @@ def create_flask_app(app_instance: App) -> Flask:
         required_fields = ['unique_id', 'initials', 'subid', 'on_study', 'phone_number', 'ema_time', 'ema_reminder_time', 'feedback_time', 'feedback_reminder_time']
         if not all(field in data for field in required_fields):
             return jsonify({"error": "Missing required fields"}), 400
+        # A blank phone_number is still allowed here -- matches the
+        # interface's existing "press enter to skip" behavior
+        # (_add_participant_menu.py) -- only a non-empty, malformed value
+        # is rejected.
+        phone_number = str(data.get('phone_number', '')).strip()
+        if phone_number and not is_valid_phone_number(phone_number):
+            return jsonify({"error": "phone_number must be exactly 10 digits"}), 400
         if app_instance.participant_manager.add_participant(data) != 0:
             return jsonify({"error": "Failed to save participant"}), 500
         app_instance.add_to_transcript(f"Participant #{data['unique_id']} added via API.", "INFO")

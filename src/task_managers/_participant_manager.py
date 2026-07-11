@@ -3,7 +3,7 @@
 from datetime import date, datetime
 from typing import Any
 
-from _helper import send_sms, notify_coordinators
+from _helper import is_valid_phone_number, send_sms, notify_coordinators
 from _error_codes import code_prefix
 from _types import App
 from task_managers._task_manager import TaskManager, Task
@@ -288,6 +288,11 @@ class ParticipantManager(TaskManager):
                                     f"Invalid time format '{value}' for {field}; expected HH:MM:SS.", "ERROR"
                                 )
                                 return 1
+                        elif field == 'phone_number' and value and not is_valid_phone_number(str(value)):
+                            self.app.add_to_transcript(
+                                f"Invalid phone_number '{value}' for participant {unique_id}; expected 10 digits.", "ERROR"
+                            )
+                            return 1
                         old_value = participant[field]
                         participant[field] = value
                         if self.save_participants():
