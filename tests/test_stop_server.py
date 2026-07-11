@@ -4,6 +4,7 @@ needs its own sys.path setup (tests/conftest.py only adds src/).
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
@@ -59,7 +60,7 @@ def test_stop_via_pid_file_stale_pid_does_not_raise(tmp_path, monkeypatch):
     assert not stop_server.PID_FILE.exists()
 
 
-def test_stop_via_pid_file_failed_kill_does_not_unlink_pid_file(tmp_path, monkeypatch):
+def test_stop_via_pid_file_failed_kill_does_not_unlink_pid_file_posix(tmp_path, monkeypatch):
     """Regression test for a real bug (external adversarial review,
     confirmed via a standalone repro of Python's finally-block ordering
     semantics): the old `finally: PID_FILE.unlink(missing_ok=True)` ran
@@ -70,8 +71,16 @@ def test_stop_via_pid_file_failed_kill_does_not_unlink_pid_file(tmp_path, monkey
     instance alongside the still-running first one -- silently recreating
     the exact double-launch scenario _acquire_pid_file() exists to
     prevent.
+
+    Forces stop_server.sys.platform (module-global, reverted by
+    monkeypatch after this test) to the POSIX branch regardless of which
+    OS actually runs this suite -- otherwise this test would silently only
+    ever exercise one of the two platform branches, exactly how the
+    Windows-side twin below caught a real, live bug this test in its
+    original (platform-implicit) form completely missed.
     """
     monkeypatch.setattr(stop_server, 'PID_FILE', tmp_path / '.run_prism.pid')
+    monkeypatch.setattr(stop_server.sys, 'platform', 'linux')
     stop_server.PID_FILE.write_text('12345')
 
     def raise_permission_error(pid, sig):
@@ -83,6 +92,29 @@ def test_stop_via_pid_file_failed_kill_does_not_unlink_pid_file(tmp_path, monkey
 
     assert result is False
     assert stop_server.PID_FILE.exists()  # NOT deleted -- the kill failed
+
+
+def test_stop_via_pid_file_failed_kill_does_not_unlink_pid_file_windows(tmp_path, monkeypatch):
+    """Windows-side twin of the POSIX test above. Regression test for a
+    real bug caught live on an actual Windows machine (not just reasoned
+    about): the Windows branch ran `taskkill /PID <pid> /F` with
+    check=False and never inspected result.returncode -- a failed kill
+    (e.g. a stale/already-dead PID, confirmed via a real
+    'ERROR: The process "12345" not found.' on taskkill's stderr) was
+    silently treated as a successful stop, unlinking the PID file anyway.
+    Same double-launch consequence as the POSIX case.
+    """
+    monkeypatch.setattr(stop_server, 'PID_FILE', tmp_path / '.run_prism.pid')
+    monkeypatch.setattr(stop_server.sys, 'platform', 'win32')
+    stop_server.PID_FILE.write_text('12345')
+
+    fake_result = SimpleNamespace(returncode=128, stdout=b'', stderr=b'ERROR: The process "12345" not found.\n')
+    monkeypatch.setattr(stop_server.subprocess, 'run', lambda *a, **k: fake_result)
+
+    result = stop_server._stop_via_pid_file()
+
+    assert result is False
+    assert stop_server.PID_FILE.exists()  # NOT deleted -- taskkill failed
 
 
 def test_stop_via_pid_file_returns_false_when_no_pid_file(tmp_path, monkeypatch):

@@ -42,7 +42,23 @@ def _stop_via_pid_file() -> bool:
         return False
     try:
         if sys.platform == "win32":
-            subprocess.run(["taskkill", "/PID", str(pid), "/F"], check=False)
+            # check=False (not check=True) so a nonzero exit is inspected
+            # here rather than raised as CalledProcessError -- found live
+            # (a real Windows test run, not just reasoned about): the old
+            # code never looked at result.returncode at all, so a failed
+            # taskkill (e.g. a stale/already-dead PID -- confirmed via
+            # "The process "<pid>" not found." on stderr) was silently
+            # treated as a successful stop, same class of bug as the
+            # finally-runs-on-failure one just above/below this branch.
+            # Conservatively treats ANY nonzero exit as a failure (not just
+            # a specific "process not found" code) -- taskkill's exact
+            # exit-code meanings aren't stably documented across Windows
+            # versions, and leaving a stale PID file in the ambiguous case
+            # is safe: _acquire_pid_file()'s own stale-PID tolerance
+            # already handles cleaning it up on the next launch.
+            result = subprocess.run(["taskkill", "/PID", str(pid), "/F"], check=False, capture_output=True)
+            if result.returncode != 0:
+                return False
         else:
             os.kill(pid, signal.SIGTERM)
     except ProcessLookupError:
