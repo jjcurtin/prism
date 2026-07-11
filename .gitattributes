@@ -1,0 +1,6 @@
+# save_params() (src/user_interface_menus/_menu_helper.py) rewrites this
+# file with native line endings (LF on POSIX, CRLF on Windows) every time
+# the interface loads/saves menu params, including during test runs. Pin
+# the git blob to LF so running tests/the interface on Linux (Pi, Fedora)
+# doesn't produce a line-ending-only diff against the Windows-authored copy.
+config/uiconfig.txt text eol=lf

@@ -193,7 +193,12 @@ def load_params() -> None:
 
 def save_params() -> None:
     file_path = ui_state.repo_root / "config" / "uiconfig.txt"
-    with open(file_path, 'w') as file:
+    # newline='\n' pins the written line ending to LF on every platform --
+    # plain text mode would otherwise translate '\n' to the OS default
+    # (CRLF on Windows), causing this tracked file to flip line endings and
+    # show as a spurious git diff depending on which platform last ran the
+    # interface.
+    with open(file_path, 'w', newline='\n') as file:
         file.write(f"RIGHT_ALIGN={ui_state.right_align}\n")
         file.write(f"RELATED_OPTIONS_THRESHOLD={ui_state.related_options_threshold}\n")
         file.write(f"BEST_OPTIONS_THRESHOLD={ui_state.best_options_threshold}\n")
