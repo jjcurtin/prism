@@ -508,3 +508,65 @@ def test_launch_web_app_or_shutdown_does_not_intervene_on_success(tmp_path):
     p._launch_web_app_or_shutdown()  # must not raise, must not shut anything down
 
     assert calls == ['called']
+
+
+# ------------------------------------------------------------
+# get_transcript -- rejects a non-positive num_lines
+# ------------------------------------------------------------
+#
+# Regression tests for a real bug found by an external adversarial review,
+# confirmed live: content[-num_lines:] silently does the wrong thing for a
+# non-positive num_lines rather than raising -- a negative value slices
+# from the FRONT instead ("everything except the first N lines," not "the
+# last N lines"), and 0 returns the ENTIRE file (`-0 == 0` in Python) instead
+# of "no lines". Both are reachable directly from the API
+# (GET /system/get_transcript/<num_lines>, a raw unvalidated path string).
+
+def test_get_transcript_rejects_negative_num_lines(tmp_path):
+    p = _make_bare_prism(tmp_path)
+    transcript_dir = tmp_path / 'logs' / 'transcripts'
+    transcript_dir.mkdir(parents=True)
+    (transcript_dir / 'test_transcript.txt').write_text(
+        "10:00:00 - INFO - line 1\n"
+        "10:00:01 - INFO - line 2\n"
+        "10:00:02 - INFO - line 3\n"
+    )
+
+    ok, entries = p.get_transcript(-3)
+
+    assert ok is False
+    assert entries is None
+
+
+def test_get_transcript_rejects_zero_num_lines(tmp_path):
+    p = _make_bare_prism(tmp_path)
+    transcript_dir = tmp_path / 'logs' / 'transcripts'
+    transcript_dir.mkdir(parents=True)
+    (transcript_dir / 'test_transcript.txt').write_text(
+        "10:00:00 - INFO - line 1\n"
+        "10:00:01 - INFO - line 2\n"
+    )
+
+    ok, entries = p.get_transcript(0)
+
+    assert ok is False
+    assert entries is None
+
+
+def test_get_transcript_accepts_positive_num_lines(tmp_path):
+    """Confirms the fix doesn't collaterally break the normal case."""
+    p = _make_bare_prism(tmp_path)
+    transcript_dir = tmp_path / 'logs' / 'transcripts'
+    transcript_dir.mkdir(parents=True)
+    (transcript_dir / 'test_transcript.txt').write_text(
+        "10:00:00 - INFO - line 1\n"
+        "10:00:01 - INFO - line 2\n"
+        "10:00:02 - INFO - line 3\n"
+    )
+
+    ok, entries = p.get_transcript(2)
+
+    assert ok is True
+    assert entries is not None
+    assert len(entries) == 2
+    assert entries[-1]['message'] == 'INFO - line 3'

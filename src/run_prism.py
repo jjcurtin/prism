@@ -430,6 +430,21 @@ class PRISM():
             try:
                 with open(transcript_path, 'r') as f:
                     num_lines = int(num_lines)
+                    # Found by an external adversarial review, confirmed
+                    # live: content[-num_lines:] silently does the wrong
+                    # thing for a non-positive num_lines rather than
+                    # raising -- a negative value (e.g. -3) slices from the
+                    # FRONT instead ("everything except the first 3 lines",
+                    # not "the last -3 lines"), and 0 returns the ENTIRE
+                    # file (`-0 == 0` in Python, so content[-0:] ==
+                    # content[0:]) instead of "no lines". Both are
+                    # reachable directly from the API
+                    # (GET /system/get_transcript/<num_lines>, a raw
+                    # unvalidated path string). Rejected the same way a
+                    # non-numeric num_lines already is (caught by the
+                    # outer except ValueError-from-int() below).
+                    if num_lines <= 0:
+                        raise ValueError(f"num_lines must be a positive integer, got {num_lines}")
                     content = f.read().splitlines()[-num_lines:]
                     return True, [{"timestamp": line.split(' - ')[0], "message": ' - '.join(line.split(' - ')[1:])} for line in content]
             except FileNotFoundError:
