@@ -5,9 +5,6 @@ from typing import Any
 
 from flask import Flask, jsonify, request
 from flask.wrappers import Response
-from flask_cors import CORS
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
 from werkzeug.exceptions import HTTPException
 import time
 from datetime import datetime
@@ -24,25 +21,16 @@ RouteResponse = Response | tuple[Response, int]
 
 def create_flask_app(app_instance: App) -> Flask:
     flask_app = Flask(__name__)
-    
-    if app_instance.mode == "prod":
-        CORS(flask_app, resources = {
-            r"/system/*": {"origins": "localhost:5000"},
-            r"/system/get_uptime": {"origins": "*"},
-            r"/participants/*": {"origins": "localhost:5000"}
-        })
-    else:
-        CORS(flask_app, resources = {
-            r"/system/*": {"origins": "localhost:5000"},
-            r"/participants/*": {"origins": "localhost:5000"}
-        })
 
-    limiter = Limiter(
-        get_remote_address,
-        app = flask_app,
-        default_limits = [],
-        storage_uri = "memory://"
-    )
+    # No CORS/rate-limiting here -- deliberate, per the documented
+    # local-only trust model (root CLAUDE.md's "Security model" section):
+    # the server binds to 127.0.0.1 only and its one client
+    # (prism_interface.py) is hardcoded to http://localhost:5000/. The
+    # CORS origins this used to configure ("localhost:5000", no scheme)
+    # could never match a real Origin header anyway, and Flask-Limiter was
+    # instantiated with default_limits=[] -- no route ever called
+    # .limit() -- so both were dead, half-configured scaffolding that
+    # implied protection neither actually provided.
 
     ################
     #    System    #

@@ -6,4 +6,3 @@ pandas-stubs==2.2.3.250527
 types-requests==2.33.0.20260518
 types-pytz==2026.2.0.20260518
 types-waitress==3.0.1.20260508
-types-Flask-Cors==6.0.3.20260616

@@ -562,3 +562,17 @@ def test_wrong_http_method_returns_default_405_no_coordinator_notify(routes_clie
 
     assert resp.status_code == 405
     notify.assert_not_called()
+
+
+def test_flask_app_has_no_cors_or_limiter_extensions_registered(routes_client):
+    """Locks in the removal of the dead CORS/Flask-Limiter scaffolding:
+    the CORS origins ("localhost:5000", no scheme) could never match a
+    real Origin header, and the limiter was configured with
+    default_limits=[] and no route ever called .limit() -- both were
+    half-configured and implied protection that didn't exist, so they were
+    deleted outright rather than fixed, per the documented local-only
+    trust model. This test exists so a future change can't silently
+    reintroduce either without a deliberate decision.
+    """
+    assert 'flask_cors' not in routes_client.application.extensions
+    assert 'limiter' not in routes_client.application.extensions
