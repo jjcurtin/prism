@@ -1,6 +1,7 @@
 import os
+import subprocess
 
-from system_tasks._run_r_script import RunRScript
+from system_tasks._run_r_script import RunRScript, R_SCRIPT_TIMEOUT_SECONDS
 
 
 def test_run_missing_scripts_dir_returns_1(fake_app):
@@ -57,7 +58,10 @@ def test_run_success_restores_cwd_and_logs_output(tmp_path, fake_app, mocker):
 
     assert result == 0
     assert os.getcwd() == original_cwd
-    mock_run.assert_called_once_with(['Rscript', 'cleanup.R'], capture_output=True, text=True)
+    mock_run.assert_called_once_with(
+        ['Rscript', 'cleanup.R'], capture_output=True, text=True,
+        cwd=str(tmp_path), timeout=R_SCRIPT_TIMEOUT_SECONDS,
+    )
     assert any('script run complete' in msg for _, msg in fake_app.transcript)
 
 
@@ -86,6 +90,30 @@ def test_run_subprocess_raises_returns_1_and_restores_cwd(tmp_path, fake_app, mo
     assert result == 1
     assert os.getcwd() == original_cwd
     assert any('Rscript not found' in msg for _, msg in fake_app.transcript)
+
+
+def test_run_rscript_timeout_returns_1_and_logs_error(tmp_path, fake_app, mocker):
+    """Regression test: subprocess.run had no timeout= at all, so a hung
+    Rscript process would block the single-threaded SystemTaskManager
+    pipeline forever. Now bounded by R_SCRIPT_TIMEOUT_SECONDS and caught
+    explicitly rather than falling into the generic Exception branch.
+    """
+    (tmp_path / 'cleanup.R').write_text('# fake R script')
+    fake_app.r_scripts_dir = str(tmp_path)
+    original_cwd = os.getcwd()
+    mocker.patch(
+        'system_tasks._run_r_script.subprocess.run',
+        side_effect=subprocess.TimeoutExpired(cmd=['Rscript', 'cleanup.R'], timeout=R_SCRIPT_TIMEOUT_SECONDS),
+    )
+
+    result = RunRScript(fake_app, 'cleanup.R').run()
+
+    assert result == 1
+    assert os.getcwd() == original_cwd
+    assert any(
+        'did not finish within' in msg and str(R_SCRIPT_TIMEOUT_SECONDS) in msg
+        for _, msg in fake_app.transcript
+    )
 
 
 def test_run_rscript_executable_missing_gives_actionable_message(tmp_path, fake_app, mocker):
