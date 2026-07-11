@@ -22,6 +22,24 @@ def test_load_paths_resolves_everything_under_the_fake_drive(prism_instance, fak
     assert Path(prism_instance.study_coordinators_path) == drive_config_base / 'config' / 'study_coordinators.csv'
 
 
+def test_load_paths_corrupt_repo_paths_csv_falls_back_and_warns(prism_instance, fake_prism_env):
+    """Regression test for a real bug (external adversarial review,
+    confirmed by inspection): a corrupted/unreadable repo_paths.csv used to
+    fall back to every default (logs_dir 'logs', drive mounts, etc.)
+    completely silently -- a bare `except Exception: repo_paths = {}` with
+    no transcript line at all, unlike the paths.csv load just below it,
+    which already logs an ERROR on failure.
+    """
+    (fake_prism_env / 'config' / 'repo_paths.csv').write_text('not,valid\ncsv"""data')
+
+    prism_instance.load_paths()  # must not raise
+
+    assert prism_instance.logs_dir == str((fake_prism_env / 'logs').resolve())  # still falls back correctly
+    transcript_text = (Path(prism_instance.logs_dir) / 'transcripts' / 'test_transcript.txt').read_text()
+    assert 'WARNING' in transcript_text
+    assert 'Failed to load repo_paths.csv' in transcript_text
+
+
 def test_load_paths_scripts_dir_not_resolved_relative_to_config_base(prism_instance, fake_prism_env):
     """r_scripts_dir is still configured per-environment via the drive's
     paths.csv 'scripts' key (it's not a prism-specific folder, so it can't

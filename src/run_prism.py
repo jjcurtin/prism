@@ -234,17 +234,34 @@ class PRISM():
             'drive_mount_posix': '/mnt/research_drive',
             'prism_drive_subpath': 'optimize/prism',
         }
+        repo_paths_load_error: Exception | None = None
         try:
             df = pd.read_csv(str(repo_root / 'config' / 'repo_paths.csv'), quotechar='"', skipinitialspace=True, dtype=str)
             repo_paths: dict[str, str] = {str(row['key']).strip(): str(row['value']).strip() for _, row in df.iterrows()}
-        except Exception:
+        except Exception as e:
             repo_paths = {}
+            repo_paths_load_error = e
         repo_paths = {**repo_paths_defaults, **repo_paths}
 
         # logs stay local to this checkout (per-machine operational data,
         # not shared study config) — set first so add_to_transcript (called
         # right after this) always has somewhere to write.
         self.logs_dir = str((repo_root / repo_paths['logs_dir']).resolve())
+        # Logged here, not inside the try/except above -- add_to_transcript
+        # reads self.logs_dir directly with no guard of its own, which
+        # isn't set until the line just above this one. Found by an
+        # external adversarial review: this fallback used to be entirely
+        # silent (a bare `except Exception: repo_paths = {}`, no transcript
+        # line at all), unlike the paths.csv load just below, which already
+        # logs an ERROR on failure -- a corrupted or unreadable
+        # repo_paths.csv would silently fall back to every default (logs_dir
+        # 'logs', drive mounts, etc.) with nothing in the transcript
+        # pointing at why.
+        if repo_paths_load_error is not None:
+            self.add_to_transcript(
+                f"Failed to load repo_paths.csv ({repo_root / 'config' / 'repo_paths.csv'}): "
+                f"{repo_paths_load_error} -- falling back to defaults ({repo_paths_defaults}).", "WARNING"
+            )
         # data_dir: where data-pulldown system tasks write raw/processed
         # output -- resolved the same way as logs_dir (repo-root-relative,
         # not cwd-relative), so callers no longer need to assume a cwd of
