@@ -736,6 +736,34 @@ def test_load_participants_reads_file_written_by_old_naive_serializer(tmp_path, 
     }
 
 
+def test_load_participants_skips_row_with_duplicate_unique_id(tmp_path, fake_app):
+    """Regression test for a real bug (external adversarial review,
+    confirmed live): load_participants() had no duplicate-unique_id guard,
+    unlike add_participant()'s existing ADD_DUPLICATE_ID rejection. A CSV
+    with two rows sharing a unique_id used to load both, scheduling
+    duplicate recurring tasks per shared survey type -- participants
+    received doubled texts for every survey time both rows specified.
+    """
+    csv_file = tmp_path / 'study_participants.csv'
+    csv_file.write_text(
+        'initials,subid,unique_id,on_study,phone_number,ema_time,'
+        'ema_reminder_time,feedback_time,feedback_reminder_time\n'
+        'JD,3000,000000000,yes,5555550100,09:00:00,10:00:00,19:00:00,20:00:00\n'
+        'ZZ,3001,000000000,yes,5555550101,09:00:00,10:00:00,19:00:00,20:00:00\n'
+    )
+    fake_app.participants_path = str(csv_file)
+    pm = make_manager(fake_app)
+    pm.file_path = str(csv_file)
+
+    result = pm.load_participants()
+
+    assert result == 0
+    assert len(pm.participants) == 1
+    assert pm.participants[0]['initials'] == 'JD'  # first row wins
+    assert pm.check_invariants() == []
+    assert any('duplicate unique_id' in msg for _, msg in fake_app.transcript)
+
+
 def test_load_participants_skips_row_with_malformed_time_entirely(tmp_path, fake_app):
     """Regression test for a real bug (external adversarial review, confirmed
     live): a malformed ema_time used to log "Skipping malformed participant

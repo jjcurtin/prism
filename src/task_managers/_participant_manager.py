@@ -170,6 +170,21 @@ class ParticipantManager(TaskManager):
                         'feedback_time': row.get('feedback_time') or '',
                         'feedback_reminder_time': row.get('feedback_reminder_time') or '',
                     }
+                    # Rejected before any of the validation below -- same
+                    # duplicate-id check add_participant() already applies
+                    # (ADD_DUPLICATE_ID), just never mirrored onto the load
+                    # path. Found by an external adversarial review,
+                    # confirmed live: a CSV with two rows sharing a
+                    # unique_id used to load both, scheduling duplicate
+                    # recurring tasks per shared survey type (violates I2)
+                    # -- participants received doubled texts for every
+                    # survey the duplicate rows both specified a time for.
+                    if any(p['unique_id'] == participant['unique_id'] for p in self.participants):
+                        self.app.add_to_transcript(
+                            f"Skipping participant row {row_number}: duplicate unique_id "
+                            f"{participant['unique_id']!r} (already loaded from an earlier row).", "ERROR"
+                        )
+                        continue
                     # Validated (and normalized) BEFORE the append below --
                     # same fix shape as add_participant/update_participant
                     # (e264b83, this session). Found by an external
