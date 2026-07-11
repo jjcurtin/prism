@@ -170,6 +170,23 @@ class ParticipantManager(TaskManager):
                         'feedback_time': row.get('feedback_time') or '',
                         'feedback_reminder_time': row.get('feedback_reminder_time') or '',
                     }
+                    # Validated (and normalized) BEFORE the append below --
+                    # same fix shape as add_participant/update_participant
+                    # (e264b83, this session). Found by an external
+                    # adversarial review: this loop used to append the
+                    # participant first and only then call
+                    # schedule_participant_tasks(), so a malformed time
+                    # field (e.g. "9am") raised inside that call's
+                    # add_task()->strptime, was caught below, and logged
+                    # "Skipping malformed participant row" -- a lie, since
+                    # the participant was already in self.participants with
+                    # zero scheduled tasks.
+                    for field_name in self.survey_types.values():
+                        task_time_str = participant.get(field_name)
+                        if task_time_str:
+                            task_time_str = str(task_time_str).strip()
+                            participant[field_name] = task_time_str
+                            datetime.strptime(task_time_str, '%H:%M:%S')
                     self.participants.append(participant)
                     self.schedule_participant_tasks(participant)
                 except Exception as e:

@@ -736,6 +736,32 @@ def test_load_participants_reads_file_written_by_old_naive_serializer(tmp_path, 
     }
 
 
+def test_load_participants_skips_row_with_malformed_time_entirely(tmp_path, fake_app):
+    """Regression test for a real bug (external adversarial review, confirmed
+    live): a malformed ema_time used to log "Skipping malformed participant
+    row" but the participant was appended to self.participants anyway, just
+    with zero scheduled tasks -- the log message lied. Validation must now
+    happen before the append, same as add_participant/update_participant.
+    """
+    csv_file = tmp_path / 'study_participants.csv'
+    csv_file.write_text(
+        'initials,subid,unique_id,on_study,phone_number,ema_time,'
+        'ema_reminder_time,feedback_time,feedback_reminder_time\n'
+        'JD,3000,000000000,yes,5555550100,9am,10:00:00,19:00:00,20:00:00\n'
+        'AB,3001,000000001,yes,5555550101,09:00:00,10:00:00,19:00:00,20:00:00\n'
+    )
+    fake_app.participants_path = str(csv_file)
+    pm = make_manager(fake_app)
+    pm.file_path = str(csv_file)
+
+    result = pm.load_participants()
+
+    assert result == 0
+    assert len(pm.participants) == 1
+    assert pm.participants[0]['unique_id'] == '000000001'
+    assert any('Skipping malformed participant row' in msg for _, msg in fake_app.transcript)
+
+
 # --- process_task ----------------------------------------------------------
 
 def test_process_task_missing_participant_id_returns_neg1(fake_app):
