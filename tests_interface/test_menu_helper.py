@@ -60,6 +60,65 @@ class FakeApp:
 
 
 # ------------------------------------------------------------
+# url_segment
+#
+# Regression tests for a real bug found by an external adversarial review:
+# self.api()'s endpoint strings are plain f-strings with no encoding at
+# all. A '#' in a free-text value starts a URL fragment -- confirmed live
+# that `requests` silently truncates everything from the '#' onward before
+# the request is even sent (data corruption, not a visible error). A '/'
+# in a value splits it into an extra, unintended path segment -- confirmed
+# that Flask's default route converters don't span multiple segments, so
+# this fails the route match instead.
+
+def test_url_segment_encodes_hash():
+    assert menu_helper.url_segment('AB#CD') == 'AB%23CD'
+
+
+def test_url_segment_encodes_slash():
+    assert menu_helper.url_segment('AB/CD') == 'AB%2FCD'
+
+
+def test_url_segment_leaves_colon_unencoded():
+    """Task times are 'HH:MM:SS' -- a literal ':' in a single path segment
+    isn't a route-splitting or truncation risk for Flask's default
+    converter or `requests`, so it stays readable rather than becoming
+    '00%3A00%3A00'."""
+    assert menu_helper.url_segment('09:00:00') == '09:00:00'
+
+
+def test_url_segment_leaves_plain_alphanumeric_unchanged():
+    assert menu_helper.url_segment('000000000') == '000000000'
+    assert menu_helper.url_segment('CHECK_SYSTEM') == 'CHECK_SYSTEM'
+
+
+def test_url_segment_coerces_non_string_input():
+    assert menu_helper.url_segment(15) == '15'
+
+
+def test_url_segment_closes_the_actual_truncation_and_splitting_bugs():
+    """End-to-end proof (not just a unit test of the function in
+    isolation): builds the exact same kind of endpoint string a menu
+    call site does, both unencoded (demonstrating the original bugs) and
+    url_segment()-encoded (demonstrating the fix), and inspects what
+    `requests` actually puts on the wire.
+    """
+    import requests
+
+    unencoded = requests.Request(
+        'PUT', f"http://localhost:5000/participants/update_participant/1/initials/AB#CD"
+    ).prepare()
+    assert unencoded.path_url == '/participants/update_participant/1/initials/AB'  # truncated -- the bug
+
+    encoded = requests.Request(
+        'PUT',
+        f"http://localhost:5000/participants/update_participant/"
+        f"{menu_helper.url_segment('1')}/{menu_helper.url_segment('initials')}/{menu_helper.url_segment('AB#CD')}",
+    ).prepare()
+    assert encoded.path_url == '/participants/update_participant/1/initials/AB%23CD'  # preserved -- the fix
+
+
+# ------------------------------------------------------------
 # add_recent_command
 
 

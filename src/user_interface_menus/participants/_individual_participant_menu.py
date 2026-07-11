@@ -10,7 +10,7 @@ from user_interface_menus._types import Interface, MenuOptions
 def individual_participant_menu(self: Interface, participant_id: str) -> None:
     def remove_participant_menu(self: Interface) -> int | None:
         if prompt_confirmation(self, prompt = "Remove participant?"):
-            ok, _ = self.api("DELETE", f"participants/remove_participant/{participant_id}")
+            ok, _ = self.api("DELETE", f"participants/remove_participant/{url_segment(participant_id)}")
             if ok:
                 success("Participant removed.", self)
                 return 1
@@ -56,7 +56,10 @@ def individual_participant_menu(self: Interface, participant_id: str) -> None:
                 error("Phone number must be exactly 10 digits.")
                 return
 
-        ok, _ = self.api("PUT", f"participants/update_participant/{participant_id}/{field}/{new_val}")
+        ok, _ = self.api(
+            "PUT",
+            f"participants/update_participant/{url_segment(participant_id)}/{url_segment(field)}/{url_segment(new_val)}",
+        )
         if ok:
             participant[field] = new_val
             success("Participant updated.", self)
@@ -97,7 +100,7 @@ def individual_participant_menu(self: Interface, participant_id: str) -> None:
             prompt = f"Send a one-time {survey_type} survey now?"
         if not prompt_confirmation(self, prompt = prompt):
             return
-        ok, _ = self.api("POST", f"participants/send_survey/{participant_id}/{survey_type}")
+        ok, _ = self.api("POST", f"participants/send_survey/{url_segment(participant_id)}/{url_segment(survey_type)}")
         if ok:
             success(f"{survey_type.capitalize()} survey sent.", self)
         else:
@@ -108,13 +111,13 @@ def individual_participant_menu(self: Interface, participant_id: str) -> None:
         if not message:
             error("Message cannot be empty.")
             return
-        ok, _ = self.api("POST", f"participants/send_custom_sms/{participant_id}", json={"message": message})
+        ok, _ = self.api("POST", f"participants/send_custom_sms/{url_segment(participant_id)}", json={"message": message})
         if ok:
             success("Message sent.", self)
         else:
             error("Failed to send message.", self)
 
-    ok, data = self.api("GET", f"participants/get_participant/{participant_id}")
+    ok, data = self.api("GET", f"participants/get_participant/{url_segment(participant_id)}")
     # A separate, Optional-typed local for the raw lookup, narrowed into
     # `participant` (declared non-Optional) right below -- kept as two
     # names, not one reassigned/narrowed variable, because mypy doesn't

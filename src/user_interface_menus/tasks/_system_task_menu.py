@@ -34,7 +34,10 @@ def remove_task_menu(self: Interface) -> None:
                     idx = int(index) - 1
                     if 0 <= idx < len(self.scheduled_tasks):
                         t = self.scheduled_tasks[idx]
-                        remove_ok, _ = self.api("DELETE", f"system/remove_system_task/{t['task_type']}/{t['task_time']}")
+                        remove_ok, _ = self.api(
+                            "DELETE",
+                            f"system/remove_system_task/{url_segment(t['task_type'])}/{url_segment(t['task_time'])}",
+                        )
                         if remove_ok:
                             success("Task removed.", self)
                         else:

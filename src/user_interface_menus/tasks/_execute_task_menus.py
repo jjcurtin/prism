@@ -53,7 +53,7 @@ def execute_task_menu(self: Interface) -> None:
     if task_type == 'RUN_R_SCRIPT':
         execute_r_script_menu(self)
     else:
-        ok, _ = self.api("POST", f"system/execute_task/{task_type}")
+        ok, _ = self.api("POST", f"system/execute_task/{url_segment(task_type)}")
         if ok:
             success(f"Task {task_type} executed.", self)
         else:

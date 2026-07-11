@@ -26,7 +26,9 @@ def send_announcement_menu(self: Interface) -> None:
         return
     
     require_on_study_param = "yes" if require_on_study else "no"
-    ok, _ = self.api("POST", f"participants/study_announcement/{require_on_study_param}", json = {"message": message})
+    ok, _ = self.api(
+        "POST", f"participants/study_announcement/{url_segment(require_on_study_param)}", json = {"message": message}
+    )
     if ok:
         success("Study announcement sent.", self)
     else:
@@ -38,7 +40,7 @@ def remove_participant_menu(self: Interface) -> int | None:
         error("Participant ID cannot be empty.")
         return 0
     if prompt_confirmation(self, prompt = f"Are you sure you want to remove participant with ID '{participant_id}'?"):
-        ok, _ = self.api("DELETE", f"participants/remove_participant/{participant_id}")
+        ok, _ = self.api("DELETE", f"participants/remove_participant/{url_segment(participant_id)}")
         if ok:
             success("Participant removed.", self)
             return 1
@@ -52,7 +54,7 @@ def access_specific_participant_menu(self: Interface) -> int | None:
     if not participant_id or participant_id.strip() == '':
         error("Participant ID cannot be empty.")
         return 0
-    ok, data = self.api("GET", f"participants/get_participant/{participant_id}")
+    ok, data = self.api("GET", f"participants/get_participant/{url_segment(participant_id)}")
     if ok:
         individual_participant_menu(self, participant_id)
         return None

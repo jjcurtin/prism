@@ -38,7 +38,12 @@ def add_new_r_script_menu(self: Interface) -> None:
         except ValueError:
             print("Invalid time format, using default 00:00:00.")
             task_time = "00:00:00"
-    ok, _ = self.api("POST", f"system/add_r_script_task/{r_script_path}/{task_time}")
+    # r_script_path intentionally NOT url_segment()-encoded here: the
+    # add_r_script_task route uses Flask's default (non-path:) converter,
+    # which already can't match an embedded '/' in a real nested script
+    # path regardless of encoding -- a server-side route change, out of
+    # scope for this client-side fix (see url_segment's own docstring).
+    ok, _ = self.api("POST", f"system/add_r_script_task/{r_script_path}/{url_segment(task_time)}")
     if ok:
         success(f"R script task {r_script_path} scheduled at {task_time}.", self)
     else:
@@ -73,7 +78,7 @@ def add_new_task_menu(self: Interface) -> None:
             except ValueError:
                 print("Invalid time format, using default 00:00:00.")
                 task_time = "00:00:00"
-        ok, _ = self.api("POST", f"system/add_system_task/{task_type}/{task_time}")
+        ok, _ = self.api("POST", f"system/add_system_task/{url_segment(task_type)}/{url_segment(task_time)}")
         if ok:
             success("Task added.", self)
         else:

@@ -1,6 +1,7 @@
 """globals and global editing functions"""
 
 import re
+from urllib.parse import quote
 
 # config/README.md's documented phone_number format: 10 digits, no
 # separators. Kept in sync by hand with _helper.py's PHONE_NUMBER_RE -- the
@@ -8,6 +9,42 @@ import re
 # prism_interface.py's own self.api() chokepoint), so this is a deliberate
 # second copy, not a shared import, matching that existing boundary.
 PHONE_NUMBER_RE = re.compile(r'^\d{10}$')
+
+
+def url_segment(value: object) -> str:
+    """Percent-encodes `value` for safe use as a single URL path segment in
+    a self.api(...) call -- e.g. url_segment('AB#CD') -> 'AB%23CD'.
+
+    Found by an external adversarial review, confirmed live: self.api()'s
+    endpoint strings are plain f-strings with no encoding at all. A `#`
+    in a free-text value (e.g. update_participant's new_val, RA-typed)
+    starts a URL fragment -- confirmed that `requests` silently truncates
+    everything from the `#` onward before the request is even sent, so the
+    server never sees it at all (silent data corruption: "AB#CD" would be
+    saved as "AB", with no error anywhere). A `/` in a value splits it into
+    an extra, unintended path segment -- confirmed that Flask's default
+    route converters (every menu-facing route in _routes.py) don't span
+    multiple segments, so this fails the route match instead (a visible,
+    if confusing, 404-shaped failure rather than silent corruption).
+
+    `safe=':'` -- unlike urllib.parse.quote's default `safe='/'`, which
+    exists for encoding whole PATHS (where `/` is meant to stay a
+    separator) -- deliberately encodes `/` too, since this is for a single
+    SEGMENT, where a literal `/` in the value is exactly the case being
+    guarded against, not a separator to preserve. `:` stays unencoded
+    (task_time values are "HH:MM:SS") -- unlike `/` or `#`, a literal `:`
+    in a single path segment isn't a route-splitting or truncation risk
+    for Flask's default converter or `requests`, so encoding it would only
+    make URLs harder to read for no safety benefit.
+
+    Not applied to r_script_path segments (system/{add,remove,execute}_
+    r_script_task) -- those routes use Flask's default (non-`path:`)
+    converter, which already can't match an embedded `/` in a real nested
+    script path regardless of encoding; fixing that would need a
+    server-side route change (`<path:r_script_path>`), a separate,
+    unrequested change from this client-side fix.
+    """
+    return quote(str(value), safe=':')
 
 # UIState/ui_state actually live in the tiny dependency-free _ui_state.py
 # leaf module, not here -- see that module's docstring for why: _display.py/
