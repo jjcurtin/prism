@@ -268,9 +268,9 @@ def test_participant_management_menu_default_sort_is_unique_id(fake_interface, m
     pmm.participant_management_menu(fake_interface)
 
     menu_options = mock_pmo.call_args[0][1]
-    assert menu_options['1']['description'] == '3000 (Alice, 100)'
-    assert menu_options['2']['description'] == 'Xavier (Bob, 200)'
-    assert menu_options['3']['description'] == 'Zed (Charlie, 300)'
+    assert menu_options['3000']['description'] == '3000 (Alice, 100)'
+    assert menu_options['Xavier']['description'] == 'Xavier (Bob, 200)'
+    assert menu_options['Zed']['description'] == 'Zed (Charlie, 300)'
     assert fake_interface.participant_display_mode == 'unique_id'
 
 
@@ -287,8 +287,8 @@ def test_participant_management_menu_sort_by_name(fake_interface, monkeypatch):
     pmm.participant_management_menu(fake_interface)
 
     menu_options = mock_pmo.call_args[0][1]
-    assert menu_options['1']['description'] == 'Adams (Zed, 100)'
-    assert menu_options['2']['description'] == 'Baker (Amy, 200)'
+    assert menu_options['Adams']['description'] == 'Adams (Zed, 100)'
+    assert menu_options['Baker']['description'] == 'Baker (Amy, 200)'
 
 
 def test_participant_management_menu_sort_by_subid(fake_interface, monkeypatch):
@@ -307,7 +307,7 @@ def test_participant_management_menu_sort_by_subid(fake_interface, monkeypatch):
     pmm.participant_management_menu(fake_interface)
 
     menu_options = mock_pmo.call_args[0][1]
-    assert [menu_options[str(i)]['description'] for i in (1, 2, 3)] == [
+    assert [menu_options[subid]['description'] for subid in ('2', '9', '10')] == [
         '2 (Alice, 100)', '9 (Bob, 200)', '10 (Charlie, 300)',
     ]
 
@@ -327,7 +327,7 @@ def test_participant_management_menu_sort_by_on_study(fake_interface, monkeypatc
 
     menu_options = mock_pmo.call_args[0][1]
     # on_study True participants first (sorted by unique_id), then False
-    assert [menu_options[str(i)]['description'] for i in (1, 2, 3)] == [
+    assert [menu_options[subid]['description'] for subid in ('A', 'B', 'C')] == [
         'A (A, 100)', 'B (B, 200)', 'C (C, 300)',
     ]
 
@@ -345,8 +345,8 @@ def test_participant_management_menu_filter_on_study_true(fake_interface, monkey
     pmm.participant_management_menu(fake_interface)
 
     menu_options = mock_pmo.call_args[0][1]
-    assert menu_options['1']['description'] == 'A (A, 100)'
-    assert '2' not in menu_options
+    assert menu_options['A']['description'] == 'A (A, 100)'
+    assert 'B' not in menu_options
 
 
 def test_participant_management_menu_filter_on_study_false(fake_interface, monkeypatch):
@@ -362,11 +362,11 @@ def test_participant_management_menu_filter_on_study_false(fake_interface, monke
     pmm.participant_management_menu(fake_interface)
 
     menu_options = mock_pmo.call_args[0][1]
-    assert menu_options['1']['description'] == 'B (B, 200)'
-    assert '2' not in menu_options
+    assert menu_options['B']['description'] == 'B (B, 200)'
+    assert 'A' not in menu_options
 
 
-def test_participant_management_menu_numbered_lambda_uses_default_arg_capture(fake_interface, monkeypatch):
+def test_participant_management_menu_subid_keyed_lambda_uses_default_arg_capture(fake_interface, monkeypatch):
     """Confirms the `lambda self, participant_id = p['unique_id']: ...` idiom
     actually pins each option to its own participant (not late-bound to the
     last loop value)."""
@@ -383,9 +383,53 @@ def test_participant_management_menu_numbered_lambda_uses_default_arg_capture(fa
     menu_options = mock_pmo.call_args[0][1]
     calls = []
     monkeypatch.setattr(pmm, 'individual_participant_menu', lambda self, pid: calls.append(pid))
-    menu_options['1']['menu_caller'](fake_interface)
-    menu_options['2']['menu_caller'](fake_interface)
+    menu_options['A']['menu_caller'](fake_interface)
+    menu_options['B']['menu_caller'](fake_interface)
     assert calls == ['100', '200']
+
+
+def test_participant_management_menu_keyed_by_subid_not_position(fake_interface, monkeypatch):
+    """The actual feature this batch of tests covers: an RA types a
+    participant's sub ID directly to select them, instead of a positional
+    1/2/3 index that shifts whenever the list is re-sorted or filtered.
+    """
+    participants = [
+        _participant('100', 'Alice', '3042'),
+        _participant('200', 'Bob', '3043'),
+    ]
+    fake_interface.api = MagicMock(return_value=(True, {'participants': participants}))
+    mock_pmo = MagicMock(return_value=True)
+    monkeypatch.setattr(pmm, 'print_menu_options', mock_pmo)
+
+    pmm.participant_management_menu(fake_interface)
+
+    menu_options = mock_pmo.call_args[0][1]
+    assert '1' not in menu_options and '2' not in menu_options
+    assert menu_options['3042']['description'] == '3042 (Alice, 100)'
+    assert menu_options['3043']['description'] == '3043 (Bob, 200)'
+
+
+def test_participant_management_menu_duplicate_subid_falls_back_to_unique_id(fake_interface, monkeypatch):
+    """subid isn't uniqueness-enforced anywhere in this codebase (unlike
+    unique_id, which is -- ParticipantManager's I4 invariant). Two
+    participants sharing a subid must not collide on the same menu key --
+    the second one falls back to unique_id so both stay independently
+    reachable, rather than silently overwriting the first and making it
+    unreachable from this menu.
+    """
+    participants = [
+        _participant('100', 'Alice', '3042'),
+        _participant('200', 'Bob', '3042'),
+    ]
+    fake_interface.api = MagicMock(return_value=(True, {'participants': participants}))
+    mock_pmo = MagicMock(return_value=True)
+    monkeypatch.setattr(pmm, 'print_menu_options', mock_pmo)
+
+    pmm.participant_management_menu(fake_interface)
+
+    menu_options = mock_pmo.call_args[0][1]
+    assert menu_options['3042']['description'] == '3042 (Alice, 100)'
+    assert menu_options['200']['description'] == '3042 (Bob, 200)'
 
 
 def test_participant_management_menu_exception_is_caught(fake_interface, monkeypatch, capsys):

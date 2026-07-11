@@ -158,12 +158,21 @@ def participant_management_menu(self: Interface) -> None:
             participants_ok, data = self.api("GET", "participants/get_participants")
             participants = data.get("participants", []) if participants_ok and data else []
             if participants and not self.commands_queue:
-                for i, p in enumerate(_sort(_filter(participants)), 1):
-                    menu_options[str(i)] = {
+                for p in _sort(_filter(participants)):
+                    key = str(p['subid'])
+                    if key in menu_options:
+                        # subid isn't uniqueness-enforced anywhere in this
+                        # codebase (unlike unique_id, which is -- see
+                        # ParticipantManager's I4 invariant) -- fall back
+                        # to unique_id for this entry rather than silently
+                        # overwriting the earlier one's menu key and making
+                        # it unreachable from this menu.
+                        key = str(p['unique_id'])
+                    menu_options[key] = {
                         'description': f"{p['subid']} ({p['initials']}, {p['unique_id']})",
                         'menu_caller': lambda self, participant_id = p['unique_id']: individual_participant_menu(self, participant_id)
                     }
-                print("Enter an index to select a participant, or, choose another option.")
+                print("Enter a participant's sub ID to select them, or choose another option.")
                 print("Current Display Mode:", red(self.participant_display_mode))
                 print("Current Filter Settings:", self.participant_filter_settings)
                 print_dashes()
