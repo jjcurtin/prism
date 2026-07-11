@@ -102,6 +102,52 @@ def test_add_task_track_defaults_to_true(fake_app):
     assert tm.tasks == [task]
 
 
+def test_add_task_dedupes_identical_system_task(fake_app):
+    """Regression test for a real bug (external adversarial review,
+    confirmed by inspection): neither the add_system_task/add_r_script_task
+    routes nor load_task_schedule() (CSV rows) checked for an existing task
+    sharing task_type+task_time before appending -- a duplicate CSV row or
+    a repeated API call silently scheduled the same system task twice,
+    running it twice daily.
+    """
+    tm = make_manager(fake_app)
+    first = tm.add_task('CHECK_SYSTEM', '03:00:00')
+
+    second = tm.add_task('CHECK_SYSTEM', '03:00:00')
+
+    assert tm.tasks == [first]
+    assert second['task_type'] == 'CHECK_SYSTEM'  # still returns a dict, just not appended
+    assert any('Not adding' in msg and 'CHECK_SYSTEM' in msg for _, msg in fake_app.transcript)
+
+
+def test_add_task_does_not_dedupe_different_r_script_paths_at_same_time(fake_app):
+    """r_script_path is part of a system task's identity -- two different
+    scripts legitimately scheduled for the same time under RUN_R_SCRIPT
+    must not be treated as duplicates of each other."""
+    tm = make_manager(fake_app)
+    tm.add_task('RUN_R_SCRIPT', '03:00:00', r_script_path='one.R')
+
+    tm.add_task('RUN_R_SCRIPT', '03:00:00', r_script_path='two.R')
+
+    assert len(tm.tasks) == 2
+    assert {t['r_script_path'] for t in tm.tasks} == {'one.R', 'two.R'}
+
+
+def test_add_task_does_not_dedupe_participant_tasks_by_type_and_time(fake_app):
+    """Dedupe only applies to system tasks (participant_id is None) --
+    two different participants both scheduled for 'ema' at the same time
+    is completely normal (most participants share the same daily survey
+    time) and must not be deduped against each other. Participant-task
+    duplication is a different bug/fix (I2, this session's
+    load_participants duplicate-unique_id guard), not this one."""
+    tm = make_manager(fake_app)
+    tm.add_task('ema', '09:00:00', participant_id='000000000')
+
+    tm.add_task('ema', '09:00:00', participant_id='000000001')
+
+    assert len(tm.tasks) == 2
+
+
 def test_add_task_track_false_not_added_to_tasks(fake_app):
     """Regression test for a real duplicate-SMS bug: _routes.py's
     send_survey adds a one-time task with task_time=now, which used to
@@ -544,9 +590,15 @@ def test_concurrent_add_task_no_lost_appends(fake_app):
     tasks_per_thread = 20
     stop_checking = threading.Event()
 
-    def add_many():
-        for _ in range(tasks_per_thread):
-            tm.add_task('CHECK_SYSTEM', '03:00:00')
+    def add_many(thread_id):
+        # Each append is for a distinct participant_id -- add_task()'s
+        # system-task dedupe (this session) only applies when
+        # participant_id is None, and giving every append the same
+        # identity here would collapse them all into one, defeating this
+        # test's actual purpose (proving the lock doesn't lose an append),
+        # not exercising the dedupe logic at all.
+        for i in range(tasks_per_thread):
+            tm.add_task('ema', '03:00:00', participant_id=f'{thread_id}_{i}')
 
     def check_repeatedly():
         # Concurrently hammers the same lock via check_tasks()'s own
@@ -556,7 +608,7 @@ def test_concurrent_add_task_no_lost_appends(fake_app):
 
     checker = threading.Thread(target=check_repeatedly)
     checker.start()
-    adders = [threading.Thread(target=add_many) for _ in range(num_threads)]
+    adders = [threading.Thread(target=add_many, args=(i,)) for i in range(num_threads)]
     for t in adders:
         t.start()
     for t in adders:

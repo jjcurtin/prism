@@ -139,7 +139,36 @@ class TaskManager():
             task_dict['participant_id'] = participant_id
         if track:
             with self._tasks_lock:
-                self.tasks.append(task_dict)
+                # Deduped for a system task (participant_id is None) only --
+                # a participant's recurring tasks are already covered by
+                # ParticipantManager's own I2 invariant (at most one
+                # recurring task per (task_type, participant_id) pair),
+                # enforced upstream of this call (load_participants'/
+                # add_participant's duplicate-unique_id rejection, this
+                # session). Found by an external adversarial review,
+                # confirmed by inspection: neither the add_system_task/
+                # add_r_script_task routes nor load_task_schedule() (CSV
+                # rows) checked for an existing task sharing
+                # task_type+task_time(+r_script_path) before appending --
+                # a duplicate CSV row or a repeated API call silently
+                # scheduled the same system task twice, running it twice
+                # daily. r_script_path is part of the identity (not just
+                # task_type+task_time) so two different scripts legitimately
+                # scheduled for the same time under RUN_R_SCRIPT aren't
+                # treated as duplicates of each other.
+                is_duplicate_system_task = participant_id is None and any(
+                    t.get('task_type') == task_type
+                    and t.get('task_time') == parsed_task_time
+                    and t.get('r_script_path') == task_dict.get('r_script_path')
+                    for t in self.tasks
+                )
+                if is_duplicate_system_task:
+                    self.app.add_to_transcript(
+                        f"Not adding {task_type} at {parsed_task_time}: an identical system task "
+                        "is already scheduled.", "WARNING"
+                    )
+                else:
+                    self.tasks.append(task_dict)
         return task_dict
     
     def save_to_csv(self, data: list[Task], file_path: str, headers: list[str] | None = None) -> None:
