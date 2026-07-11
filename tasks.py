@@ -11,15 +11,21 @@ script and is left as-is.
 computes the venv's interpreter paths itself, mirroring the old Makefile's
 OS-branch exactly (Windows: plain pip install, since pandas ships a
 prebuilt wheel for every Windows-supported CPython version we target;
-Linux: apt-installed pandas + `--system-site-packages` venv, since pandas
-has no prebuilt wheel for cp313/aarch64). Every other subcommand assumes
-it's already being run via the venv's python (so `sys.executable`
-correctly points at the venv) and just relays to the right script/subprocess.
+everywhere else: probe pip for a prebuilt pandas wheel first, since wheel
+availability depends on CPython version + CPU arch rather than distro --
+e.g. it's missing on the Pi's cp313/aarch64 but present on a typical Fedora
+x86_64 host. Only when no wheel is found do we fall back to a system-package
+install (apt on Debian/Ubuntu, dnf on Fedora) + `--system-site-packages`
+venv). Every other subcommand assumes it's already being run via the venv's
+python (so `sys.executable` correctly points at the venv) and just relays to
+the right script/subprocess.
 """
 
 import argparse
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent
@@ -34,25 +40,67 @@ def _venv_paths():
     return VENV_DIR / "bin" / "python", VENV_DIR / "bin" / "pip"
 
 
+def _pandas_requirement():
+    """Return the pinned pandas requirement line from requirements.txt, so
+    the wheel probe and the system-package fallback both track the same
+    pin instead of duplicating the version."""
+    with open(REPO_ROOT / "requirements.txt") as f:
+        for line in f:
+            if line.strip().startswith("pandas"):
+                return line.strip()
+    raise RuntimeError("pandas requirement not found in requirements.txt")
+
+
+def _pandas_wheel_available():
+    """Probe (without installing anything) whether pip can source a
+    prebuilt pandas wheel for this interpreter/platform. `pip download`
+    isn't gated by PEP 668's externally-managed-environment check the way
+    `pip install` is, so this is safe to run with the system python."""
+    with tempfile.TemporaryDirectory() as tmp:
+        result = subprocess.run(
+            [
+                sys.executable, "-m", "pip", "download",
+                "--no-deps", "--only-binary=:all:", "--dest", tmp,
+                _pandas_requirement(),
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+        )
+    return result.returncode == 0
+
+
+def _system_pandas_install_command():
+    """Pick the system package manager available on this host to install
+    pandas as a fallback when no prebuilt wheel exists."""
+    if shutil.which("apt-get"):
+        return ["sudo", "apt-get", "install", "-y", "python3-pandas"]
+    if shutil.which("dnf"):
+        return ["sudo", "dnf", "install", "-y", "python3-pandas"]
+    raise RuntimeError(
+        "No prebuilt pandas wheel is available for this Python/platform, "
+        "and neither apt-get nor dnf was found to install a system package. "
+        "Install pandas manually, then re-run setup."
+    )
+
+
 def cmd_setup(args):
     """Create .venv and install dependencies, then run setup_env.py."""
     venv_python, venv_pip = _venv_paths()
 
-    if sys.platform == "win32":
-        # Windows has prebuilt wheels for every requirement (including
-        # pandas, as of the 2.2.3 pin -- earlier pins had no cp313 wheel
-        # and pip would silently fall back to a from-source build that
-        # fails without MSVC Build Tools installed), so a plain venv +
-        # pip install is enough.
+    if sys.platform == "win32" or _pandas_wheel_available():
+        # A prebuilt wheel exists for this interpreter/platform, so a plain
+        # venv + pip install is enough -- no system package or
+        # --system-site-packages workaround needed.
         subprocess.run([sys.executable, "-m", "venv", str(VENV_DIR)], check=True, cwd=REPO_ROOT)
         subprocess.run([str(venv_pip), "install", "--upgrade", "pip"], check=True, cwd=REPO_ROOT)
         subprocess.run([str(venv_pip), "install", "-r", "requirements.txt"], check=True, cwd=REPO_ROOT)
         subprocess.run([str(venv_pip), "install", "-r", "requirements-dev.txt"], check=True, cwd=REPO_ROOT)
     else:
-        # pandas has no prebuilt wheel for this platform (cp313/aarch64);
-        # install it via apt and build the venv with --system-site-packages
-        # so pip doesn't try (and fail/hang) to compile it from source.
-        subprocess.run(["sudo", "apt-get", "install", "-y", "python3-pandas"], check=True)
+        # No prebuilt wheel for this platform (e.g. the Pi's cp313/aarch64);
+        # install pandas via the system package manager and build the venv
+        # with --system-site-packages so pip doesn't try (and fail/hang) to
+        # compile it from source.
+        subprocess.run(_system_pandas_install_command(), check=True)
         subprocess.run(
             [sys.executable, "-m", "venv", "--system-site-packages", str(VENV_DIR)],
             check=True,
