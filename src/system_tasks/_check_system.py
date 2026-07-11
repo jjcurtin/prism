@@ -1,8 +1,8 @@
 """This file checks the system to make sure components work"""
 
-import concurrent.futures
 import os
 import shutil
+import threading
 
 from system_tasks._system_task import SystemTask
 
@@ -29,10 +29,18 @@ class CheckSystem(SystemTask):
     def check_research_drive(self) -> int:
         if self.app.mode == "prod":
             self.app.add_to_transcript(f"INFO: Now checking Research Drive connection...")
-            drive_mount = getattr(self.app, 'drive_mount', None)
-            if not drive_mount:
+            raw_drive_mount = getattr(self.app, 'drive_mount', None)
+            if not raw_drive_mount:
                 self.app.add_to_transcript("Failed to connect to Research Drive: drive_mount is not set.", "ERROR")
                 return 1
+            # A distinct, single-assignment, explicitly-str-typed name --
+            # getattr(..., None) widens the type past App.drive_mount's own
+            # `str` declaration (_types.py) to `Any | None`, and reusing
+            # the same variable name for a narrowed reassignment doesn't
+            # reliably narrow it inside the nested _run_probe() closure
+            # below (mypy infers one unified type per variable per
+            # function scope, not a flow-sensitive one per assignment).
+            drive_mount: str = str(raw_drive_mount)
             # The research drive is assumed pre-mounted (config/README.md) --
             # this just confirms the mount point is actually there and
             # listable, rather than attempting to mount it ourselves.
@@ -40,32 +48,45 @@ class CheckSystem(SystemTask):
             # every platform/filesystem, so also fail if the directory can't
             # be listed (e.g. present but not actually connected/stale).
             #
-            # Run on a worker thread with a hard deadline (future.result's
+            # Run on a daemon thread with a hard deadline (Thread.join's
             # timeout) rather than calling these directly: neither
             # os.path.ismount() nor os.listdir() can be cancelled or given
             # a native timeout, so a stale/unresponsive mount can block for
-            # minutes (or indefinitely). If the deadline is hit, the worker
-            # thread itself is abandoned (shutdown(wait=False) -- there's
-            # no way to actually kill a thread stuck in a blocking syscall)
-            # rather than blocking this call again waiting for it to exit,
-            # which would defeat the entire point of the timeout.
-            executor = concurrent.futures.ThreadPoolExecutor(max_workers = 1)
-            try:
-                future = executor.submit(self._probe_research_drive, drive_mount)
-                mounted = future.result(timeout = DRIVE_CHECK_TIMEOUT_SECONDS)
-            except concurrent.futures.TimeoutError:
+            # minutes (or indefinitely). Plain threading.Thread(daemon=True)
+            # rather than concurrent.futures.ThreadPoolExecutor: an
+            # abandoned ThreadPoolExecutor worker is NOT a daemon thread, so
+            # Python's atexit machinery (concurrent.futures.thread._python_
+            # exit) unconditionally joins it with no timeout at interpreter
+            # shutdown -- a probe truly stuck forever would then block
+            # PRISM's own process exit too. A daemon thread is killed
+            # outright at interpreter shutdown instead of joined, so an
+            # abandoned probe can never block PRISM from exiting.
+            result: dict[str, object] = {}
+
+            def _run_probe() -> None:
+                try:
+                    result['mounted'] = self._probe_research_drive(drive_mount)
+                except Exception as e:
+                    result['error'] = e
+
+            probe_thread = threading.Thread(target = _run_probe, daemon = True)
+            probe_thread.start()
+            probe_thread.join(timeout = DRIVE_CHECK_TIMEOUT_SECONDS)
+
+            if probe_thread.is_alive():
                 self.app.add_to_transcript(
                     f"Failed to connect to Research Drive: {drive_mount} did not respond within "
                     f"{DRIVE_CHECK_TIMEOUT_SECONDS}s -- mount may be stale.",
                     "ERROR",
                 )
                 return 1
-            except Exception as e:
-                self.app.add_to_transcript(f"Failed to connect to Research Drive: {e}", "ERROR")
+            # is_alive() is False here, meaning _run_probe has fully
+            # completed (including its write to `result`) -- safe to read
+            # without any further synchronization.
+            if 'error' in result:
+                self.app.add_to_transcript(f"Failed to connect to Research Drive: {result['error']}", "ERROR")
                 return 1
-            finally:
-                executor.shutdown(wait = False)
-            if not mounted:
+            if not result.get('mounted'):
                 self.app.add_to_transcript(f"Failed to connect to Research Drive: {drive_mount} does not exist.", "ERROR")
                 return 1
             self.app.add_to_transcript("INFO: Successfully connected to Research Drive.")
@@ -73,7 +94,7 @@ class CheckSystem(SystemTask):
 
     @staticmethod
     def _probe_research_drive(drive_mount: str) -> bool:
-        """Runs on the worker thread submitted by check_research_drive()
+        """Runs on the daemon thread started by check_research_drive()
         above -- kept as a plain function (no self.app access) so it has no
         shared state to race against the caller if it ends up abandoned
         past the timeout.
