@@ -360,6 +360,18 @@ class ParticipantManager(TaskManager):
         survey_type, violating I2 and the spirit of I4 without ever
         touching update_participant's unique_id-edit rejection at all).
 
+        Also validates each survey time field up front (found by an
+        external adversarial review: this method had no validation of its
+        own at all -- a malformed time string, e.g. "9am", used to persist
+        the participant successfully via save_participants() and only then
+        raise, uncaught, inside schedule_participant_tasks()'s add_task()
+        call, propagating out of this method entirely. The caller (the
+        route) saw an unhandled 500 and paged coordinators for what was
+        actually a half-completed add: the participant record existed on
+        disk with some or all of its recurring tasks never scheduled).
+        update_participant already validates this same way; this mirrors
+        it for the add path.
+
         Also rolls back the in-memory append if save_participants() fails,
         so self.participants stays in sync with what's actually on disk.
         """
@@ -373,6 +385,26 @@ class ParticipantManager(TaskManager):
                     f"Rejected add_participant: unique_id {participant['unique_id']} already exists.", "ERROR"
                 )
                 return 1
+            for field_name in self.survey_types.values():
+                task_time_str = participant.get(field_name)
+                if task_time_str:
+                    # Normalized in place (not just validated against a
+                    # copy) -- same strip-before-persist fix as
+                    # update_participant's equivalent branch, so
+                    # schedule_participant_tasks()'s own add_task() call
+                    # below sees the same stripped value this check just
+                    # validated, not a padded original that could still
+                    # raise there.
+                    task_time_str = str(task_time_str).strip()
+                    participant[field_name] = task_time_str
+                    try:
+                        datetime.strptime(task_time_str, '%H:%M:%S')
+                    except ValueError:
+                        self.app.add_to_transcript(
+                            f"Rejected add_participant: invalid time format '{task_time_str}' for {field_name}; "
+                            "expected HH:MM:SS.", "ERROR"
+                        )
+                        return 1
             self.participants.append(participant)
             if self.save_participants():
                 self.participants.remove(participant)

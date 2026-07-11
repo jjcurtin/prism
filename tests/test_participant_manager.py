@@ -245,6 +245,41 @@ def test_add_participant_rejects_duplicate_unique_id_returns_1(fake_app):
     assert any('already exists' in msg for _, msg in fake_app.transcript)
 
 
+def test_add_participant_rejects_invalid_time_format_no_partial_state(fake_app):
+    """Regression test for a bug found by an external adversarial review:
+    add_participant had no validation of its own -- a malformed time
+    string used to persist the participant successfully via
+    save_participants() and only then raise, uncaught, inside
+    schedule_participant_tasks()'s add_task() call, propagating out of
+    this method entirely and leaving a half-completed add (participant on
+    disk, some/all tasks never scheduled) behind an apparent failure.
+    Validated up front now, so a rejected add changes nothing at all --
+    same fix shape as update_participant's equivalent bug.
+    """
+    pm = make_manager(fake_app)
+    pm.save_participants = lambda: 0  # should never be reached
+    new_participant = dict(PARTICIPANT, ema_time='9am')
+
+    result = pm.add_participant(new_participant)
+
+    assert result == 1
+    assert pm.participants == []
+    assert pm.tasks == []
+    assert any('invalid time format' in msg.lower() for _, msg in fake_app.transcript)
+
+
+def test_add_participant_strips_padded_time_before_persisting(fake_app):
+    pm = make_manager(fake_app)
+    pm.save_participants = lambda: 0
+    new_participant = dict(PARTICIPANT, ema_time=' 16:00:00 ')
+
+    result = pm.add_participant(new_participant)
+
+    assert result == 0
+    assert new_participant['ema_time'] == '16:00:00'
+    assert any(t['task_type'] == 'ema' and t['task_time'].strftime('%H:%M:%S') == '16:00:00' for t in pm.tasks)
+
+
 def test_update_participant_rejects_invalid_time_format_no_mutation(fake_app):
     """Regression test for a bug found by an adversarial review: the old
     code applied the field mutation and persisted it BEFORE reaching
