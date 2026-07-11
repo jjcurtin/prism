@@ -16,6 +16,40 @@ import argparse
 from task_managers._system_task_manager import SystemTaskManager
 from task_managers._participant_manager import ParticipantManager
 
+
+def _verify_invocation_directory() -> None:
+    """Exits cleanly if launched with a cwd other than src/. A standalone
+    function, not a PRISM method: it runs before anything on `self` is
+    initialized (see __init__ below), so it must not touch `self` at all --
+    the old inline version called self.add_to_transcript(...) here, which
+    itself reads self.mode/self.logs_dir, neither set yet at this point;
+    hitting this guard raised AttributeError instead of the intended clean
+    error message.
+
+    Also a real cwd check now, not just reordering that old call: the
+    previous version only ever compared __file__'s own on-disk location
+    (os.path.dirname(os.path.abspath(__file__)).endswith('src')), which is
+    fixed by the checkout layout regardless of the launching shell's
+    working directory -- it could essentially never fail in practice, so
+    it never actually caught the "wrong directory invocation" its message
+    implied.
+    """
+    expected_dir = os.path.dirname(os.path.abspath(__file__))
+    actual_dir = os.path.abspath(os.getcwd())
+    if actual_dir != expected_dir:
+        print(f"ERROR - Please run this script from the '{expected_dir}' directory (src/); current directory is '{actual_dir}'.")
+        exit(1)
+
+
+
+# Written to repo_root on startup, read (and removed) by stop_server.py --
+# a precise, PID-targeted alternative to the old pattern-matching
+# `pkill -f run_prism.py`, which would also kill any unrelated process
+# whose command line merely contained that string (e.g. `vim run_prism.py`,
+# a second checkout's server, a grep).
+PID_FILE_NAME = '.run_prism.pid'
+
+
 class PRISM():
     # Attributes populated by load_paths()/load_api_keys() below, rather
     # than directly in __init__ -- some (participants_path, reminders_path,
@@ -50,14 +84,13 @@ class PRISM():
     flask_app: Any  # Flask app instance; see launch_web_app()
 
     def __init__(self, mode: str = "test") -> None:
-        if not os.path.dirname(os.path.abspath(__file__)).endswith('src'):
-            self.add_to_transcript("Please run this script from the 'src' directory.", "ERROR")
-            exit(1)
+        _verify_invocation_directory()
 
         clear()
         self.mode = mode
         self.start_time = datetime.now()
         self.load_paths()
+        self._write_pid_file()
         self.add_to_transcript("Initializing PRISM application...", "INFO")
 
         self.load_api_keys()
@@ -286,6 +319,14 @@ class PRISM():
             self.add_to_transcript(f"Failed to read {target}: {e}", "ERROR")
             return False, None
 
+    def _write_pid_file(self) -> None:
+        try:
+            (self.repo_root / PID_FILE_NAME).write_text(str(os.getpid()))
+        except Exception as e:
+            self.add_to_transcript(
+                f"Failed to write PID file (stop_server.py will fall back to pattern-matching): {e}", "WARNING"
+            )
+
     def launch_web_app(self) -> None:
         self.flask_app = create_flask_app(self)
         serve(self.flask_app, host = '127.0.0.1', port = 5000)
@@ -294,6 +335,7 @@ class PRISM():
         self.add_to_transcript("Received shutdown signal. Stopping PRISM application...", "INFO")
         self.system_task_manager.stop()
         self.participant_manager.stop()
+        Path(self.repo_root, PID_FILE_NAME).unlink(missing_ok = True)
         os._exit(0)
 
     def shutdown(self) -> None:

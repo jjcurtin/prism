@@ -95,3 +95,44 @@ def test_prism_still_serves_requests_when_research_drive_is_unmounted(booted_pri
     degraded_tasks = client.get('/system/get_task_schedule')
     assert degraded_tasks.status_code == 200
     assert degraded_tasks.get_json() == {'tasks': []}
+
+
+# ------------------------------------------------------------
+# _verify_invocation_directory / the __init__ startup guard
+# ------------------------------------------------------------
+
+def test_verify_invocation_directory_wrong_cwd_exits_cleanly(monkeypatch, tmp_path, capsys):
+    import run_prism
+
+    monkeypatch.chdir(tmp_path)  # anywhere but src/
+
+    with pytest.raises(SystemExit):
+        run_prism._verify_invocation_directory()
+
+    assert 'Please run this script from' in capsys.readouterr().out
+
+
+def test_verify_invocation_directory_correct_cwd_does_not_exit(monkeypatch):
+    import os
+    import run_prism
+
+    monkeypatch.chdir(os.path.dirname(os.path.abspath(run_prism.__file__)))
+
+    run_prism._verify_invocation_directory()  # must not raise
+
+
+def test_init_wrong_cwd_raises_systemexit_not_attributeerror(monkeypatch, tmp_path):
+    """Regression test for a fixed bug: the old inline guard called
+    self.add_to_transcript(...) before self.mode (and self.logs_dir, which
+    add_to_transcript itself reads) were ever set on the instance -- hitting
+    it raised AttributeError instead of the intended clean startup error.
+    Constructs a real PRISM() (not the __new__-bypassing fixtures used
+    elsewhere in this file) specifically to prove __init__ itself now fails
+    the right way.
+    """
+    from run_prism import PRISM
+
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(SystemExit):
+        PRISM(mode='test')

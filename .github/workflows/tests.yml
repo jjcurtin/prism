@@ -216,6 +216,33 @@ jobs:
           reporter: java-junit
           fail-on-error: false
 
+  process-lifecycle:
+    name: process-lifecycle
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      pull-requests: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Run tests
+        run: python -m pytest tests/test_run_prism.py tests/test_stop_server.py -v --junitxml=test-results.xml
+      - name: Publish test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: process-lifecycle tests
+          path: test-results.xml
+          reporter: java-junit
+          fail-on-error: false
+
   helper:
     name: helper
     runs-on: ubuntu-latest
