@@ -58,7 +58,21 @@ def _pid_is_alive(pid: int) -> bool:
     Windows has no os.kill(pid, 0) equivalent; `tasklist` is already this
     codebase's convention for Windows process inspection (see
     stop_server.py's Windows branch).
+
+    pid <= 0 is treated as dead outright rather than probed: os.getpid()
+    never returns one, so the only way _acquire_pid_file would ever pass
+    one in is a corrupted PID file (e.g. literally "0" or "-1"). POSIX
+    os.kill(pid, 0) treats those as process-group/broadcast signals, not
+    single-PID probes -- pid 0 targets this process's own group (would
+    return True, since the caller's own process is always "alive"), and a
+    negative pid targets the process group named by its absolute value --
+    neither answers "is PID <pid> alive", so probing would silently
+    misreport a corrupted file as a live instance and refuse to start
+    indefinitely instead of the existing "stale file, warn and proceed"
+    path a genuinely dead recorded PID already takes.
     """
+    if pid <= 0:
+        return False
     if sys.platform == "win32":
         try:
             result = subprocess.run(
@@ -435,7 +449,7 @@ class PRISM():
                 f"Web server failed to start or crashed: {e} -- shutting down task managers "
                 "so no headless instance keeps processing the schedule.", "ERROR"
             )
-            self.handle_shutdown(signal.SIGTERM, None)
+            self.handle_shutdown(signal.SIGTERM, None, exit_code = 1)
 
     def _unlink_pid_file_if_owned(self) -> None:
         """Only removes the PID file if it currently names THIS process.
@@ -465,12 +479,24 @@ class PRISM():
             return
         pid_file.unlink(missing_ok = True)
 
-    def handle_shutdown(self, signum: int, frame: FrameType | None) -> None:
+    def handle_shutdown(self, signum: int, frame: FrameType | None, exit_code: int = 0) -> None:
+        """`exit_code` defaults to 0 -- a real SIGINT/SIGTERM (the normal
+        case: signal.signal registers this directly, so signum/frame must
+        stay the first two positional params) is a clean, requested
+        shutdown. _launch_web_app_or_shutdown passes exit_code=1: before
+        this parameter existed, a launch failure and a clean shutdown were
+        indistinguishable at the process-exit-code level (both ended in
+        the same unconditional os._exit(0)) even though the ERROR
+        transcript line already told them apart -- any process supervisor
+        driven by exit code (not this codebase today, but a plausible
+        future systemd/supervisor wrapper) couldn't tell a failed launch
+        from a successful one asked to stop.
+        """
         self.add_to_transcript("Received shutdown signal. Stopping PRISM application...", "INFO")
         self.system_task_manager.stop()
         self.participant_manager.stop()
         self._unlink_pid_file_if_owned()
-        os._exit(0)
+        os._exit(exit_code)
 
     def shutdown(self) -> None:
         self.handle_shutdown(signal.SIGINT, None)

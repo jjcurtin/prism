@@ -239,6 +239,24 @@ def test_pid_is_alive_true_for_the_current_process():
     assert _pid_is_alive(os.getpid()) is True
 
 
+def test_pid_is_alive_false_for_pid_zero_or_negative():
+    """Regression test: POSIX os.kill(pid, 0) treats pid<=0 as a
+    process-group/broadcast signal, not a single-PID probe -- pid 0 targets
+    the caller's own process group (would return True, since the caller is
+    always "alive") and a negative pid targets the group named by its
+    absolute value. Neither answers "is PID <pid> alive". os.getpid()
+    never returns 0 or negative, so the only way _acquire_pid_file would
+    ever probe one is a corrupted PID file (e.g. literally "0"); without
+    this guard that would misreport as a live instance and refuse to start
+    indefinitely instead of taking the existing stale-file warn-and-proceed
+    path.
+    """
+    from run_prism import _pid_is_alive
+
+    assert _pid_is_alive(0) is False
+    assert _pid_is_alive(-1) is False
+
+
 def test_pid_is_alive_false_for_a_dead_pid():
     import subprocess
     import sys
@@ -317,7 +335,14 @@ def test_acquire_pid_file_writes_fresh_when_no_file_exists(tmp_path):
 # drive handle_shutdown's real code path without actually terminating the
 # test process.
 
-def test_launch_web_app_or_shutdown_stops_managers_and_exits_on_failure(monkeypatch, tmp_path):
+def test_launch_web_app_or_shutdown_stops_managers_and_exits_nonzero_on_failure(monkeypatch, tmp_path):
+    """Regression test: a launch failure used to os._exit(0) via
+    handle_shutdown's old unconditional exit code -- indistinguishable, at
+    the process-exit-code level, from a clean requested shutdown, even
+    though the ERROR transcript line already told them apart. Now exits 1
+    so any exit-code-driven process supervisor can tell a failed launch
+    from a successful stop.
+    """
     import os
     from run_prism import PRISM
 
@@ -341,10 +366,33 @@ def test_launch_web_app_or_shutdown_stops_managers_and_exits_on_failure(monkeypa
     p._launch_web_app_or_shutdown()
 
     assert stopped == {'system': True, 'participant': True}
-    assert exit_codes == [0]
+    assert exit_codes == [1]
     transcript_text = (tmp_path / 'logs' / 'transcripts' / 'test_transcript.txt').read_text()
     assert 'Web server failed to start or crashed' in transcript_text
     assert 'shutting down task managers' in transcript_text
+
+
+def test_handle_shutdown_exits_zero_for_a_real_signal(monkeypatch, tmp_path):
+    """A real SIGINT/SIGTERM-driven shutdown (signal.signal registers
+    handle_shutdown directly) must still exit 0 -- only the
+    _launch_web_app_or_shutdown failure path opts into a nonzero code."""
+    import signal
+    import os
+
+    p = _make_bare_prism(tmp_path)
+
+    class FakeManager:
+        def stop(self):
+            pass
+
+    p.system_task_manager = FakeManager()
+    p.participant_manager = FakeManager()
+    exit_codes = []
+    monkeypatch.setattr(os, '_exit', lambda code=0: exit_codes.append(code))
+
+    p.handle_shutdown(signal.SIGTERM, None)
+
+    assert exit_codes == [0]
 
 
 def test_launch_web_app_or_shutdown_does_not_intervene_on_success(tmp_path):
