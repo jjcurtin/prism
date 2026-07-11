@@ -12,6 +12,11 @@ from datetime import datetime
 from _helper import is_valid_phone_number, send_sms, notify_coordinators
 from _error_codes import code_prefix
 from _types import App
+from task_managers._participant_manager import (
+    ADD_DUPLICATE_ID, ADD_INVALID_VALUE, ADD_SAVE_FAILED,
+    UPDATE_IMMUTABLE_FIELD, UPDATE_INVALID_VALUE, UPDATE_NOT_FOUND,
+    UPDATE_SAVE_FAILED, UPDATE_UNKNOWN_FIELD,
+)
 
 # Every route handler below returns either `(jsonify(...), <status code>)`
 # or a bare `jsonify(...)` (Flask defaults the status to 200) -- this alias
@@ -199,22 +204,50 @@ def create_flask_app(app_instance: App) -> Flask:
         if phone_number and not is_valid_phone_number(phone_number):
             return jsonify({"error": "phone_number must be exactly 10 digits"}), 400
         data['phone_number'] = phone_number
-        if app_instance.participant_manager.add_participant(data) != 0:
+        # Distinct statuses per failure reason, not one generic 500 for
+        # everything -- found by an external adversarial review: a
+        # duplicate unique_id and a genuine disk-write failure were
+        # previously indistinguishable to the API caller. See the ADD_*
+        # code definitions in _participant_manager.py.
+        add_result = app_instance.participant_manager.add_participant(data)
+        if add_result == ADD_DUPLICATE_ID:
+            return jsonify({"error": f"Participant {data['unique_id']} already exists"}), 409
+        if add_result == ADD_INVALID_VALUE:
+            return jsonify({"error": "Invalid field value (see server transcript for which field)"}), 400
+        if add_result == ADD_SAVE_FAILED or add_result != 0:
             return jsonify({"error": "Failed to save participant"}), 500
         app_instance.add_to_transcript(f"Participant #{data['unique_id']} added via API.", "INFO")
         return jsonify({"message": "Participant added successfully"}), 200
-    
+
     @flask_app.route('/participants/remove_participant/<unique_id>', methods = ['DELETE'])
     def remove_participant(unique_id: str) -> RouteResponse:
         if app_instance.participant_manager.remove_participant(unique_id) != 0:
             return jsonify({"error": "Participant not found"}), 404
         app_instance.add_to_transcript(f"Participant #{unique_id} removed via API.", "INFO")
         return jsonify({"message": "Participant removed successfully"}), 200
-        
+
     @flask_app.route('/participants/update_participant/<unique_id>/<field>/<new_value>', methods = ['PUT'])
     def update_participant(unique_id: str, field: str, new_value: str) -> RouteResponse:
-        if app_instance.participant_manager.update_participant(unique_id, field, new_value) != 0:
+        # Distinct statuses per failure reason, not one generic 404 for
+        # everything -- found live by an external adversarial review:
+        # rejecting a unique_id edit, an invalid field value, and a
+        # genuinely missing participant were all indistinguishable to the
+        # API caller (a 404 "Participant not found" for an existing
+        # participant is an outright lie). See the UPDATE_* code
+        # definitions in _participant_manager.py.
+        update_result = app_instance.participant_manager.update_participant(unique_id, field, new_value)
+        if update_result == UPDATE_NOT_FOUND:
             return jsonify({"error": "Participant not found"}), 404
+        if update_result == UPDATE_IMMUTABLE_FIELD:
+            return jsonify({"error": "unique_id is immutable; remove and re-add the participant instead"}), 403
+        if update_result == UPDATE_UNKNOWN_FIELD:
+            return jsonify({"error": f"Field '{field}' does not exist"}), 400
+        if update_result == UPDATE_INVALID_VALUE:
+            return jsonify({"error": f"Invalid value '{new_value}' for field '{field}'"}), 400
+        if update_result == UPDATE_SAVE_FAILED:
+            return jsonify({"error": "Failed to persist update"}), 500
+        if update_result != 0:
+            return jsonify({"error": "Failed to update participant"}), 500
         app_instance.add_to_transcript(f"Participant #{unique_id} updated via API: {field} changed to {new_value}", "INFO")
         return jsonify({"message": "Participant updated successfully"}), 200
     

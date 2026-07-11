@@ -25,6 +25,32 @@ PARTICIPANT_CSV_HEADERS = [
     'ema_time', 'ema_reminder_time', 'feedback_time', 'feedback_reminder_time',
 ]
 
+# update_participant()/add_participant() failure-reason codes -- distinct
+# nonzero ints, not just "1" for every rejection reason. Found by an
+# external adversarial review: the route mapped any nonzero
+# update_participant() result to a generic 404 "Participant not found",
+# so an existing participant's rejected unique_id edit, an invalid field
+# value, and a genuinely missing participant were all indistinguishable
+# to the API caller -- the manager logged the real reason server-side,
+# but the HTTP response actively lied about it. Kept as plain ints (this
+# file's existing 0/1/-1 convention throughout), not a new Enum/Literal
+# type -- nothing else in this codebase does that, and a distinguishable
+# int is the smallest change that fixes the actual bug. Every existing
+# caller that only checks `!= 0` is unaffected; only _routes.py needs to
+# switch on the specific value to report an honest status/message.
+UPDATE_OK = 0
+UPDATE_NOT_FOUND = 1
+UPDATE_UNKNOWN_FIELD = 2
+UPDATE_IMMUTABLE_FIELD = 3
+UPDATE_INVALID_VALUE = 4
+UPDATE_SAVE_FAILED = 5
+UPDATE_UNEXPECTED_ERROR = 6
+
+ADD_OK = 0
+ADD_DUPLICATE_ID = 1
+ADD_INVALID_VALUE = 2
+ADD_SAVE_FAILED = 3
+
 class ParticipantManager(TaskManager):
     """Invariants (see check_invariants() below for the executable form):
 
@@ -244,6 +270,11 @@ class ParticipantManager(TaskManager):
         a unique_id edit is rejected outright rather than attempted, and a
         save_participants() failure reverts the in-memory field change
         instead of leaving it applied only in memory.
+
+        Returns one of the UPDATE_* codes above (module level), not a bare
+        0/1 -- _routes.py's update_participant route switches on the
+        specific value to report an honest status/message instead of
+        collapsing every rejection reason into a generic 404.
         """
         try:
             # Locked as one unit: field mutation + persist + reschedule
@@ -266,7 +297,7 @@ class ParticipantManager(TaskManager):
                         "immutable (also referenced by Qualtrics Q_ExternalData and reminders.csv, which "
                         "this app doesn't rewrite). Remove and re-add the participant instead.", "ERROR"
                     )
-                    return 1
+                    return UPDATE_IMMUTABLE_FIELD
                 participant = self.get_participant(unique_id)
                 if participant:
                     if field in participant:
@@ -277,7 +308,7 @@ class ParticipantManager(TaskManager):
                                 value = False
                             else:
                                 self.app.add_to_transcript(f"Invalid value '{value}' for on_study; expected true/false.", "ERROR")
-                                return 1
+                                return UPDATE_INVALID_VALUE
                         elif field in self.survey_types.values() and value:
                             # Validated up front, not left to add_task()'s
                             # strptime below -- found by an adversarial
@@ -310,7 +341,7 @@ class ParticipantManager(TaskManager):
                                 self.app.add_to_transcript(
                                     f"Invalid time format '{value}' for {field}; expected HH:MM:SS.", "ERROR"
                                 )
-                                return 1
+                                return UPDATE_INVALID_VALUE
                         elif field == 'phone_number' and value:
                             # Same normalize-before-validate-and-persist
                             # fix as the time-field branch above.
@@ -319,7 +350,7 @@ class ParticipantManager(TaskManager):
                                 self.app.add_to_transcript(
                                     f"Invalid phone_number '{value}' for participant {unique_id}; expected 10 digits.", "ERROR"
                                 )
-                                return 1
+                                return UPDATE_INVALID_VALUE
                         old_value = participant[field]
                         participant[field] = value
                         if self.save_participants():
@@ -327,7 +358,7 @@ class ParticipantManager(TaskManager):
                             self.app.add_to_transcript(
                                 f"Failed to update participant {unique_id}: could not persist to CSV.", "ERROR"
                             )
-                            return 1
+                            return UPDATE_SAVE_FAILED
                         for task_type, field_name in self.survey_types.items():
                             if field_name == field:
                                 self.remove_task(task_type, participant_id = unique_id)
@@ -339,16 +370,16 @@ class ParticipantManager(TaskManager):
                                 if value:
                                     self.add_task(task_type, value, participant_id = unique_id)
                         self.app.add_to_transcript(f"Updated {field} for participant {unique_id} to {value}.", "INFO")
-                        return 0
+                        return UPDATE_OK
                     else:
                         self.app.add_to_transcript(f"Field {field} does not exist for participant {unique_id}.", "ERROR")
-                        return 1
+                        return UPDATE_UNKNOWN_FIELD
                 else:
                     self.app.add_to_transcript(f"Failed to update participant {unique_id}: Participant not found.", "ERROR")
-                    return 1
+                    return UPDATE_NOT_FOUND
         except Exception as e:
             self.app.add_to_transcript(f"An error occurred while updating participant {unique_id}: {e}", "ERROR")
-            return 1
+            return UPDATE_UNEXPECTED_ERROR
 
     def add_participant(self, participant: Participant) -> int:
         """Rejects a duplicate unique_id outright (found by an adversarial
@@ -374,6 +405,11 @@ class ParticipantManager(TaskManager):
 
         Also rolls back the in-memory append if save_participants() fails,
         so self.participants stays in sync with what's actually on disk.
+
+        Returns one of the ADD_* codes above (module level), not a bare
+        0/1 -- _routes.py's add_participant route switches on the specific
+        value to report an honest status/message (a duplicate id is a 409,
+        not the same generic 500 as a real disk-write failure).
         """
         with self._tasks_lock:
             # A direct existence check, not get_participant() -- that logs
@@ -384,7 +420,7 @@ class ParticipantManager(TaskManager):
                 self.app.add_to_transcript(
                     f"Rejected add_participant: unique_id {participant['unique_id']} already exists.", "ERROR"
                 )
-                return 1
+                return ADD_DUPLICATE_ID
             for field_name in self.survey_types.values():
                 task_time_str = participant.get(field_name)
                 if task_time_str:
@@ -404,13 +440,13 @@ class ParticipantManager(TaskManager):
                             f"Rejected add_participant: invalid time format '{task_time_str}' for {field_name}; "
                             "expected HH:MM:SS.", "ERROR"
                         )
-                        return 1
+                        return ADD_INVALID_VALUE
             self.participants.append(participant)
             if self.save_participants():
                 self.participants.remove(participant)
-                return 1
+                return ADD_SAVE_FAILED
             self.schedule_participant_tasks(participant)
-            return 0
+            return ADD_OK
 
     def schedule_participant_tasks(self, participant: Participant) -> None:
         for task_type, field_name in self.survey_types.items():

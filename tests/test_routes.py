@@ -9,6 +9,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from task_managers._participant_manager import (
+    ADD_DUPLICATE_ID, ADD_INVALID_VALUE, ADD_SAVE_FAILED,
+    UPDATE_IMMUTABLE_FIELD, UPDATE_INVALID_VALUE, UPDATE_NOT_FOUND,
+    UPDATE_SAVE_FAILED, UPDATE_UNKNOWN_FIELD,
+)
+
 
 # ------------------------------------------------------------
 # System
@@ -288,9 +294,26 @@ def test_add_participant_write_failure_is_500(routes_client, routes_app_instance
     """Regression test for a fixed bug: add_participant used to always
     report success regardless of whether the CSV write actually succeeded.
     """
-    routes_app_instance.participant_manager.add_participant.return_value = 1
+    routes_app_instance.participant_manager.add_participant.return_value = ADD_SAVE_FAILED
     resp = routes_client.post('/participants/add_participant', json=ADD_PARTICIPANT_PAYLOAD)
     assert resp.status_code == 500
+
+
+def test_add_participant_duplicate_id_is_409(routes_client, routes_app_instance):
+    """Regression test for a fixed bug found by an external adversarial
+    review: a duplicate-unique_id rejection and a genuine disk-write
+    failure used to both report the same generic 500 -- indistinguishable
+    to the caller.
+    """
+    routes_app_instance.participant_manager.add_participant.return_value = ADD_DUPLICATE_ID
+    resp = routes_client.post('/participants/add_participant', json=ADD_PARTICIPANT_PAYLOAD)
+    assert resp.status_code == 409
+
+
+def test_add_participant_invalid_value_is_400(routes_client, routes_app_instance):
+    routes_app_instance.participant_manager.add_participant.return_value = ADD_INVALID_VALUE
+    resp = routes_client.post('/participants/add_participant', json=ADD_PARTICIPANT_PAYLOAD)
+    assert resp.status_code == 400
 
 
 def test_add_participant_missing_fields(routes_client):
@@ -367,9 +390,39 @@ def test_update_participant_success(routes_client, routes_app_instance):
 
 
 def test_update_participant_not_found(routes_client, routes_app_instance):
-    routes_app_instance.participant_manager.update_participant.return_value = 1
+    routes_app_instance.participant_manager.update_participant.return_value = UPDATE_NOT_FOUND
     resp = routes_client.put('/participants/update_participant/1/phone_number/5555550199')
     assert resp.status_code == 404
+
+
+def test_update_participant_immutable_field_is_403(routes_client, routes_app_instance):
+    """Regression test for a fixed bug found live by an external
+    adversarial review: rejecting a unique_id edit for an EXISTING
+    participant used to report the same 404 "Participant not found" as a
+    genuinely missing participant.
+    """
+    routes_app_instance.participant_manager.update_participant.return_value = UPDATE_IMMUTABLE_FIELD
+    resp = routes_client.put('/participants/update_participant/1/unique_id/2')
+    assert resp.status_code == 403
+    assert 'immutable' in resp.get_json()['error']
+
+
+def test_update_participant_unknown_field_is_400(routes_client, routes_app_instance):
+    routes_app_instance.participant_manager.update_participant.return_value = UPDATE_UNKNOWN_FIELD
+    resp = routes_client.put('/participants/update_participant/1/not_a_real_field/x')
+    assert resp.status_code == 400
+
+
+def test_update_participant_invalid_value_is_400(routes_client, routes_app_instance):
+    routes_app_instance.participant_manager.update_participant.return_value = UPDATE_INVALID_VALUE
+    resp = routes_client.put('/participants/update_participant/1/ema_time/not-a-time')
+    assert resp.status_code == 400
+
+
+def test_update_participant_save_failed_is_500(routes_client, routes_app_instance):
+    routes_app_instance.participant_manager.update_participant.return_value = UPDATE_SAVE_FAILED
+    resp = routes_client.put('/participants/update_participant/1/phone_number/5555550199')
+    assert resp.status_code == 500
 
 
 def test_send_survey_success(routes_client, routes_app_instance, mocker):

@@ -2,7 +2,11 @@ import queue
 import threading
 from datetime import datetime
 
-from task_managers._participant_manager import ParticipantManager
+from task_managers._participant_manager import (
+    ADD_INVALID_VALUE, ADD_SAVE_FAILED,
+    ParticipantManager,
+    UPDATE_IMMUTABLE_FIELD, UPDATE_INVALID_VALUE, UPDATE_SAVE_FAILED, UPDATE_UNKNOWN_FIELD,
+)
 
 
 def make_manager(fake_app):
@@ -183,7 +187,7 @@ def test_update_participant_unknown_field_returns_1(fake_app):
 
     result = pm.update_participant('000000000', 'not_a_real_field', 'value')
 
-    assert result == 1
+    assert result == UPDATE_UNKNOWN_FIELD
     assert any('does not exist' in msg for _, msg in fake_app.transcript)
 
 
@@ -212,8 +216,8 @@ def test_add_participant_write_failure_returns_1_and_rolls_back(fake_app):
     return statement at all and never checked save_participants()'s result,
     so a CSV write failure (disk full, permissions) was logged internally
     but the caller (the /participants/add_participant route) always
-    reported success. Now returns 1 on a write failure and doesn't leave
-    the unsaved participant in memory.
+    reported success. Now returns ADD_SAVE_FAILED on a write failure and
+    doesn't leave the unsaved participant in memory.
     """
     pm = make_manager(fake_app)
     pm.save_participants = lambda: 1  # simulate a write failure
@@ -221,7 +225,7 @@ def test_add_participant_write_failure_returns_1_and_rolls_back(fake_app):
 
     result = pm.add_participant(new_participant)
 
-    assert result == 1
+    assert result == ADD_SAVE_FAILED
     assert new_participant not in pm.participants
 
 
@@ -262,7 +266,7 @@ def test_add_participant_rejects_invalid_time_format_no_partial_state(fake_app):
 
     result = pm.add_participant(new_participant)
 
-    assert result == 1
+    assert result == ADD_INVALID_VALUE
     assert pm.participants == []
     assert pm.tasks == []
     assert any('invalid time format' in msg.lower() for _, msg in fake_app.transcript)
@@ -297,7 +301,7 @@ def test_update_participant_rejects_invalid_time_format_no_mutation(fake_app):
 
     result = pm.update_participant('000000000', 'ema_time', 'not-a-time')
 
-    assert result == 1
+    assert result == UPDATE_INVALID_VALUE
     assert participant['ema_time'] == PARTICIPANT['ema_time']  # unchanged
     assert len(pm.tasks) == 1  # old task still in place, never removed
 
@@ -394,7 +398,7 @@ def test_update_participant_on_study_rejects_invalid_value(fake_app):
 
     result = pm.update_participant('000000000', 'on_study', 'maybe')
 
-    assert result == 1
+    assert result == UPDATE_INVALID_VALUE
     assert participant['on_study'] is True  # unchanged
     assert any('Invalid value' in msg for _, msg in fake_app.transcript)
 
@@ -422,7 +426,7 @@ def test_update_participant_phone_number_rejects_malformed_value_returns_1(fake_
 
     result = pm.update_participant('000000000', 'phone_number', '555-555-0100')
 
-    assert result == 1
+    assert result == UPDATE_INVALID_VALUE
     assert participant['phone_number'] == PARTICIPANT['phone_number']  # unchanged
     assert any('Invalid phone_number' in msg for _, msg in fake_app.transcript)
 
@@ -472,7 +476,7 @@ def test_update_participant_write_failure_rolls_back_field_and_returns_1(fake_ap
 
     result = pm.update_participant('000000000', 'phone_number', '5555559999')
 
-    assert result == 1
+    assert result == UPDATE_SAVE_FAILED
     assert participant['phone_number'] == PARTICIPANT['phone_number']  # unchanged
 
 
@@ -484,7 +488,7 @@ def test_update_participant_rejects_unique_id_edit_returns_1(fake_app):
 
     result = pm.update_participant('000000000', 'unique_id', '999999999')
 
-    assert result == 1
+    assert result == UPDATE_IMMUTABLE_FIELD
     assert participant['unique_id'] == '000000000'
     assert any('unique_id is' in msg for _, msg in fake_app.transcript)
 
