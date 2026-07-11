@@ -308,6 +308,111 @@ def test_acquire_pid_file_overwrites_a_stale_pid_and_warns(tmp_path):
     assert 'no-longer-running' in transcript_text
 
 
+# ------------------------------------------------------------
+# _acquire_pid_lock / _acquire_pid_file atomicity -- close the TOCTOU race
+# ------------------------------------------------------------
+#
+# Regression tests for a real bug found by an external adversarial review:
+# _acquire_pid_file's read-check-write sequence had no lock spanning it, so
+# two near-simultaneous launches could both read "no live PID" and both
+# proceed to construct their managers -- exactly the double-launch scenario
+# the whole method exists to prevent.
+
+def test_acquire_pid_lock_serializes_two_concurrent_holders(tmp_path):
+    import os
+    from run_prism import _acquire_pid_lock
+
+    fd1 = _acquire_pid_lock(tmp_path)
+    try:
+        with pytest.raises(TimeoutError):
+            _acquire_pid_lock(tmp_path)  # already held -- must not succeed
+    finally:
+        os.close(fd1)
+        (tmp_path / '.run_prism.pid.lock').unlink(missing_ok=True)
+
+    fd2 = _acquire_pid_lock(tmp_path)  # released now -- succeeds promptly
+    os.close(fd2)
+    (tmp_path / '.run_prism.pid.lock').unlink(missing_ok=True)
+
+
+def test_acquire_pid_lock_self_heals_past_a_stale_lock(tmp_path):
+    """A lock file older than PID_LOCK_STALE_AGE_SECONDS is treated as
+    abandoned (e.g. a crash between creating it and its own cleanup), not
+    real contention -- otherwise a single crash while holding the lock
+    would permanently wedge every future launch.
+    """
+    import os
+    import time
+    from run_prism import _acquire_pid_lock, PID_LOCK_STALE_AGE_SECONDS
+
+    lock_path = tmp_path / '.run_prism.pid.lock'
+    lock_path.write_text('')
+    stale_time = time.time() - PID_LOCK_STALE_AGE_SECONDS - 5
+    os.utime(lock_path, (stale_time, stale_time))
+
+    fd = _acquire_pid_lock(tmp_path)  # must not time out -- self-heals past the stale lock
+
+    os.close(fd)
+    lock_path.unlink(missing_ok=True)
+
+
+def test_acquire_pid_file_concurrent_launches_only_one_succeeds(tmp_path, monkeypatch):
+    """A rendezvous barrier is injected into the PID-file read (only) so
+    two real threads are forced to reach that point at the same instant --
+    without the fix's lock, both threads reach the (now-synchronized) read
+    together and race past the check; with the fix, the lock separates them
+    so only one thread is ever inside the critical section at a time, and
+    the barrier just times out waiting for a second party that never shows
+    up concurrently (caught below, harmless -- the real assertion is on the
+    outcome, not on hitting the barrier itself).
+    """
+    import os
+    import threading
+    import time
+    from pathlib import Path
+    from run_prism import PID_FILE_NAME
+
+    real_read_text = Path.read_text
+    barrier = threading.Barrier(2, timeout=0.3)
+
+    def slow_read_text(self, *args, **kwargs):
+        if self.name == PID_FILE_NAME:
+            try:
+                barrier.wait()
+            except threading.BrokenBarrierError:
+                pass
+        return real_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'read_text', slow_read_text)
+
+    p1 = _make_bare_prism(tmp_path)
+    p2 = _make_bare_prism(tmp_path)
+    results: dict[str, str] = {}
+
+    def run(name: str, p: object) -> None:
+        try:
+            p._acquire_pid_file()  # type: ignore[attr-defined]
+            results[name] = 'succeeded'
+        except SystemExit:
+            results[name] = 'refused'
+
+    t1 = threading.Thread(target=run, args=('p1', p1))
+    t2 = threading.Thread(target=run, args=('p2', p2))
+    t1.start()
+    t2.start()
+    t1.join(timeout=5)
+    t2.join(timeout=5)
+
+    # Exactly one launch wins -- the other must see the winner's (real,
+    # live -- both belong to this same test process) PID and refuse,
+    # rather than both silently overwriting each other.
+    assert sorted(results.values()) == ['refused', 'succeeded']
+    pid_file = tmp_path / PID_FILE_NAME
+    assert pid_file.read_text() == str(os.getpid())
+    lock_file = tmp_path / '.run_prism.pid.lock'
+    assert not lock_file.exists()  # released regardless of which branch each thread took
+
+
 def test_acquire_pid_file_writes_fresh_when_no_file_exists(tmp_path):
     import os
     from run_prism import PID_FILE_NAME

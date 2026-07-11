@@ -4,6 +4,7 @@ import os
 import platform
 import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from types import FrameType
@@ -46,6 +47,59 @@ from task_managers._participant_manager import ParticipantManager
 # PRISM._acquire_pid_file) to refuse a second launch while a first is
 # still live, rather than just overwriting it.
 PID_FILE_NAME = '.run_prism.pid'
+
+# A separate, short-lived lock file spanning _acquire_pid_file's entire
+# read-check-write critical section -- found by an external adversarial
+# review: reading PID_FILE_NAME, liveness-checking it, and writing it back
+# were three separate steps with no lock across them, leaving a genuine
+# TOCTOU race window where two near-simultaneous launches could both read
+# "no live PID" and both proceed to construct their managers -- exactly the
+# double-launch scenario _acquire_pid_file exists to prevent. Uses
+# os.O_CREAT | os.O_EXCL (atomic create-if-absent on POSIX *and* Windows --
+# Python's os.open translates this to CreateFile's CREATE_NEW flag there,
+# no msvcrt-specific code needed) on its own file rather than on
+# PID_FILE_NAME directly, so the existing stale-PID-file tolerance
+# (overwrite a dead-process's recorded PID) doesn't need to change shape.
+PID_LOCK_FILE_NAME = '.run_prism.pid.lock'
+# Generous relative to the critical section it guards (a few filesystem
+# calls, sub-millisecond in practice) -- this is contention time, not
+# processing time, so a real second launch should never need anywhere
+# close to this long to get in.
+PID_LOCK_ACQUIRE_TIMEOUT_SECONDS = 2.0
+# A lock file older than this is treated as abandoned (e.g. a crash between
+# creating the lock and its own `finally: unlink()`), not real contention --
+# mirrors _acquire_pid_file's own stale-PID-file tolerance, applied to the
+# lock file itself so a single crash can't permanently wedge every future
+# launch.
+PID_LOCK_STALE_AGE_SECONDS = 30.0
+
+
+def _acquire_pid_lock(repo_root: Path) -> int:
+    """Blocks (briefly) until the exclusive lock file can be created,
+    self-healing past a stale lock rather than ever waiting past
+    PID_LOCK_STALE_AGE_SECONDS. Returns the open file descriptor -- caller
+    is responsible for os.close()-ing it and unlinking the lock file
+    (see _acquire_pid_file's `finally`).
+    """
+    lock_path = Path(repo_root, PID_LOCK_FILE_NAME)
+    deadline = time.monotonic() + PID_LOCK_ACQUIRE_TIMEOUT_SECONDS
+    while True:
+        try:
+            return os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            try:
+                age = time.time() - lock_path.stat().st_mtime
+            except OSError:
+                continue  # lock file vanished between the failed open and this stat -- retry immediately
+            if age > PID_LOCK_STALE_AGE_SECONDS:
+                lock_path.unlink(missing_ok = True)
+                continue
+            if time.monotonic() > deadline:
+                raise TimeoutError(
+                    f"could not acquire {lock_path} within {PID_LOCK_ACQUIRE_TIMEOUT_SECONDS}s "
+                    "(another instance may be starting concurrently)"
+                )
+            time.sleep(0.02)
 
 
 def _pid_is_alive(pid: int) -> bool:
@@ -395,32 +449,51 @@ class PRISM():
         prior crash that skipped clean shutdown) is tolerated: logged as a
         WARNING and overwritten with this process's own PID, same as
         before this check existed.
+
+        The read-check-write sequence below runs while holding
+        PID_LOCK_FILE_NAME (see _acquire_pid_lock) -- found by an external
+        adversarial review: without a lock spanning all three steps, two
+        near-simultaneous launches could both read "no live PID" and both
+        proceed to construct their managers, which is exactly the
+        double-launch scenario this whole method exists to prevent. The
+        lock only serializes THIS method's brief critical section; it is
+        released (and its file removed) before this method returns, one
+        way or another.
         """
         pid_file = Path(self.repo_root, PID_FILE_NAME)
         try:
-            recorded_pid: int | None = int(pid_file.read_text().strip())
-        except (FileNotFoundError, ValueError, OSError):
-            recorded_pid = None
-
-        if recorded_pid is not None and _pid_is_alive(recorded_pid):
-            self.add_to_transcript(
-                f"Refusing to start: {pid_file} names process {recorded_pid}, which is "
-                "still running. Stop it first (stop_server.py), or remove the PID file "
-                "yourself if you're certain it's stale.", "ERROR"
-            )
+            lock_fd = _acquire_pid_lock(self.repo_root)
+        except TimeoutError as e:
+            self.add_to_transcript(f"Refusing to start: {e}.", "ERROR")
             exit(1)
-
-        if recorded_pid is not None:
-            self.add_to_transcript(
-                f"PID file named a no-longer-running process ({recorded_pid}) -- replacing it.", "WARNING"
-            )
-
         try:
-            pid_file.write_text(str(os.getpid()))
-        except Exception as e:
-            self.add_to_transcript(
-                f"Failed to write PID file (stop_server.py will fall back to pattern-matching): {e}", "WARNING"
-            )
+            try:
+                recorded_pid: int | None = int(pid_file.read_text().strip())
+            except (FileNotFoundError, ValueError, OSError):
+                recorded_pid = None
+
+            if recorded_pid is not None and _pid_is_alive(recorded_pid):
+                self.add_to_transcript(
+                    f"Refusing to start: {pid_file} names process {recorded_pid}, which is "
+                    "still running. Stop it first (stop_server.py), or remove the PID file "
+                    "yourself if you're certain it's stale.", "ERROR"
+                )
+                exit(1)
+
+            if recorded_pid is not None:
+                self.add_to_transcript(
+                    f"PID file named a no-longer-running process ({recorded_pid}) -- replacing it.", "WARNING"
+                )
+
+            try:
+                pid_file.write_text(str(os.getpid()))
+            except Exception as e:
+                self.add_to_transcript(
+                    f"Failed to write PID file (stop_server.py will fall back to pattern-matching): {e}", "WARNING"
+                )
+        finally:
+            os.close(lock_fd)
+            Path(self.repo_root, PID_LOCK_FILE_NAME).unlink(missing_ok = True)
 
     def launch_web_app(self) -> None:
         self.flask_app = create_flask_app(self)
