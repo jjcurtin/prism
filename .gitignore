@@ -15,6 +15,7 @@ plan/
 environment
 
 .run_prism.pid
+.run_prism.pid.lock
 
 api/*
 
