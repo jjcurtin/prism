@@ -403,6 +403,18 @@ class ParticipantManager(TaskManager):
         update_participant already validates this same way; this mirrors
         it for the add path.
 
+        Also coerces on_study to a real bool the same way (found in the
+        same review: this method never coerced it at all, unlike
+        update_participant. A JSON string "no" is truthy in Python, so
+        save_participants()'s `'yes' if participant['on_study'] else
+        'no'` wrote the literal string "yes" to disk -- the opposite of
+        what the caller asked for -- and process_task()'s off-study skip
+        (`participant['on_study'] is False`) also never matches a string,
+        so an intentionally off-study participant kept receiving
+        scheduled surveys. Not reachable through the shipped interface
+        menu, which always sends a real bool via prompt_confirmation(),
+        but a landmine for any other API caller).
+
         Also rolls back the in-memory append if save_participants() fails,
         so self.participants stays in sync with what's actually on disk.
 
@@ -421,6 +433,25 @@ class ParticipantManager(TaskManager):
                     f"Rejected add_participant: unique_id {participant['unique_id']} already exists.", "ERROR"
                 )
                 return ADD_DUPLICATE_ID
+            if 'on_study' in participant:
+                # Same coercion as update_participant's on_study branch --
+                # mutated in place so both save_participants() and the
+                # in-memory off-study skip check (process_task) see a real
+                # bool, not whatever JSON type the caller happened to send.
+                # A real Python bool already round-trips through this same
+                # check (str(True).lower() == 'true'), so no separate
+                # isinstance case is needed.
+                on_study_str = str(participant['on_study']).strip().lower()
+                if on_study_str in ('true', 'yes'):
+                    participant['on_study'] = True
+                elif on_study_str in ('false', 'no'):
+                    participant['on_study'] = False
+                else:
+                    self.app.add_to_transcript(
+                        f"Rejected add_participant: invalid value '{participant['on_study']}' for on_study; "
+                        "expected true/false.", "ERROR"
+                    )
+                    return ADD_INVALID_VALUE
             for field_name in self.survey_types.values():
                 task_time_str = participant.get(field_name)
                 if task_time_str:

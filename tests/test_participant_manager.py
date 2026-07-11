@@ -284,6 +284,39 @@ def test_add_participant_strips_padded_time_before_persisting(fake_app):
     assert any(t['task_type'] == 'ema' and t['task_time'].strftime('%H:%M:%S') == '16:00:00' for t in pm.tasks)
 
 
+def test_add_participant_coerces_on_study_string_to_bool(fake_app):
+    """Regression test for a bug found by an external adversarial review,
+    confirmed pre-existing (present before this session's changes, not
+    introduced by them): add_participant never coerced on_study at all,
+    unlike update_participant. A JSON string "no" is truthy in Python, so
+    save_participants()'s `'yes' if participant['on_study'] else 'no'`
+    wrote the literal string "yes" to disk -- the opposite of what the
+    caller asked for -- and process_task()'s off-study skip
+    (`participant['on_study'] is False`) never matches a string either,
+    so an intentionally off-study participant kept receiving surveys.
+    """
+    pm = make_manager(fake_app)
+    pm.save_participants = lambda: 0
+    new_participant = dict(PARTICIPANT, unique_id='1', on_study='no')
+
+    result = pm.add_participant(new_participant)
+
+    assert result == 0
+    assert new_participant['on_study'] is False
+    assert pm.participants[0]['on_study'] is False
+
+
+def test_add_participant_rejects_invalid_on_study_value(fake_app):
+    pm = make_manager(fake_app)
+    pm.save_participants = lambda: 0  # should never be reached
+
+    result = pm.add_participant(dict(PARTICIPANT, on_study='maybe'))
+
+    assert result == ADD_INVALID_VALUE
+    assert pm.participants == []
+    assert any('invalid value' in msg.lower() and 'on_study' in msg for _, msg in fake_app.transcript)
+
+
 def test_update_participant_rejects_invalid_time_format_no_mutation(fake_app):
     """Regression test for a bug found by an adversarial review: the old
     code applied the field mutation and persisted it BEFORE reaching
