@@ -1055,3 +1055,25 @@ def test_save_participants_then_load_participants_round_trips_embedded_comma_and
 
     assert pm.participants[0]['initials'] == 'Smith, "Bob"'
     assert pm.participants[0]['subid'] == PARTICIPANT['subid']
+
+
+def test_save_participants_ignores_extra_dict_keys(tmp_path, fake_app):
+    """Regression test for a bug found during a post-implementation
+    regression audit: csv.DictWriter defaults to extrasaction='raise', so
+    a participant dict carrying any key beyond the 9-column schema (e.g.
+    from an API client that sends extra JSON fields -- add_participant's
+    required_fields check only forbids missing fields, not extra ones)
+    used to fail the entire save with a ValueError, where the old
+    explicit-field-access writer silently ignored the extra key.
+    """
+    csv_file = tmp_path / 'study_participants.csv'
+    fake_app.participants_path = str(csv_file)
+    pm = make_manager(fake_app)
+    pm.file_path = str(csv_file)
+    pm.participants = [dict(PARTICIPANT, extra_field_from_client='should be ignored')]
+
+    result = pm.save_participants()
+
+    assert result == 0
+    pm.load_participants()
+    assert pm.participants[0]['unique_id'] == PARTICIPANT['unique_id']

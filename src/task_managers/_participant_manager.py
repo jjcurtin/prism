@@ -220,7 +220,17 @@ class ParticipantManager(TaskManager):
                 writer = csv.DictWriter(file, fieldnames = PARTICIPANT_CSV_HEADERS, quoting = csv.QUOTE_ALL)
                 writer.writeheader()
                 for participant in snapshot:
-                    row = dict(participant)
+                    # Built from PARTICIPANT_CSV_HEADERS explicitly, not
+                    # dict(participant) -- csv.DictWriter defaults to
+                    # extrasaction='raise', so passing the participant dict
+                    # through unfiltered would fail the entire write (a
+                    # regression from the old writer's explicit
+                    # participant["field"] access, which silently ignored
+                    # any extra key) the moment a caller's dict carries a
+                    # field this schema doesn't know about -- e.g. any API
+                    # client that sends more than the 9 documented fields,
+                    # not just the interface's own menu.
+                    row = {header: participant.get(header, '') for header in PARTICIPANT_CSV_HEADERS}
                     row['on_study'] = 'yes' if participant['on_study'] else 'no'
                     writer.writerow(row)
             return 0

@@ -190,10 +190,15 @@ def create_flask_app(app_instance: App) -> Flask:
         # A blank phone_number is still allowed here -- matches the
         # interface's existing "press enter to skip" behavior
         # (_add_participant_menu.py) -- only a non-empty, malformed value
-        # is rejected.
+        # is rejected. Written back into `data` (not just validated as a
+        # local copy) so a padded value like " 5555550100 " -- which
+        # validates fine after stripping -- doesn't then get persisted
+        # with the whitespace still attached, which is what actually gets
+        # saved and later handed to Twilio.
         phone_number = str(data.get('phone_number', '')).strip()
         if phone_number and not is_valid_phone_number(phone_number):
             return jsonify({"error": "phone_number must be exactly 10 digits"}), 400
+        data['phone_number'] = phone_number
         if app_instance.participant_manager.add_participant(data) != 0:
             return jsonify({"error": "Failed to save participant"}), 500
         app_instance.add_to_transcript(f"Participant #{data['unique_id']} added via API.", "INFO")
