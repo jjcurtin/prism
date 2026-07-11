@@ -29,6 +29,29 @@ from pathlib import Path
 PID_FILE = Path(__file__).resolve().parent / '.run_prism.pid'
 
 
+def _windows_pid_is_alive(pid: int) -> bool:
+    """Mirrors src/run_prism.py's _pid_is_alive Windows branch -- a
+    deliberately separate copy, not a shared import, since stop_server.py
+    stays a standalone top-level script outside src/ (see this module's
+    own docstring). Checked BEFORE attempting taskkill below: found by a
+    real Windows test failure (not just reasoned about) that checking only
+    taskkill's own exit code can't distinguish "already dead" (should
+    still count as a successful stop, mirroring POSIX's ProcessLookupError
+    handling below) from "alive but the kill itself failed" (should not) --
+    taskkill's exit-code meanings for those two cases aren't reliably
+    distinguishable across Windows versions, but a liveness check first
+    sidesteps needing to guess from the exit code at all.
+    """
+    try:
+        result = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {pid}"],
+            capture_output=True, text=True, timeout=5,
+        )
+        return str(pid) in result.stdout
+    except Exception:
+        return False
+
+
 def _stop_via_pid_file() -> bool:
     """Returns True if a PID file was found and acted on (kill attempted
     or the process was already gone) -- False means "no PID file, caller
@@ -42,23 +65,24 @@ def _stop_via_pid_file() -> bool:
         return False
     try:
         if sys.platform == "win32":
-            # check=False (not check=True) so a nonzero exit is inspected
-            # here rather than raised as CalledProcessError -- found live
-            # (a real Windows test run, not just reasoned about): the old
-            # code never looked at result.returncode at all, so a failed
-            # taskkill (e.g. a stale/already-dead PID -- confirmed via
-            # "The process "<pid>" not found." on stderr) was silently
-            # treated as a successful stop, same class of bug as the
-            # finally-runs-on-failure one just above/below this branch.
-            # Conservatively treats ANY nonzero exit as a failure (not just
-            # a specific "process not found" code) -- taskkill's exact
-            # exit-code meanings aren't stably documented across Windows
-            # versions, and leaving a stale PID file in the ambiguous case
-            # is safe: _acquire_pid_file()'s own stale-PID tolerance
-            # already handles cleaning it up on the next launch.
-            result = subprocess.run(["taskkill", "/PID", str(pid), "/F"], check=False, capture_output=True)
-            if result.returncode != 0:
-                return False
+            if not _windows_pid_is_alive(pid):
+                pass  # already dead -- still a successful "stop", mirrors the ProcessLookupError branch below
+            else:
+                # check=False (not check=True) so a nonzero exit is
+                # inspected here rather than raised as CalledProcessError --
+                # found live (a real Windows test run, not just reasoned
+                # about): the old code never looked at result.returncode at
+                # all, so a failed taskkill against a genuinely LIVE
+                # process (e.g. PermissionError-equivalent) was silently
+                # treated as a successful stop, same class of bug as the
+                # finally-runs-on-failure one just below this branch. The
+                # liveness check above already handled the "already dead"
+                # case, so any nonzero exit reaching here is a real failure
+                # to kill a still-live process, not an ambiguous "not
+                # found" -- safe to treat uniformly as failure.
+                result = subprocess.run(["taskkill", "/PID", str(pid), "/F"], check=False, capture_output=True)
+                if result.returncode != 0:
+                    return False
         else:
             os.kill(pid, signal.SIGTERM)
     except ProcessLookupError:

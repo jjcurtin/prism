@@ -99,22 +99,60 @@ def test_stop_via_pid_file_failed_kill_does_not_unlink_pid_file_windows(tmp_path
     real bug caught live on an actual Windows machine (not just reasoned
     about): the Windows branch ran `taskkill /PID <pid> /F` with
     check=False and never inspected result.returncode -- a failed kill
-    (e.g. a stale/already-dead PID, confirmed via a real
-    'ERROR: The process "12345" not found.' on taskkill's stderr) was
+    against a genuinely LIVE process (e.g. a permission failure) was
     silently treated as a successful stop, unlinking the PID file anyway.
     Same double-launch consequence as the POSIX case.
+
+    _windows_pid_is_alive is monkeypatched to True (a real, live process)
+    -- this test is specifically about the "alive but the kill itself
+    failed" case, distinct from test_stop_via_pid_file_stale_pid_does_not_raise's
+    "already dead" case just below, which must NOT go down this failure
+    path (a second real Windows bug, caught live: an earlier version of
+    this fix treated every nonzero taskkill exit as failure, including
+    "process not found," incorrectly refusing to clean up a stale PID
+    file).
     """
     monkeypatch.setattr(stop_server, 'PID_FILE', tmp_path / '.run_prism.pid')
     monkeypatch.setattr(stop_server.sys, 'platform', 'win32')
+    monkeypatch.setattr(stop_server, '_windows_pid_is_alive', lambda pid: True)
     stop_server.PID_FILE.write_text('12345')
 
-    fake_result = SimpleNamespace(returncode=128, stdout=b'', stderr=b'ERROR: The process "12345" not found.\n')
+    fake_result = SimpleNamespace(returncode=1, stdout=b'', stderr=b'ERROR: Access is denied.\n')
     monkeypatch.setattr(stop_server.subprocess, 'run', lambda *a, **k: fake_result)
 
     result = stop_server._stop_via_pid_file()
 
     assert result is False
-    assert stop_server.PID_FILE.exists()  # NOT deleted -- taskkill failed
+    assert stop_server.PID_FILE.exists()  # NOT deleted -- taskkill failed against a live process
+
+
+def test_stop_via_pid_file_windows_already_dead_pid_still_succeeds(tmp_path, monkeypatch):
+    """Regression test for a real Windows-only bug introduced by an
+    earlier version of the failed-kill fix above: treating EVERY nonzero
+    taskkill exit code as failure (rather than checking liveness first)
+    also refused to clean up a stale/already-dead PID's file -- breaking
+    the exact "already dead, still a successful stop" case
+    test_stop_via_pid_file_stale_pid_does_not_raise relies on, caught live
+    on a real Windows machine running that pre-existing test. taskkill
+    itself is never even called here -- _windows_pid_is_alive short-
+    circuits it, same as ProcessLookupError does on POSIX.
+    """
+    monkeypatch.setattr(stop_server, 'PID_FILE', tmp_path / '.run_prism.pid')
+    monkeypatch.setattr(stop_server.sys, 'platform', 'win32')
+    monkeypatch.setattr(stop_server, '_windows_pid_is_alive', lambda pid: False)
+    stop_server.PID_FILE.write_text('999999')
+
+    taskkill_called = []
+    monkeypatch.setattr(
+        stop_server.subprocess, 'run',
+        lambda *a, **k: taskkill_called.append(a) or SimpleNamespace(returncode=0, stdout=b'', stderr=b''),
+    )
+
+    result = stop_server._stop_via_pid_file()
+
+    assert result is True
+    assert not stop_server.PID_FILE.exists()  # cleaned up -- already dead counts as a successful stop
+    assert taskkill_called == []  # never even attempted -- liveness check short-circuited it
 
 
 def test_stop_via_pid_file_returns_false_when_no_pid_file(tmp_path, monkeypatch):
