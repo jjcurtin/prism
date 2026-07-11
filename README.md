@@ -129,10 +129,13 @@ once it's mounted. Only one is yours to create by hand.
   scripts for the `RUN_R_SCRIPT` task type live here, auto-detected by
   filename; nothing creates this directory automatically, and a
   `RUN_R_SCRIPT` task fails with a clear "does not exist" error until it's
-  there. Create it once at the repo root (`mkdir scripts` — or whatever
-  name your `config/repo_paths.csv`/the drive's `paths.csv` actually
-  configures, ask your PI if unsure) and drop `.R` script files in
-  directly; no further registration step needed.
+  there. Its exact location comes from the drive's own `paths.csv`
+  (its `scripts` key, a *separate* file from `config/repo_paths.csv`
+  above) — a relative value there resolves against your local repo
+  checkout (not the drive), so it's usually just `scripts/` at the repo
+  root, but ask your PI to confirm if unsure. Create that directory
+  (`mkdir scripts`) and drop `.R` script files in directly; no further
+  registration step needed.
 
 ## Running PRISM
 
