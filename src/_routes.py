@@ -58,22 +58,20 @@ def create_flask_app(app_instance: App) -> Flask:
     
     @flask_app.route('/system/get_task_schedule', methods = ['GET'])
     def get_task_schedule() -> RouteResponse:
+        # A legitimately empty schedule is not an error -- 404 used to
+        # conflate the two, and the interface would print the generic
+        # "failed to retrieve" error for what's actually just "no tasks
+        # scheduled yet".
         tasks = app_instance.system_task_manager.get_task_schedule()
-        if not tasks:
-            return jsonify({"error": "No scheduled tasks found"}), 404
         return jsonify({"tasks": tasks}), 200
-    
+
     @flask_app.route('/system/get_task_types', methods = ['GET'])
     def get_task_types() -> RouteResponse:
-        if not app_instance.system_task_manager.task_types:
-            return jsonify({"error": "No task types available"}), 404
         return jsonify({"task_types": app_instance.system_task_manager.task_types}), 200
-    
+
     @flask_app.route('/system/get_r_script_tasks', methods = ['GET'])
     def get_r_script_tasks() -> RouteResponse:
         tasks = app_instance.system_task_manager.get_r_script_tasks()
-        if not tasks:
-            return jsonify({"error": "No R script tasks found"}), 404
         return jsonify({"r_script_tasks": tasks}), 200
     
     @flask_app.route('/system/add_system_task/<task_type>/<task_time>', methods = ['POST'])
@@ -155,16 +153,14 @@ def create_flask_app(app_instance: App) -> Flask:
 
     @flask_app.route('/participants/get_participants', methods = ['GET'])
     def get_participants() -> RouteResponse:
+        # A legitimately empty roster is not an error -- see
+        # get_task_schedule's comment above for the same fix applied here.
         participants = app_instance.participant_manager.get_participants()
-        if not participants:
-            return jsonify({"error": "No participants found"}), 404
         return jsonify({"participants": participants}), 200
-    
+
     @flask_app.route('/participants/get_participant_task_schedule', methods = ['GET'])
     def get_participant_task_schedule() -> RouteResponse:
         tasks = app_instance.participant_manager.get_task_schedule()
-        if not tasks:
-            return jsonify({"error": "No participant tasks found"}), 404
         return jsonify({"tasks": tasks}), 200
     
     @flask_app.route('/participants/refresh_participants', methods = ['POST'])

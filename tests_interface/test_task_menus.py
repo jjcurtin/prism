@@ -205,6 +205,19 @@ def test_execute_r_script_menu_no_scripts_errors(fake_interface, capsys):
     assert 'No R scripts available.' in capsys.readouterr().out
 
 
+def test_execute_r_script_menu_empty_scripts_dict_errors(fake_interface, capsys):
+    """Regression test: get_r_script_tasks now returns 200 with an empty
+    {"r_script_tasks": {}} for "no scripts" (previously 404, i.e. `ok=False`
+    -- see test_execute_r_script_menu_no_scripts_errors above for that old
+    shape). The truthy-but-empty outer dict must not be mistaken for "there
+    are scripts".
+    """
+    fake_interface.commands_queue = deque(['x'])
+    fake_interface.api = MagicMock(return_value=(True, {'r_script_tasks': {}}))
+    etm.execute_r_script_menu(fake_interface)
+    assert 'No R scripts available.' in capsys.readouterr().out
+
+
 def test_execute_r_script_menu_valid_selection_success(fake_interface, capsys):
     fake_interface.commands_queue = deque(['x'])
     fake_interface.api = MagicMock(side_effect=[
@@ -339,6 +352,15 @@ def test_execute_menu_options_wired_correctly(fake_interface, monkeypatch):
 def test_add_new_r_script_menu_no_scripts_errors(fake_interface, capsys):
     fake_interface.commands_queue = deque(['x'])
     fake_interface.api = MagicMock(return_value=(False, None))
+    atm.add_new_r_script_menu(fake_interface)
+    assert 'No R scripts available.' in capsys.readouterr().out
+
+
+def test_add_new_r_script_menu_empty_scripts_dict_errors(fake_interface, capsys):
+    """Regression test: see test_execute_r_script_menu_empty_scripts_dict_errors
+    -- same fix, applied to the other near-duplicate menu."""
+    fake_interface.commands_queue = deque(['x'])
+    fake_interface.api = MagicMock(return_value=(True, {'r_script_tasks': {}}))
     atm.add_new_r_script_menu(fake_interface)
     assert 'No R scripts available.' in capsys.readouterr().out
 

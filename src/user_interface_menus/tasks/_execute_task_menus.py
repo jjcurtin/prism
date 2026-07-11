@@ -8,7 +8,11 @@ def execute_r_script_menu(self: Interface) -> None:
     if not self.commands_queue:
         print_menu_header("tasks execute rscript")
     r_scripts_ok, r_scripts = self.api("GET", "system/get_r_script_tasks")
-    if not r_scripts_ok or not r_scripts:
+    # get_r_script_tasks now returns 200 with an empty {"r_script_tasks":
+    # {}} for "no scripts" (previously 404) -- so the outer dict is always
+    # truthy on success, and the nested collection is what must be checked
+    # for "nothing to show".
+    if not r_scripts_ok or not r_scripts or not r_scripts.get('r_script_tasks'):
         error("No R scripts available.", self)
         return
     print("Available R Scripts:")

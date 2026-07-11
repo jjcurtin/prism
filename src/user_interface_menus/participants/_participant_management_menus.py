@@ -64,9 +64,15 @@ def participant_management_menu(self: Interface) -> None:
     def print_task_schedule(self: Interface) -> None:
         if not self.commands_queue:
             tasks_ok, tasks = self.api("GET", "participants/get_participant_task_schedule")
-            if tasks_ok and tasks:
+            # get_participant_task_schedule now returns 200 with an empty
+            # {"tasks": []} for "no tasks" (previously 404) -- so the outer
+            # `tasks_ok and tasks` truthiness check alone would now print
+            # an empty header and pause for Enter even when there's
+            # nothing to show. Check the nested list instead, matching
+            # every other "empty means nothing to display" call site.
+            if tasks_ok and tasks and tasks.get("tasks"):
                 print("Participant Task Schedule:")
-                for task in tasks.get("tasks", []):
+                for task in tasks["tasks"]:
                     print(f"{task['participant_id']}: {task['task_type']} at {task['task_time']} - On Study: {task['on_study']}")
                 exit_menu()
 

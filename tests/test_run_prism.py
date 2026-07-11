@@ -84,10 +84,14 @@ def test_prism_still_serves_requests_when_research_drive_is_unmounted(booted_pri
     assert ok.status_code == 200
     assert ok.get_json() == {'mode': 'test'}
 
+    # Nothing loaded (no participants.csv/schedule found with the drive
+    # unmounted) is a legitimately empty result, not a request failure --
+    # these routes now return 200 with an empty list rather than 404,
+    # same fix as the empty-vs-error routes tests elsewhere.
     degraded = client.get('/participants/get_participants')
-    assert degraded.status_code == 404
-    assert 'error' in degraded.get_json()
+    assert degraded.status_code == 200
+    assert degraded.get_json() == {'participants': []}
 
     degraded_tasks = client.get('/system/get_task_schedule')
-    assert degraded_tasks.status_code == 404
-    assert 'error' in degraded_tasks.get_json()
+    assert degraded_tasks.status_code == 200
+    assert degraded_tasks.get_json() == {'tasks': []}

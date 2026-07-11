@@ -61,10 +61,14 @@ def test_get_task_schedule_found(routes_client, routes_app_instance):
     assert resp.get_json() == {'tasks': [{'task_type': 'CHECK_SYSTEM'}]}
 
 
-def test_get_task_schedule_empty_is_404(routes_client, routes_app_instance):
+def test_get_task_schedule_empty_returns_200_empty_list(routes_client, routes_app_instance):
+    """Regression test for a fixed bug: a legitimately empty schedule used
+    to be conflated with an error and returned 404.
+    """
     routes_app_instance.system_task_manager.get_task_schedule.return_value = []
     resp = routes_client.get('/system/get_task_schedule')
-    assert resp.status_code == 404
+    assert resp.status_code == 200
+    assert resp.get_json() == {'tasks': []}
 
 
 def test_get_task_types(routes_client):
@@ -73,10 +77,13 @@ def test_get_task_types(routes_client):
     assert resp.get_json() == {'task_types': {'CHECK_SYSTEM': 'CheckSystem', 'RUN_R_SCRIPT': 'RunRScript'}}
 
 
-def test_get_task_types_empty_is_404(routes_client, routes_app_instance):
+def test_get_task_types_empty_returns_200_empty_dict(routes_client, routes_app_instance):
+    """Regression test for a fixed bug: see test_get_task_schedule_empty
+    above -- same fix, applied here."""
     routes_app_instance.system_task_manager.task_types = {}
     resp = routes_client.get('/system/get_task_types')
-    assert resp.status_code == 404
+    assert resp.status_code == 200
+    assert resp.get_json() == {'task_types': {}}
 
 
 def test_get_r_script_tasks_found(routes_client, routes_app_instance):
@@ -85,10 +92,13 @@ def test_get_r_script_tasks_found(routes_client, routes_app_instance):
     assert resp.status_code == 200
 
 
-def test_get_r_script_tasks_empty_is_404(routes_client, routes_app_instance):
+def test_get_r_script_tasks_empty_returns_200_empty_dict(routes_client, routes_app_instance):
+    """Regression test for a fixed bug: see test_get_task_schedule_empty
+    above -- same fix, applied here."""
     routes_app_instance.system_task_manager.get_r_script_tasks.return_value = {}
     resp = routes_client.get('/system/get_r_script_tasks')
-    assert resp.status_code == 404
+    assert resp.status_code == 200
+    assert resp.get_json() == {'r_script_tasks': {}}
 
 
 def test_add_system_task_success(routes_client, routes_app_instance):
@@ -212,10 +222,13 @@ def test_get_participants_found(routes_client, routes_app_instance):
     assert resp.status_code == 200
 
 
-def test_get_participants_empty_is_404(routes_client, routes_app_instance):
+def test_get_participants_empty_returns_200_empty_list(routes_client, routes_app_instance):
+    """Regression test for a fixed bug: see test_get_task_schedule_empty
+    above -- same fix, applied here."""
     routes_app_instance.participant_manager.get_participants.return_value = []
     resp = routes_client.get('/participants/get_participants')
-    assert resp.status_code == 404
+    assert resp.status_code == 200
+    assert resp.get_json() == {'participants': []}
 
 
 def test_get_participant_task_schedule_found(routes_client, routes_app_instance):
@@ -224,10 +237,13 @@ def test_get_participant_task_schedule_found(routes_client, routes_app_instance)
     assert resp.status_code == 200
 
 
-def test_get_participant_task_schedule_empty_is_404(routes_client, routes_app_instance):
+def test_get_participant_task_schedule_empty_returns_200_empty_list(routes_client, routes_app_instance):
+    """Regression test for a fixed bug: see test_get_task_schedule_empty
+    above -- same fix, applied here."""
     routes_app_instance.participant_manager.get_task_schedule.return_value = []
     resp = routes_client.get('/participants/get_participant_task_schedule')
-    assert resp.status_code == 404
+    assert resp.status_code == 200
+    assert resp.get_json() == {'tasks': []}
 
 
 def test_refresh_participants_success(routes_client, routes_app_instance):

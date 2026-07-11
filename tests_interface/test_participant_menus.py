@@ -437,6 +437,21 @@ def test_participant_management_menu_schedule_option_prints_schedule(fake_interf
     assert '100: ema at 16:00:00 - On Study: True' in out
 
 
+def test_participant_management_menu_schedule_option_empty_prints_nothing(fake_interface, monkeypatch, capsys):
+    """Regression test: get_participant_task_schedule now returns 200 with
+    an empty {"tasks": []} for "no tasks" (previously 404, i.e. `ok=False`
+    -- which this menu's old `if tasks_ok and tasks:` check correctly
+    treated as "print nothing"). The truthy-but-empty outer dict must not
+    be mistaken for "there are tasks to show" and print an empty header.
+    """
+    menu_options = _build_menu_options(fake_interface, monkeypatch)
+    fake_interface.commands_queue = deque()
+    fake_interface.api = MagicMock(return_value=(True, {'tasks': []}))
+    menu_options['schedule']['menu_caller'](fake_interface)
+    out = capsys.readouterr().out
+    assert 'Participant Task Schedule:' not in out
+
+
 def test_participant_management_menu_change_display_mode_valid(fake_interface, monkeypatch, capsys):
     menu_options = _build_menu_options(fake_interface, monkeypatch)
     fake_interface.inputs_queue.put('name')
