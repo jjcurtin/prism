@@ -736,6 +736,56 @@ def test_load_participants_reads_file_written_by_old_naive_serializer(tmp_path, 
     }
 
 
+def test_load_participants_skips_row_with_invalid_phone_number(tmp_path, fake_app):
+    """Regression test for a real bug (external adversarial review,
+    confirmed live): add/update paths validate phone_number via
+    is_valid_phone_number() (10 digits), but load_participants() never
+    did -- a hand-edited or corrupted phone_number cell used to load
+    cleanly and only fail later, silently, at send time inside send_sms's
+    own Twilio call.
+    """
+    csv_file = tmp_path / 'study_participants.csv'
+    csv_file.write_text(
+        'initials,subid,unique_id,on_study,phone_number,ema_time,'
+        'ema_reminder_time,feedback_time,feedback_reminder_time\n'
+        'JD,3000,000000000,yes,not-a-phone-number,09:00:00,10:00:00,19:00:00,20:00:00\n'
+        'AB,3001,000000001,yes,5555550101,09:00:00,10:00:00,19:00:00,20:00:00\n'
+    )
+    fake_app.participants_path = str(csv_file)
+    pm = make_manager(fake_app)
+    pm.file_path = str(csv_file)
+
+    result = pm.load_participants()
+
+    assert result == 0
+    assert len(pm.participants) == 1
+    assert pm.participants[0]['unique_id'] == '000000001'
+    assert any(
+        'invalid phone_number' in msg and 'not-a-phone-number' in msg for _, msg in fake_app.transcript
+    )
+
+
+def test_load_participants_allows_blank_phone_number(tmp_path, fake_app):
+    """A blank phone_number cell is tolerated, not rejected -- matching
+    update_participant's own `elif field == 'phone_number' and value:`
+    (only validates when a value is actually present)."""
+    csv_file = tmp_path / 'study_participants.csv'
+    csv_file.write_text(
+        'initials,subid,unique_id,on_study,phone_number,ema_time,'
+        'ema_reminder_time,feedback_time,feedback_reminder_time\n'
+        'JD,3000,000000000,yes,,09:00:00,10:00:00,19:00:00,20:00:00\n'
+    )
+    fake_app.participants_path = str(csv_file)
+    pm = make_manager(fake_app)
+    pm.file_path = str(csv_file)
+
+    result = pm.load_participants()
+
+    assert result == 0
+    assert len(pm.participants) == 1
+    assert pm.participants[0]['phone_number'] == ''
+
+
 def test_load_participants_skips_row_with_unrecognized_on_study_value(tmp_path, fake_app):
     """Regression test for a real bug (external adversarial review,
     confirmed live): the old `(row.get('on_study') or '').strip().lower()

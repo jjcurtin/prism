@@ -182,12 +182,32 @@ class ParticipantManager(TaskManager):
                             f"{row.get('on_study')!r}; expected yes/no.", "ERROR"
                         )
                         continue
+                    # Rejected (not silently loaded) for a non-blank value
+                    # that fails the same 10-digit check update_participant
+                    # already applies (`is_valid_phone_number`,
+                    # UPDATE_INVALID_VALUE) -- a blank cell is still
+                    # tolerated here, matching update_participant's own
+                    # `elif field == 'phone_number' and value:` (only
+                    # validates when a value is actually present). Found by
+                    # an external adversarial review, confirmed live: a
+                    # hand-edited or corrupted phone_number cell used to
+                    # load cleanly and only fail later, at send time,
+                    # inside send_sms's own Twilio call -- silently, since
+                    # nothing surfaces that failure back to whoever edited
+                    # the CSV.
+                    phone_number = row.get('phone_number') or ''
+                    if phone_number and not is_valid_phone_number(phone_number):
+                        self.app.add_to_transcript(
+                            f"Skipping participant row {row_number}: invalid phone_number "
+                            f"{phone_number!r}; expected 10 digits.", "ERROR"
+                        )
+                        continue
                     participant: Participant = {
                         'initials': row.get('initials') or '',
                         'subid': row.get('subid') or '',
                         'unique_id': row.get('unique_id') or '',
                         'on_study': on_study,
-                        'phone_number': row.get('phone_number') or '',
+                        'phone_number': phone_number,
                         'ema_time': row.get('ema_time') or '',
                         'ema_reminder_time': row.get('ema_reminder_time') or '',
                         'feedback_time': row.get('feedback_time') or '',
