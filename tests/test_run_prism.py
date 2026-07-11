@@ -301,3 +301,57 @@ def test_acquire_pid_file_writes_fresh_when_no_file_exists(tmp_path):
     p._acquire_pid_file()  # must not raise
 
     assert pid_file.read_text() == str(os.getpid())
+
+
+# ------------------------------------------------------------
+# _launch_web_app_or_shutdown -- defense in depth if the port bind fails
+# ------------------------------------------------------------
+#
+# Regression test for the other half of the zombie-manager-threads bug:
+# _acquire_pid_file (previous commit) closes the common case (two launches
+# of the same PRISM instance), but an exception escaping launch_web_app()
+# for any OTHER reason (e.g. a port already held by an unrelated process)
+# used to just kill the main thread while the two non-daemon manager
+# threads -- already fully loaded with the schedule -- kept running
+# headless. os._exit is monkeypatched here specifically so this test can
+# drive handle_shutdown's real code path without actually terminating the
+# test process.
+
+def test_launch_web_app_or_shutdown_stops_managers_and_exits_on_failure(monkeypatch, tmp_path):
+    import os
+    from run_prism import PRISM
+
+    p = _make_bare_prism(tmp_path)
+    p.launch_web_app = lambda: (_ for _ in ()).throw(OSError('Address already in use'))
+
+    stopped = {'system': False, 'participant': False}
+
+    class FakeManager:
+        def __init__(self, key):
+            self.key = key
+
+        def stop(self):
+            stopped[self.key] = True
+
+    p.system_task_manager = FakeManager('system')
+    p.participant_manager = FakeManager('participant')
+    exit_codes = []
+    monkeypatch.setattr(os, '_exit', lambda code=0: exit_codes.append(code))
+
+    p._launch_web_app_or_shutdown()
+
+    assert stopped == {'system': True, 'participant': True}
+    assert exit_codes == [0]
+    transcript_text = (tmp_path / 'logs' / 'transcripts' / 'test_transcript.txt').read_text()
+    assert 'Web server failed to start or crashed' in transcript_text
+    assert 'shutting down task managers' in transcript_text
+
+
+def test_launch_web_app_or_shutdown_does_not_intervene_on_success(tmp_path):
+    p = _make_bare_prism(tmp_path)
+    calls = []
+    p.launch_web_app = lambda: calls.append('called')
+
+    p._launch_web_app_or_shutdown()  # must not raise, must not shut anything down
+
+    assert calls == ['called']

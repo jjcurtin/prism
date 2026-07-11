@@ -128,7 +128,7 @@ class PRISM():
         signal.signal(signal.SIGINT, self.handle_shutdown)
         signal.signal(signal.SIGTERM, self.handle_shutdown)
         self.add_to_transcript(f"PRISM started in {self.mode} mode.", "INFO")
-        self.launch_web_app()
+        self._launch_web_app_or_shutdown()
 
     # system methods
 
@@ -402,6 +402,31 @@ class PRISM():
     def launch_web_app(self) -> None:
         self.flask_app = create_flask_app(self)
         serve(self.flask_app, host = '127.0.0.1', port = 5000)
+
+    def _launch_web_app_or_shutdown(self) -> None:
+        """Defense in depth for whatever _acquire_pid_file's liveness check
+        doesn't catch -- e.g. a port already held by an unrelated process,
+        not another PRISM instance, so there's no PID file to refuse on.
+
+        Found by the same external adversarial review as _acquire_pid_file:
+        an exception escaping launch_web_app() (e.g. OSError: Address
+        already in use) used to just kill this thread (Python's main
+        thread, on an uncaught exception) -- the two non-daemon manager
+        threads, started earlier in __init__ and already fully loaded with
+        the schedule, would keep running headless indefinitely (verified
+        directly: a non-daemon thread survives an uncaught exception in the
+        main thread). handle_shutdown already stops both managers and
+        unlinks the PID file (now ownership-checked); reused as-is here
+        rather than writing a second shutdown path.
+        """
+        try:
+            self.launch_web_app()
+        except Exception as e:
+            self.add_to_transcript(
+                f"Web server failed to start or crashed: {e} -- shutting down task managers "
+                "so no headless instance keeps processing the schedule.", "ERROR"
+            )
+            self.handle_shutdown(signal.SIGTERM, None)
 
     def _unlink_pid_file_if_owned(self) -> None:
         """Only removes the PID file if it currently names THIS process.
