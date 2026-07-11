@@ -291,18 +291,35 @@ class ParticipantManager(TaskManager):
                             # and persisted, and the old task already
                             # removed. Validating first means a rejected
                             # edit changes nothing at all.
+                            #
+                            # value is normalized to the stripped form
+                            # (not just validated against one) -- a
+                            # sibling bug to the one already fixed for
+                            # add_participant (e264b83): this used to
+                            # validate a str(value).strip() copy but then
+                            # persist/reschedule the UNSTRIPPED original,
+                            # so a padded time (' 16:00:00 ') validated
+                            # fine here but still raised, unstripped,
+                            # inside add_task()'s own strptime call below
+                            # -- after the field mutation and old-task
+                            # removal had already gone through.
+                            value = str(value).strip()
                             try:
-                                datetime.strptime(str(value).strip(), '%H:%M:%S')
+                                datetime.strptime(value, '%H:%M:%S')
                             except ValueError:
                                 self.app.add_to_transcript(
                                     f"Invalid time format '{value}' for {field}; expected HH:MM:SS.", "ERROR"
                                 )
                                 return 1
-                        elif field == 'phone_number' and value and not is_valid_phone_number(str(value)):
-                            self.app.add_to_transcript(
-                                f"Invalid phone_number '{value}' for participant {unique_id}; expected 10 digits.", "ERROR"
-                            )
-                            return 1
+                        elif field == 'phone_number' and value:
+                            # Same normalize-before-validate-and-persist
+                            # fix as the time-field branch above.
+                            value = str(value).strip()
+                            if value and not is_valid_phone_number(value):
+                                self.app.add_to_transcript(
+                                    f"Invalid phone_number '{value}' for participant {unique_id}; expected 10 digits.", "ERROR"
+                                )
+                                return 1
                         old_value = participant[field]
                         participant[field] = value
                         if self.save_participants():

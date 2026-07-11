@@ -286,6 +286,39 @@ def test_update_participant_empty_time_value_removes_task_without_readding(fake_
     assert pm.tasks == []  # removed, not re-added for an empty time
 
 
+def test_update_participant_strips_padded_time_before_persisting(fake_app):
+    """Regression test for a bug found by an external adversarial review,
+    a sibling of the one already fixed for add_participant (e264b83):
+    validation checked a str(value).strip() copy but persisted/rescheduled
+    the unstripped original -- a padded time (' 16:00:00 ') validated fine
+    here but then raised, unstripped, inside add_task()'s own strptime
+    call, after the field mutation and old-task removal had already gone
+    through.
+    """
+    pm = make_manager(fake_app)
+    participant = dict(PARTICIPANT)
+    pm.participants = [participant]
+    pm.save_participants = lambda: 0
+
+    result = pm.update_participant('000000000', 'ema_time', ' 16:00:00 ')
+
+    assert result == 0
+    assert participant['ema_time'] == '16:00:00'
+    assert any(t['task_type'] == 'ema' and t['task_time'].strftime('%H:%M:%S') == '16:00:00' for t in pm.tasks)
+
+
+def test_update_participant_strips_padded_phone_number_before_persisting(fake_app):
+    pm = make_manager(fake_app)
+    participant = dict(PARTICIPANT)
+    pm.participants = [participant]
+    pm.save_participants = lambda: 0
+
+    result = pm.update_participant('000000000', 'phone_number', ' 5555559999 ')
+
+    assert result == 0
+    assert participant['phone_number'] == '5555559999'
+
+
 def test_update_participant_on_study_coerces_string_to_bool(fake_app):
     """Regression test for a fixed bug: update_participant used to store
     whatever raw URL string was passed for on_study (e.g. "false") without
