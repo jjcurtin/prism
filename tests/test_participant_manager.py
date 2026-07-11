@@ -742,7 +742,7 @@ def test_process_task_link_parsing_failure_returns_neg1_no_crash(fake_app, mocke
     # Deliberately don't set fake_app.ema_survey_id/ema_message, so the
     # getattr() lookups inside process_task()'s link-building try block
     # raise AttributeError.
-    send_sms = mocker.patch('task_managers._participant_manager.send_sms')
+    send_sms = mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
 
     result = pm.process_task({'task_type': 'ema', 'participant_id': '000000000'})
 
@@ -774,7 +774,7 @@ def test_process_task_off_study_returns_0_no_sms(fake_app, mocker):
     pm = make_manager(fake_app)
     participant = dict(PARTICIPANT, on_study=False)
     pm.participants = [participant]
-    send_sms = mocker.patch('task_managers._participant_manager.send_sms')
+    send_sms = mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
 
     result = pm.process_task({'task_type': 'ema', 'participant_id': '000000000'})
 
@@ -795,7 +795,7 @@ def test_process_task_off_study_one_time_task_still_sends(fake_app, mocker):
     fake_app.mode = 'prod'
     fake_app.ema_survey_id = 'fake_survey'
     fake_app.ema_message = "Hello, it's time to take your daily survey."
-    send_sms = mocker.patch('task_managers._participant_manager.send_sms')
+    send_sms = mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
 
     result = pm.process_task({'task_type': 'ema', 'participant_id': '000000000', 'one_time': True})
 
@@ -809,7 +809,7 @@ def test_process_task_sends_ema_sms_in_prod_mode(fake_app, mocker):
     fake_app.mode = 'prod'
     fake_app.ema_survey_id = 'fake_survey'
     fake_app.ema_message = "Hello, it's time to take your daily survey."
-    send_sms = mocker.patch('task_managers._participant_manager.send_sms')
+    send_sms = mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
 
     result = pm.process_task({'task_type': 'ema', 'participant_id': '000000000'})
 
@@ -833,7 +833,7 @@ def test_finish_task_one_time_survey_send_removes_only_the_one_time_task(fake_ap
     pm.participants = [dict(PARTICIPANT)]
     fake_app.ema_survey_id = 'fake_survey'
     fake_app.ema_message = "Hello, it's time to take your daily survey."
-    mocker.patch('task_managers._participant_manager.send_sms')
+    mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
     recurring_task = pm.add_task('ema', '09:00:00', participant_id='000000000')
 
     one_time_task = pm.add_task('ema', '09:05:00', participant_id='000000000', one_time=True)
@@ -879,7 +879,7 @@ def test_process_task_ema_reminder_skipped_when_already_opened(tmp_path, fake_ap
     fake_app.mode = 'prod'
     pm = make_manager(fake_app)
     pm.participants = [dict(PARTICIPANT)]
-    send_sms = mocker.patch('task_managers._participant_manager.send_sms')
+    send_sms = mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
 
     result = pm.process_task({'task_type': 'ema_reminder', 'participant_id': '000000000'})
 
@@ -899,7 +899,7 @@ def test_process_task_ema_reminder_sent_when_not_yet_opened(tmp_path, fake_app, 
     fake_app.ema_reminder_message = "Hello, you have not yet completed your daily survey for today."
     pm = make_manager(fake_app)
     pm.participants = [dict(PARTICIPANT)]
-    send_sms = mocker.patch('task_managers._participant_manager.send_sms')
+    send_sms = mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
 
     result = pm.process_task({'task_type': 'ema_reminder', 'participant_id': '000000000'})
 
@@ -923,7 +923,7 @@ def test_process_task_reminders_file_missing_sends_reminder_anyway(fake_app, moc
     fake_app.ema_reminder_message = "Hello, you have not yet completed your daily survey for today."
     pm = make_manager(fake_app)
     pm.participants = [dict(PARTICIPANT)]
-    send_sms = mocker.patch('task_managers._participant_manager.send_sms')
+    send_sms = mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
     notify = mocker.patch('task_managers._participant_manager.notify_coordinators', return_value=0)
 
     result = pm.process_task({'task_type': 'ema_reminder', 'participant_id': '000000000'})
@@ -942,7 +942,7 @@ def test_process_task_reminders_file_failure_pages_coordinators_once_per_day(fak
     pm = make_manager(fake_app)
     pm.participants = [dict(PARTICIPANT)]
     pm._now = lambda: datetime(2026, 1, 1, 9, 0, 0)
-    mocker.patch('task_managers._participant_manager.send_sms')
+    mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
     notify = mocker.patch('task_managers._participant_manager.notify_coordinators', return_value=0)
 
     pm.process_task({'task_type': 'ema_reminder', 'participant_id': '000000000'})
@@ -958,7 +958,7 @@ def test_process_task_reminders_file_failure_pages_again_next_day(fake_app, mock
     fake_app.ema_reminder_message = "reminder"
     pm = make_manager(fake_app)
     pm.participants = [dict(PARTICIPANT)]
-    mocker.patch('task_managers._participant_manager.send_sms')
+    mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
     notify = mocker.patch('task_managers._participant_manager.notify_coordinators', return_value=0)
 
     pm._now = lambda: datetime(2026, 1, 1, 9, 0, 0)
@@ -983,7 +983,7 @@ def test_process_task_reminders_file_readable_does_not_page(tmp_path, fake_app, 
     fake_app.ema_reminder_message = "reminder"
     pm = make_manager(fake_app)
     pm.participants = [dict(PARTICIPANT)]
-    mocker.patch('task_managers._participant_manager.send_sms')
+    mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
     notify = mocker.patch('task_managers._participant_manager.notify_coordinators')
 
     pm.process_task({'task_type': 'ema_reminder', 'participant_id': '000000000'})
@@ -1014,6 +1014,54 @@ def test_process_task_send_sms_failure_notifies_coordinators_and_returns_neg1(fa
     assert message.startswith('[2001] ')
     assert '000000000' in message
     assert 'twilio down' in message
+
+
+def test_process_task_send_sms_reports_failure_via_return_value_notifies_coordinators(fake_app, mocker):
+    """Regression test for a severe bug found by an external adversarial
+    review: send_sms() communicates a per-recipient failure by RETURN
+    COUNT, not by raising -- it catches TwilioRestException (and anything
+    else) internally per-recipient. The old code discarded that return
+    value entirely, so a real Twilio failure (expired credential, blocked
+    number, a genuine outage -- none of which raise here) was logged as
+    "SMS sent", reported success (return 0), and never paged anyone. This
+    is the actual real-world failure shape; the sibling test above
+    (send_sms raising) is the much rarer case of a bug inside send_sms
+    itself.
+    """
+    fake_app.mode = 'prod'
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+    fake_app.ema_survey_id = 'fake_survey'
+    fake_app.ema_message = "Hello, it's time to take your daily survey."
+    mocker.patch('task_managers._participant_manager.send_sms', return_value=1)  # 1 of 1 recipients failed
+    notify = mocker.patch('task_managers._participant_manager.notify_coordinators', return_value=0)
+
+    result = pm.process_task({'task_type': 'ema', 'participant_id': '000000000'})
+
+    assert result == -1
+    notify.assert_called_once()
+    message = notify.call_args[0][1]
+    assert message.startswith('[2001] ')
+    assert not any('SMS sent to 000000000' in msg for _, msg in fake_app.transcript)
+
+
+def test_process_task_test_mode_logs_simulated_send_not_sms_sent(fake_app, mocker):
+    """Regression test: the old code logged the same "SMS sent" text in
+    test mode as in a real prod send, even though no send is attempted --
+    the transcript couldn't distinguish a real send from a simulated one.
+    """
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+    fake_app.ema_survey_id = 'fake_survey'
+    fake_app.ema_message = "Hello, it's time to take your daily survey."
+    send_sms = mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
+
+    result = pm.process_task({'task_type': 'ema', 'participant_id': '000000000'})
+
+    assert result == 0
+    send_sms.assert_not_called()
+    assert any('Simulated SMS send' in msg for _, msg in fake_app.transcript)
+    assert not any(msg == 'SMS sent to 000000000.' for _, msg in fake_app.transcript)
 
 
 def test_process_task_unexpected_error_notifies_coordinators_and_returns_neg1(fake_app, mocker):

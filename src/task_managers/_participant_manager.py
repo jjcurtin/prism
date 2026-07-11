@@ -603,8 +603,32 @@ class ParticipantManager(TaskManager):
                 return -1
             try:
                 if self.app.mode == "prod":
-                    send_sms(self.app, [participant_phone_number], [body])
-                self.app.add_to_transcript(f"SMS sent to {participant_id}.", "INFO")
+                    # send_sms() communicates a per-recipient failure by
+                    # RETURN COUNT, not by raising -- it catches
+                    # TwilioRestException (and any other exception)
+                    # internally per-recipient and only ever returns an
+                    # int (see its own docstring). The old code called it
+                    # and discarded that return value entirely, then
+                    # unconditionally logged "SMS sent" and returned 0 --
+                    # so a real Twilio failure (expired credential,
+                    # blocked number, an outage) never raised here, this
+                    # method reported success regardless, and the
+                    # coordinator-alert code below it was unreachable for
+                    # the exact failure mode it exists to catch. Found by
+                    # an external adversarial review.
+                    failed_count = send_sms(self.app, [participant_phone_number], [body])
+                    if failed_count:
+                        raise RuntimeError(
+                            f"send_sms reported {failed_count} of 1 recipient(s) failed"
+                        )
+                    self.app.add_to_transcript(f"SMS sent to {participant_id}.", "INFO")
+                else:
+                    # Distinct from the real "SMS sent" line above -- the
+                    # old code logged the same "SMS sent" text here too,
+                    # even though no send is attempted in test mode, so
+                    # the transcript couldn't distinguish a real send from
+                    # a simulated one.
+                    self.app.add_to_transcript(f"Simulated SMS send to {participant_id} (test mode).", "INFO")
                 return 0
             except Exception as e:
                 self.app.add_to_transcript(f"Failed to send SMS to {participant_id}: {e}", "ERROR")
