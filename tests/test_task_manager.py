@@ -5,7 +5,14 @@ import pytest
 
 def make_manager(fake_app):
     """TaskManager with __init__ bypassed so no background thread starts —
-    the logic methods under test here don't need a live thread."""
+    the logic methods under test here don't need a live thread. _now
+    defaults to the real clock and _last_reset_date to today, matching a
+    freshly-started real instance's steady state; tests that need to pin
+    "now" to a specific moment (e.g. midnight-boundary behavior) override
+    tm._now directly -- and, if the fake date differs from the real
+    "today" this helper seeded _last_reset_date with, must also set
+    tm._last_reset_date = tm._now().date() themselves, or check_tasks()
+    sees a spurious date change and resets every run_today flag."""
     from task_managers._task_manager import TaskManager
 
     tm = TaskManager.__new__(TaskManager)
@@ -15,12 +22,15 @@ def make_manager(fake_app):
     import queue
     import threading
     tm._tasks_lock = threading.RLock()
+    tm._now = datetime.now
+    tm._last_reset_date = datetime.now().date()
     tm.task_queue = queue.Queue()
     return tm
 
 
 def test_add_task_parses_string_time(fake_app):
     tm = make_manager(fake_app)
+    tm._now = lambda: datetime(2026, 1, 1, 0, 0, 0)  # before task_time, so run_today stays False
     tm.add_task('CHECK_SYSTEM', '03:00:00')
     assert tm.tasks[0]['task_type'] == 'CHECK_SYSTEM'
     assert tm.tasks[0]['task_time'] == time(3, 0, 0)
@@ -153,6 +163,97 @@ def test_check_tasks_leaves_a_not_yet_due_task_alone(fake_app):
 
     assert tm.task_queue.empty()
     assert tm.tasks[0]['run_today'] is False
+
+
+def test_check_tasks_fires_task_whose_1s_window_was_missed_while_blocked(fake_app):
+    """Regression test for a fixed bug: firing used to require abs(diff) <=
+    1 second between "now" and task_time, so a task whose window elapsed
+    while the loop was blocked (e.g. an SMS send holding it up to 30s) was
+    silently skipped for the entire day, with no log. Firing now only
+    requires "now has passed task_time and it hasn't run today" -- no
+    narrow window to miss."""
+    tm = make_manager(fake_app)
+    task_time = time(9, 0, 0)
+    tm._now = lambda: datetime.combine(datetime(2026, 1, 1), task_time).replace(
+        hour=9, minute=0, second=45
+    )  # 45s past the old 1s window
+    tm.tasks = [{'task_type': 'ema', 'task_time': task_time, 'run_today': False}]
+
+    tm.check_tasks()
+
+    assert tm.tasks[0]['run_today'] is True
+    assert tm.task_queue.get_nowait()['task_type'] == 'ema'
+
+
+def test_check_tasks_resets_run_today_even_when_tick_skips_exact_midnight_second(fake_app):
+    """Regression test for a fixed bug: the run_today reset used to only
+    trigger on a tick that landed exactly at 00:00:00 -- a tick that lands
+    late (e.g. 00:00:07, after a blocking call) never reset anything,
+    silently skipping that whole day's tasks. Reset is now keyed off
+    "the calendar date has advanced since the last reset", any tick."""
+    tm = make_manager(fake_app)
+    tm._last_reset_date = datetime(2025, 12, 31).date()
+    tm._now = lambda: datetime(2026, 1, 1, 0, 0, 7)  # 7s past midnight, not exact
+    tm.tasks = [{'task_type': 'CHECK_SYSTEM', 'task_time': time(23, 59, 0), 'run_today': True}]
+
+    tm.check_tasks()
+
+    assert tm.tasks[0]['run_today'] is False
+    assert tm._last_reset_date == datetime(2026, 1, 1).date()
+
+
+def test_check_tasks_uses_injected_clock_not_wall_clock(fake_app):
+    """Locks in the clock-injection interface itself: check_tasks() must
+    consult self._now(), not call datetime.now() directly, so tests can
+    control "now" without depending on real wall-clock time."""
+    tm = make_manager(fake_app)
+    tm._now = lambda: datetime(2026, 1, 1, 23, 59, 0)
+    tm.tasks = [{'task_type': 'CHECK_SYSTEM', 'task_time': time(23, 59, 0), 'run_today': False}]
+
+    tm.check_tasks()
+
+    assert tm.tasks[0]['run_today'] is True
+    assert tm.task_queue.get_nowait()['task_type'] == 'CHECK_SYSTEM'
+
+
+def test_add_task_marks_run_today_true_for_time_already_past_today(fake_app):
+    """Regression test for a fixed bug: a task loaded (from a persisted
+    schedule) or added at runtime for a time already past today used to
+    always start run_today=False, so the very next check_tasks() tick fired
+    it immediately -- a midday restart replayed the entire morning's tasks.
+    """
+    tm = make_manager(fake_app)
+    tm._now = lambda: datetime(2026, 1, 1, 17, 0, 0)
+    tm._last_reset_date = tm._now().date()  # matches the fake "today", no spurious reset
+
+    tm.add_task('CHECK_SYSTEM', '09:00:00')
+
+    assert tm.tasks[0]['run_today'] is True
+    tm.check_tasks()
+    assert tm.task_queue.empty()
+
+
+def test_add_task_marks_run_today_false_for_time_still_ahead_today(fake_app):
+    tm = make_manager(fake_app)
+    tm._now = lambda: datetime(2026, 1, 1, 5, 0, 0)
+
+    tm.add_task('CHECK_SYSTEM', '09:00:00')
+
+    assert tm.tasks[0]['run_today'] is False
+
+
+def test_add_task_track_false_run_today_ignores_clock(fake_app):
+    """An untracked (track=False) task is never scanned by check_tasks() at
+    all, so its run_today value is irrelevant in practice -- this just locks
+    in the `track and ...` short-circuit so a future change can't
+    accidentally make it True and have that matter if the task is ever
+    tracked down the line."""
+    tm = make_manager(fake_app)
+    tm._now = lambda: datetime(2026, 1, 1, 17, 0, 0)
+
+    task = tm.add_task('ema', '09:00:00', participant_id='000000000', one_time=True, track=False)
+
+    assert task['run_today'] is False
 
 
 def test_save_to_csv_writes_header_and_rows(tmp_path, fake_app):
@@ -340,6 +441,37 @@ def test_run_notify_coordinators_failure_does_not_crash_loop(fake_app, mocker):
         'Also failed to notify coordinators' in msg and 'twilio also broken' in msg
         for _, msg in fake_app.transcript
     )
+
+
+def test_run_reports_new_iterations_task_type_not_a_stale_locals_value(fake_app, mocker):
+    """Regression test for a fixed bug: run()'s except handler used to
+    check 'task' in locals() to decide what to report -- but a plain local
+    variable stays bound for the rest of the function's life once set on
+    any earlier iteration, so a later iteration's exception raised BEFORE
+    task_queue.get() returns incorrectly reported the PREVIOUS iteration's
+    task_type instead of '?'. task is now reassigned to None at the top of
+    every iteration.
+    """
+    tm = make_manager(fake_app)
+    tm.running = True
+    tm.process_task = lambda task: 0
+    calls = {'n': 0}
+    real_get = tm.task_queue.get
+
+    def flaky_get(*args, **kwargs):
+        calls['n'] += 1
+        if calls['n'] == 1:
+            return {'task_type': 'REAL_TASK'}
+        tm.running = False
+        raise RuntimeError('boom before get() returns')
+
+    tm.task_queue.get = flaky_get
+
+    tm.run()
+
+    error_messages = [msg for level, msg in fake_app.transcript if level == 'ERROR']
+    assert any('processing task ?:' in msg for msg in error_messages)
+    assert not any('processing task REAL_TASK:' in msg for msg in error_messages)
 
 
 def test_run_outer_catch_all_notifies_coordinators(fake_app, mocker):

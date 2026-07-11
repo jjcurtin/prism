@@ -1,5 +1,6 @@
 import queue
 import threading
+from datetime import datetime
 
 from task_managers._participant_manager import ParticipantManager
 
@@ -8,12 +9,15 @@ def make_manager(fake_app):
     """ParticipantManager with __init__ bypassed (no background thread, no
     load_participants() at construction) — tests set .participants/.tasks
     directly, or call load_participants() explicitly where that's the thing
-    under test."""
+    under test. _now defaults to the real clock and _last_reset_date to
+    today, matching a freshly-started real instance's steady state."""
     pm = ParticipantManager.__new__(ParticipantManager)
     pm.app = fake_app
     pm.name = 'ParticipantManager'
     pm.tasks = []
     pm._tasks_lock = threading.RLock()
+    pm._now = datetime.now
+    pm._last_reset_date = datetime.now().date()
     pm.task_queue = queue.Queue()
     pm.participants = []
     pm.survey_types = {

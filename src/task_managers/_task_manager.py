@@ -1,7 +1,7 @@
 """base class for task managers"""
 
-from datetime import datetime, time as dt_time
-from typing import Any
+from datetime import date, datetime, time as dt_time
+from typing import Any, Callable
 import queue
 import threading
 
@@ -45,6 +45,26 @@ class TaskManager():
         # other thread trying to touch self.tasks for that entire duration
         # -- trading one hang for another.
         self._tasks_lock = threading.RLock()
+        # Injected rather than calling datetime.now()/date.today() inline in
+        # check_tasks()/add_task() below -- an ambient wall-clock read is an
+        # input a test can't control, so tests end up either not exercising
+        # midnight/boundary behavior at all or doing so flakily (real sleeps
+        # racing real wall-clock ticks). Tests bypass __init__ (see
+        # make_manager() in tests/test_task_manager.py et al) and set
+        # tm._now to a fixed callable directly.
+        self._now: Callable[[], datetime] = datetime.now
+        # Tracks the last calendar date check_tasks() reset run_today flags
+        # for. Seeded to *today*, not None/some sentinel -- add_task() above
+        # already pre-computes the correct run_today for each task as it's
+        # loaded (see its own comment), so the very first check_tasks() tick
+        # after startup must NOT treat "no reset has ever happened" as "the
+        # date has advanced" and wipe those freshly-computed flags back to
+        # False, which would silently undo that fix and replay the whole
+        # morning on every restart, exactly like before. Compared by date
+        # equality (not an exact 00:00:00 tick) on every later call -- a
+        # tick that lands late (e.g. after a blocking SMS send held the loop
+        # up) still resets on whichever tick comes next.
+        self._last_reset_date: date = self._now().date()
         self.task_queue: queue.Queue[Task] = queue.Queue()
         self.thread = threading.Thread(target = self.run)
         self.thread.start()
@@ -93,16 +113,26 @@ class TaskManager():
         one-time 'ema' send and a participant's recurring daily 'ema'
         task).
         """
+        parsed_task_time = datetime.strptime(task_time, '%H:%M:%S').time() if isinstance(task_time, str) else task_time
         task_dict: Task = {
             'task_type': task_type,
-            'task_time': datetime.strptime(task_time, '%H:%M:%S').time() if isinstance(task_time, str) else task_time,
+            'task_time': parsed_task_time,
         }
         if r_script_path is not None:
             if r_script_path == "" or r_script_path == "None":
                 task_dict['r_script_path'] = None
             else:
                 task_dict['r_script_path'] = r_script_path
-        task_dict['run_today'] = False
+        # A tracked task whose time-of-day has already passed "now" starts
+        # pre-marked run_today=True -- otherwise check_tasks()'s "now >=
+        # task_time and not run_today" firing condition (below) would fire
+        # it on the very next tick, whether it was just loaded from a
+        # persisted schedule at startup (a midday restart replaying the
+        # whole morning) or freshly added via a route/menu for a time
+        # that's already passed today (which should just wait for
+        # tomorrow). An untracked one-time task (track=False) is never
+        # scanned by check_tasks() at all, so this doesn't affect it.
+        task_dict['run_today'] = track and parsed_task_time <= self._now().time()
         task_dict['one_time'] = one_time
         if participant_id is not None:
             task_dict['participant_id'] = participant_id
@@ -135,20 +165,25 @@ class TaskManager():
             self.app.add_to_transcript(f"Failed to save data to CSV at {file_path}: {e}", "ERROR")
 
     def check_tasks(self) -> None:
-        """A task fires once its scheduled time is within 1 second of "now"
-        (this runs frequently enough that the window doesn't need to be
-        wider), and won't fire again until run_today is reset back to False
-        at the next midnight tick.
+        """A task fires once its scheduled time has passed for the day and
+        it hasn't already run today -- not a narrow "within 1 second of
+        now" window, which a blocked tick (e.g. an SMS send holding this
+        loop up to SMS_SEND_TIMEOUT_SECONDS) could elapse without this loop
+        ever observing, silently skipping that task for the entire day.
+        run_today is reset for the whole list whenever the calendar date
+        has advanced since the last reset, not only on a tick that happens
+        to land exactly at 00:00:00.
         """
-        current_time = datetime.now().time()
+        now = self._now()
+        today = now.date()
         with self._tasks_lock:
-            if current_time.hour == 0 and current_time.minute == 0 and current_time.second == 0:
+            if today != self._last_reset_date:
                 for task in self.tasks:
                     task['run_today'] = False
+                self._last_reset_date = today
             for task in self.tasks:
                 task_time = task['task_time']
-                diff = abs((datetime.combine(datetime.today(), current_time) - datetime.combine(datetime.today(), task_time)).total_seconds())
-                if diff <= 1 and not task['run_today']:
+                if now >= datetime.combine(today, task_time) and not task['run_today']:
                     self.task_queue.put(task)
                     task['run_today'] = True
 
@@ -197,15 +232,22 @@ class TaskManager():
                 self.check_tasks()
             except Exception as e:
                 self.app.add_to_transcript(f"An error occurred while checking scheduled tasks in {self.name}: {e}", "ERROR")
+            # Reassigned every iteration (rather than relying on 'task' in
+            # locals()) -- a plain local variable stays bound for the rest
+            # of this function's life once first assigned on any earlier
+            # iteration, so a later exception raised before task_queue.get()
+            # returns would otherwise report a PREVIOUS iteration's task
+            # instead of "unknown".
+            task: Task | None = None
             try:
-                task: Task = self.task_queue.get(timeout = 1)
+                task = self.task_queue.get(timeout = 1)
                 result = self.finish_task(task)
                 if result != 0:
                     self.app.add_to_transcript(f"Task {task['task_type']} failed with error code {result}.", "ERROR")
             except queue.Empty:
                 pass
             except Exception as e:
-                task_type = task.get('task_type', '?') if 'task' in locals() else '?'
+                task_type = task.get('task_type', '?') if task is not None else '?'
                 self.app.add_to_transcript(f"An error occurred while processing task {task_type}: {e}", "ERROR")
                 # Defensively wrapped: notify_coordinators() itself failing
                 # (e.g. the same broken-Twilio-credentials root cause that
