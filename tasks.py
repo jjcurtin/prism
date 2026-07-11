@@ -143,7 +143,12 @@ def cmd_setup(args):
 
 def cmd_run(args):
     """Stop any running server, then start run_prism.py in the given mode."""
-    subprocess.run([sys.executable, "stop_server.py"], check=True, cwd=REPO_ROOT)
+    # check=False: stop_server.py now exits nonzero when it can't find a
+    # precise PID to target and refuses to kill-by-pattern instead of
+    # blindly doing so (see its own module docstring) -- that's a real,
+    # human-actionable warning printed to stdout, not a reason to abort
+    # the subsequent start.
+    subprocess.run([sys.executable, "stop_server.py"], check=False, cwd=REPO_ROOT)
     try:
         subprocess.run(
             [sys.executable, "run_prism.py", "-mode", args.mode], cwd=REPO_ROOT / "src", check=True

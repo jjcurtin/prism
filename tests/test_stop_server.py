@@ -63,3 +63,67 @@ def test_stop_via_pid_file_returns_false_when_no_pid_file(tmp_path, monkeypatch)
     monkeypatch.setattr(stop_server, 'PID_FILE', tmp_path / '.run_prism.pid')
 
     assert stop_server._stop_via_pid_file() is False
+
+
+# ------------------------------------------------------------
+# _stop_via_pattern_match -- reports candidates, never kills
+# ------------------------------------------------------------
+#
+# Regression tests for a bug found by an external adversarial review,
+# demonstrated live killing unrelated bystander processes (four separate
+# times, including the operator's own shell): the old fallback ran
+# `pkill -f run_prism.py`, a substring match against every process's full
+# command line -- it can't distinguish the real PRISM server from
+# anything else whose argv happens to contain that string.
+
+def test_pattern_match_fallback_reports_a_decoy_without_killing_it():
+    # A real process whose command line contains "run_prism.py" -- the
+    # exact shape the old pkill -f would have matched and killed.
+    proc = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(10)', 'run_prism.py'])
+    try:
+        import time as time_module
+        time_module.sleep(0.3)  # let it actually start before pgrep looks
+
+        found = stop_server._stop_via_pattern_match()
+
+        assert found is True
+        assert proc.poll() is None  # still alive -- NOT killed
+    finally:
+        proc.terminate()
+        proc.wait(timeout=5)
+
+
+def test_pattern_match_fallback_returns_false_when_nothing_matches(monkeypatch):
+    class _EmptyResult:
+        stdout = ''
+
+    monkeypatch.setattr(stop_server.subprocess, 'run', lambda *a, **k: _EmptyResult())
+
+    assert stop_server._stop_via_pattern_match() is False
+
+
+def test_main_exits_nonzero_when_fallback_finds_unstoppable_candidates(tmp_path, monkeypatch):
+    monkeypatch.setattr(stop_server, 'PID_FILE', tmp_path / '.run_prism.pid')
+    _skip_sleep(monkeypatch)
+    monkeypatch.setattr(stop_server, '_stop_via_pattern_match', lambda: True)
+
+    assert stop_server.main() == 1
+
+
+def test_main_exits_zero_when_fallback_finds_nothing(tmp_path, monkeypatch):
+    monkeypatch.setattr(stop_server, 'PID_FILE', tmp_path / '.run_prism.pid')
+    _skip_sleep(monkeypatch)
+    monkeypatch.setattr(stop_server, '_stop_via_pattern_match', lambda: False)
+
+    assert stop_server.main() == 0
+
+
+def test_main_exits_zero_when_pid_file_path_succeeds(tmp_path, monkeypatch):
+    monkeypatch.setattr(stop_server, 'PID_FILE', tmp_path / '.run_prism.pid')
+    _skip_sleep(monkeypatch)
+    proc = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])
+    stop_server.PID_FILE.write_text(str(proc.pid))
+
+    assert stop_server.main() == 0
+
+    proc.wait(timeout=5)
