@@ -60,6 +60,29 @@ def test_send_sms_missing_credentials_returns_failure_without_raising(fake_app):
     assert any('Twilio credentials not loaded' in msg for _, msg in fake_app.transcript)
 
 
+def test_send_sms_blank_credential_cell_returns_failure_without_raising(fake_app):
+    """Regression test for a real bug (external adversarial review,
+    confirmed live): pd.read_csv(..., dtype=str) still returns
+    float('nan') for a blank cell -- a pandas quirk, not a dtype bug --
+    and `not nan` is False in Python, so the old bare truthiness check
+    (`if not account_sid or not auth_token or not from_number:`) silently
+    let a blank twilio.api credential cell through instead of catching it
+    with the "credentials not loaded" message. account_sid is float('nan')
+    here, matching exactly what run_prism.py's load_api_keys would set it
+    to for a blank cell (auth_token/from_number are real strings, so this
+    also confirms _is_real_value() is applied per-credential, not just to
+    the first one).
+    """
+    fake_app.twilio_account_sid = float('nan')
+    fake_app.twilio_auth_token = 'fake_token'
+    fake_app.twilio_from_number = '+15555550199'
+
+    result = send_sms(fake_app, ['5555550100'], ['Time for your survey.'])
+
+    assert result == 1
+    assert any('Twilio credentials not loaded' in msg for _, msg in fake_app.transcript)
+
+
 def test_send_sms_dev_environment_prefixes_participant_message(fake_app, mocker):
     fake_app.environment = 'dev'
     client = _mock_twilio_client(mocker, fake_app)

@@ -45,6 +45,16 @@ PLACEHOLDER_PREFIX = "REPLACE_WITH_"
 def _is_real_value(value: object) -> bool:
     if value is None:
         return False
+    if isinstance(value, float) and value != value:
+        # NaN -- pd.read_csv(..., dtype=str) still returns float('nan') for
+        # a blank cell (a pandas quirk, not a dtype bug), so a caller
+        # reading straight from a CSV can hand this function a float even
+        # though every other "real" value it sees is a str. `value != value`
+        # is the standard NaN self-inequality check (true for NaN and only
+        # NaN, per IEEE 754) -- checked before the str(value) below, which
+        # would otherwise stringify it to the non-empty, non-placeholder
+        # "nan" and let it straight through.
+        return False
     value = str(value).strip()
     if not value:
         return False
@@ -112,7 +122,16 @@ def send_sms(app: App, receiver_numbers: list[str], messages: list[str], is_coor
     account_sid = getattr(app, 'twilio_account_sid', None)
     auth_token = getattr(app, 'twilio_auth_token', None)
     from_number = getattr(app, 'twilio_from_number', None)
-    if not account_sid or not auth_token or not from_number:
+    # _is_real_value(), not a bare truthiness check: pd.read_csv(...,
+    # dtype=str) still returns float('nan') for a blank cell (a pandas
+    # quirk, not a dtype bug) -- and `not nan` is False in Python, so a
+    # twilio.api file with a blank account_sid/auth_token/from_number cell
+    # used to silently pass this guard and reach the real Twilio client
+    # constructor below with a NaN credential, rather than being caught
+    # here with the clear "credentials not loaded" message. Also rejects
+    # an unfilled-in template placeholder ("REPLACE_WITH_..."), which a
+    # bare truthiness check would have let through as well.
+    if not all(_is_real_value(v) for v in (account_sid, auth_token, from_number)):
         app.add_to_transcript(
             "Twilio credentials not loaded (twilio.api failed to load, or is missing "
             "required fields) -- cannot send SMS.",
