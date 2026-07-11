@@ -269,20 +269,20 @@ def create_flask_app(app_instance: App) -> Flask:
         if not isinstance(data, dict) or 'message' not in data:
             app_instance.add_to_transcript("Study announcement failed: message content is required", "ERROR")
             return jsonify({"error": "Message content is required"}), 400
-        if not app_instance.participant_manager.participants:
+
+        # Goes through the locked accessor rather than touching
+        # .participants directly -- the old code read it 3 separate times
+        # here with no lock, racing a concurrent refresh_participants()
+        # clearing the list mid-iteration.
+        phone_numbers = app_instance.participant_manager.get_phone_numbers(
+            on_study_only = (require_on_study.lower() == 'yes')
+        )
+        if not phone_numbers:
             app_instance.add_to_transcript("Study announcement failed: no participants found", "ERROR")
             return jsonify({"error": "No participants found"}), 404
-        
-        if require_on_study.lower() == 'yes':
-            phone_numbers = [p['phone_number'] for p in app_instance.participant_manager.participants if p['on_study']]
-        else:
-            phone_numbers = [p['phone_number'] for p in app_instance.participant_manager.participants]
-        
-        if not phone_numbers:
-            app_instance.add_to_transcript("Study announcement failed: no participants on study", "ERROR")
-            return jsonify({"error": "No participants on study"}), 404
-        
+
         if app_instance.mode == "prod":
+            send_start = datetime.now()
             attempted = 0
             failed = 0
             for phone_number in phone_numbers:
@@ -292,6 +292,11 @@ def create_flask_app(app_instance: App) -> Flask:
                         failed += 1
                     else:
                         app_instance.add_to_transcript(f"Study announcement sent to {phone_number}", "INFO")
+            elapsed_seconds = (datetime.now() - send_start).total_seconds()
+            app_instance.add_to_transcript(
+                f"Study announcement send finished in {elapsed_seconds:.1f}s "
+                f"({attempted} attempted, {failed} failed).", "INFO"
+            )
             if attempted and failed == attempted:
                 return jsonify({"error": "Failed to send study announcement to any participant"}), 502
             if failed:

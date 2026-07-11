@@ -224,6 +224,67 @@ def test_add_participant_write_failure_returns_1_and_rolls_back(fake_app):
     assert new_participant not in pm.participants
 
 
+def test_add_participant_rejects_duplicate_unique_id_returns_1(fake_app):
+    """Regression test for a bug found by an adversarial review of the
+    class invariants (not the original audit): nothing -- not this method,
+    not the route above it -- checked for an existing participant sharing
+    unique_id before appending a second one, so two add_participant() calls
+    for the same id used to silently produce two participants and two
+    recurring tasks per shared survey_type.
+    """
+    pm = make_manager(fake_app)
+    pm.save_participants = lambda: 0
+    pm.participants = [dict(PARTICIPANT)]
+    duplicate = dict(PARTICIPANT, initials='ZZ')
+
+    result = pm.add_participant(duplicate)
+
+    assert result == 1
+    assert pm.participants == [PARTICIPANT]  # unchanged, no second entry
+    assert any('already exists' in msg for _, msg in fake_app.transcript)
+
+
+def test_update_participant_rejects_invalid_time_format_no_mutation(fake_app):
+    """Regression test for a bug found by an adversarial review: the old
+    code applied the field mutation and persisted it BEFORE reaching
+    add_task()'s strptime call in the reschedule loop, so an invalid time
+    string raised there, was caught by this method's own outer except, and
+    reported failure (return 1) -- while the field had already been
+    mutated and persisted, and the old recurring task already removed.
+    Validated up front now, so a rejected edit changes nothing at all.
+    """
+    pm = make_manager(fake_app)
+    participant = dict(PARTICIPANT)
+    pm.participants = [participant]
+    pm.tasks = [{'task_type': 'ema', 'task_time': None, 'participant_id': '000000000', 'run_today': False, 'one_time': False}]
+    pm.save_participants = lambda: 0  # should never be reached
+
+    result = pm.update_participant('000000000', 'ema_time', 'not-a-time')
+
+    assert result == 1
+    assert participant['ema_time'] == PARTICIPANT['ema_time']  # unchanged
+    assert len(pm.tasks) == 1  # old task still in place, never removed
+
+
+def test_update_participant_empty_time_value_removes_task_without_readding(fake_app):
+    """Clearing a survey time field now removes that recurring task rather
+    than attempting to reschedule it for an empty string, matching
+    schedule_participant_tasks' own "only schedule a non-empty time"
+    semantics.
+    """
+    pm = make_manager(fake_app)
+    participant = dict(PARTICIPANT)
+    pm.participants = [participant]
+    pm.tasks = [{'task_type': 'ema', 'task_time': None, 'participant_id': '000000000', 'run_today': False, 'one_time': False}]
+    pm.save_participants = lambda: 0
+
+    result = pm.update_participant('000000000', 'ema_time', '')
+
+    assert result == 0
+    assert participant['ema_time'] == ''
+    assert pm.tasks == []  # removed, not re-added for an empty time
+
+
 def test_update_participant_on_study_coerces_string_to_bool(fake_app):
     """Regression test for a fixed bug: update_participant used to store
     whatever raw URL string was passed for on_study (e.g. "false") without
@@ -282,6 +343,195 @@ def test_update_participant_updates_field_and_reschedules_task(fake_app):
     assert participant['ema_time'] == '08:00:00'
     task_types = [t['task_type'] for t in pm.tasks]
     assert task_types.count('ema') == 1  # old one removed, new one added, no duplicate
+
+
+def test_remove_participant_write_failure_rolls_back_and_returns_1(fake_app):
+    """Regression test for a fixed bug: remove_participant() used to call
+    save_participants() and discard the result entirely -- a write failure
+    still removed the participant (and their tasks) from memory and
+    reported success, so memory/disk diverged and the "removed" participant
+    reappeared on the next reload. Mirrors add_participant's rollback.
+    """
+    pm = make_manager(fake_app)
+    participant = dict(PARTICIPANT)
+    pm.participants = [participant]
+    pm.tasks = [{'task_type': 'ema', 'participant_id': '000000000'}]
+    pm.save_participants = lambda: 1  # simulate a write failure
+
+    result = pm.remove_participant('000000000')
+
+    assert result == 1
+    assert participant in pm.participants
+    assert pm.tasks == [{'task_type': 'ema', 'participant_id': '000000000'}]
+
+
+def test_update_participant_write_failure_rolls_back_field_and_returns_1(fake_app):
+    """Regression test for a fixed bug: update_participant() used to call
+    save_participants() and discard the result entirely -- a write failure
+    still left the field mutated in memory (and tasks rescheduled) while
+    reporting success.
+    """
+    pm = make_manager(fake_app)
+    participant = dict(PARTICIPANT)
+    pm.participants = [participant]
+    pm.save_participants = lambda: 1  # simulate a write failure
+
+    result = pm.update_participant('000000000', 'phone_number', '5555559999')
+
+    assert result == 1
+    assert participant['phone_number'] == PARTICIPANT['phone_number']  # unchanged
+
+
+def test_update_participant_rejects_unique_id_edit_returns_1(fake_app):
+    pm = make_manager(fake_app)
+    participant = dict(PARTICIPANT)
+    pm.participants = [participant]
+    pm.save_participants = lambda: 0  # should never be called
+
+    result = pm.update_participant('000000000', 'unique_id', '999999999')
+
+    assert result == 1
+    assert participant['unique_id'] == '000000000'
+    assert any('unique_id is' in msg for _, msg in fake_app.transcript)
+
+
+def test_update_participant_unique_id_edit_does_not_orphan_tasks(fake_app):
+    """Regression test for a fixed bug: a unique_id edit used to mutate the
+    participant's key in place without rescheduling (the reschedule loop
+    only matches survey_types field names) -- existing tasks stayed keyed
+    to the OLD unique_id, becoming orphans. A subsequent time-field edit
+    then failed its remove_task (nothing keyed to the new ID) and added a
+    duplicate task under the new ID. unique_id edits are now rejected
+    outright, so this sequence can no longer produce either an orphan or a
+    duplicate.
+    """
+    pm = make_manager(fake_app)
+    participant = dict(PARTICIPANT)
+    pm.participants = [participant]
+    pm.save_participants = lambda: 0
+    pm.schedule_participant_tasks(participant)
+    original_task_count = len(pm.tasks)
+
+    # Attempt (and fail) to change identity, then perform a real edit.
+    pm.update_participant('000000000', 'unique_id', '999999999')
+    pm.update_participant('000000000', 'ema_time', '08:00:00')
+
+    assert len(pm.tasks) == original_task_count  # no orphan, no duplicate
+    assert all(t['participant_id'] == '000000000' for t in pm.tasks)
+    assert pm.check_invariants() == []
+
+
+def test_get_phone_numbers_on_study_only_filters(fake_app):
+    pm = make_manager(fake_app)
+    pm.participants = [
+        dict(PARTICIPANT, unique_id='1', phone_number='5555550100', on_study=True),
+        dict(PARTICIPANT, unique_id='2', phone_number='5555550101', on_study=False),
+    ]
+
+    assert pm.get_phone_numbers(on_study_only=True) == ['5555550100']
+    assert set(pm.get_phone_numbers(on_study_only=False)) == {'5555550100', '5555550101'}
+
+
+def test_get_phone_numbers_returns_a_copy_not_a_live_reference(fake_app):
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+
+    numbers = pm.get_phone_numbers(on_study_only=False)
+    pm.participants.clear()
+
+    assert numbers == [PARTICIPANT['phone_number']]
+
+
+def test_concurrent_get_phone_numbers_and_load_participants_no_race(tmp_path, fake_app):
+    """Real-thread regression test for the race get_phone_numbers() exists
+    to close: one thread repeatedly reloads self.participants from disk
+    while another repeatedly reads phone numbers -- without the lock,
+    get_phone_numbers()'s list comprehension could observe self.participants
+    mid-mutation. Just confirms no exception/corruption over many
+    iterations; real thread interleaving is non-deterministic, so this
+    would reliably fail if the lock weren't actually preventing the race.
+    """
+    import threading
+
+    csv_file = tmp_path / 'study_participants.csv'
+    csv_file.write_text(
+        'initials,subid,unique_id,on_study,phone_number,ema_time,'
+        'ema_reminder_time,feedback_time,feedback_reminder_time\n'
+        'JD,3000,000000000,yes,5555550100,09:00:00,10:00:00,19:00:00,20:00:00\n'
+    )
+    fake_app.participants_path = str(csv_file)
+    pm = make_manager(fake_app)
+    pm.file_path = str(csv_file)
+    pm.load_participants()
+
+    stop = threading.Event()
+    errors: list[Exception] = []
+
+    def reload_repeatedly():
+        while not stop.is_set():
+            try:
+                pm.load_participants()
+            except Exception as e:
+                errors.append(e)
+
+    def read_repeatedly():
+        for _ in range(500):
+            try:
+                pm.get_phone_numbers(on_study_only=False)
+            except Exception as e:
+                errors.append(e)
+
+    reloader = threading.Thread(target=reload_repeatedly)
+    reloader.start()
+    reader = threading.Thread(target=read_repeatedly)
+    reader.start()
+    reader.join()
+    stop.set()
+    reloader.join()
+
+    assert errors == []
+
+
+def test_participant_manager_invariants_hold_after_random_operation_sequences(fake_app):
+    """Property-style regression test (deterministic seeded random, no new
+    test dependency): per-method tests alone verify local correctness, but
+    the unique_id bug lived in a SEQUENCE (edit unique_id, then edit a time
+    field) no single method's test would think to write. Runs many random
+    sequences of add/update/update-unique_id-attempt/remove against a small
+    pool of participants and checks all invariants hold after every single
+    operation, not just at the end.
+    """
+    import random
+
+    pm = make_manager(fake_app)
+    pm.save_participants = lambda: 0  # avoid touching the filesystem
+    rng = random.Random(1234)
+    candidate_ids = [str(i) for i in range(5)]
+
+    def random_participant(unique_id):
+        return dict(PARTICIPANT, unique_id=unique_id, initials=f'P{unique_id}')
+
+    for _ in range(200):
+        unique_id = rng.choice(candidate_ids)
+        existing = pm.get_participant(unique_id)
+        op = rng.choice(['add', 'update_time', 'update_unique_id', 'remove'])
+
+        if op == 'add':
+            if existing is None:
+                pm.add_participant(random_participant(unique_id))
+        elif op == 'update_time':
+            if existing is not None:
+                pm.update_participant(unique_id, 'ema_time', f'{rng.randint(0, 23):02d}:00:00')
+        elif op == 'update_unique_id':
+            if existing is not None:
+                other_id = rng.choice(candidate_ids)
+                pm.update_participant(unique_id, 'unique_id', other_id)
+        elif op == 'remove':
+            if existing is not None:
+                pm.remove_participant(unique_id)
+
+        violations = pm.check_invariants()
+        assert violations == [], f"invariant violated after op={op!r}, unique_id={unique_id!r}: {violations}"
 
 
 # --- Previously-documented bugs, now fixed -------------------------------

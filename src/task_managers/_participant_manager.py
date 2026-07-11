@@ -1,5 +1,6 @@
 """participant management logic"""
 
+from datetime import datetime
 from typing import Any
 
 from _helper import send_sms, notify_coordinators
@@ -25,6 +26,21 @@ PARTICIPANT_CSV_HEADERS = [
 ]
 
 class ParticipantManager(TaskManager):
+    """Invariants (see check_invariants() below for the executable form):
+
+    I1. Every task in self.tasks with a participant_id references a
+        participant currently present in self.participants (no orphans).
+    I2. At most one recurring task per (task_type, participant_id) pair
+        (no duplicates).
+    I3. self.participants and its on-disk CSV agree after every mutation
+        method (add/update/remove_participant) returns 0 -- never
+        partially applied.
+    I4. unique_id is immutable once a participant is added -- it's also
+        referenced externally by Qualtrics Q_ExternalData and
+        reminders.csv, which this app can't rewrite, so in-app re-keying
+        would only fix half the picture anyway.
+    """
+
     def __init__(self, app: App, name: str = "ParticipantManager") -> None:
         try:
             super().__init__(app, name)
@@ -48,6 +64,49 @@ class ParticipantManager(TaskManager):
             self.load_participants()
         except Exception as e:
             self.app.add_to_transcript(f"Failed to initialize ParticipantManager: {e}", "ERROR")
+
+    def check_invariants(self) -> list[str]:
+        """Executable form of the class-level invariants above. Not called
+        anywhere in production code paths -- this is a test/dev-only tool
+        for verifying I1-I3 hold after an arbitrary sequence of mutation
+        calls (see tests/test_participant_manager.py's sequence test),
+        since per-method tests alone can't catch a bug that only shows up
+        after a specific *combination* of operations (the unique_id bug
+        I4 exists to prevent was exactly this shape). Returns a list of
+        human-readable violation descriptions, empty if everything holds.
+        I4 isn't checked here since it's enforced unconditionally by
+        update_participant rejecting the edit outright -- there's no
+        reachable state where it could be violated to check for.
+        """
+        violations: list[str] = []
+        with self._tasks_lock:
+            participant_ids = {p['unique_id'] for p in self.participants}
+            seen_recurring: set[tuple[str | None, str | None]] = set()
+            for task in self.tasks:
+                participant_id = task.get('participant_id')
+                if participant_id is None:
+                    continue
+                if participant_id not in participant_ids:
+                    violations.append(
+                        f"I1 violated: task {task.get('task_type')!r} references participant "
+                        f"{participant_id!r}, which is not in self.participants"
+                    )
+                if not task.get('one_time'):
+                    key = (task.get('task_type'), participant_id)
+                    if key in seen_recurring:
+                        violations.append(f"I2 violated: duplicate recurring task {key}")
+                    seen_recurring.add(key)
+            try:
+                with open(self.file_path, 'r', newline = '') as file:
+                    on_disk_ids = {row.get('unique_id') for row in csv.DictReader(file)}
+            except Exception:
+                on_disk_ids = None
+            if on_disk_ids is not None and on_disk_ids != participant_ids:
+                violations.append(
+                    f"I3 violated: self.participants ({sorted(participant_ids, key = str)}) doesn't "
+                    f"match the on-disk CSV ({sorted(on_disk_ids, key = str)})"
+                )
+        return violations
 
     def load_participants(self) -> int:
         """Uses csv.DictReader (maps by the file's own header row) rather
@@ -125,12 +184,31 @@ class ParticipantManager(TaskManager):
             self.app.add_to_transcript(f"Failed to retrieve participants: {e}", "ERROR")
             return []
 
-    def save_participants(self) -> int | None:
+    def get_phone_numbers(self, on_study_only: bool) -> list[str]:
+        """A safe, locked copy -- never a reference into self.participants
+        itself, so a caller iterating the returned list can't race a
+        concurrent load_participants()/add_participant()/remove_participant()
+        mutating the underlying list mid-iteration. Routes should always go
+        through this (or another locked accessor) rather than touching
+        .participants directly.
+        """
+        with self._tasks_lock:
+            if on_study_only:
+                return [p['phone_number'] for p in self.participants if p['on_study']]
+            return [p['phone_number'] for p in self.participants]
+
+    def save_participants(self) -> int:
+        """Returns 0 on success, 1 on failure -- same convention as every
+        other mutation method in this class. (Used to return None on
+        success, which happened to also be falsy and so "worked" at
+        add_participant's `if self.save_participants():` call site, but was
+        a landmine for remove_participant/update_participant, which called
+        this and discarded the result entirely rather than getting it
+        wrong -- see their own docstrings.)
+        """
         # Snapshot taken under the lock, file write happens outside it --
         # same "never hold this lock across I/O" rule as
         # SystemTaskManager.save_tasks(), even though this write is small.
-        # Return contract (None on success, 1 on failure) is unchanged in
-        # this phase -- normalized to 0/1 separately, see that commit.
         with self._tasks_lock:
             snapshot = list(self.participants)
         try:
@@ -141,12 +219,18 @@ class ParticipantManager(TaskManager):
                     row = dict(participant)
                     row['on_study'] = 'yes' if participant['on_study'] else 'no'
                     writer.writerow(row)
-            return None
+            return 0
         except Exception as e:
             self.app.add_to_transcript(f"Failed to save participants to CSV: {e}", "ERROR")
             return 1
 
     def update_participant(self, unique_id: str, field: str, value: Any) -> int:
+        """Enforces I4 (unique_id is immutable) and I3 (memory/disk agree
+        after a 0 return) directly, rather than merely documenting them:
+        a unique_id edit is rejected outright rather than attempted, and a
+        save_participants() failure reverts the in-memory field change
+        instead of leaving it applied only in memory.
+        """
         try:
             # Locked as one unit: field mutation + persist + reschedule
             # must be atomic, not three independently-interleavable steps
@@ -154,6 +238,21 @@ class ParticipantManager(TaskManager):
             # add_task() below all reacquire this same lock themselves
             # (it's an RLock, so that's safe from this same thread).
             with self._tasks_lock:
+                if field == 'unique_id':
+                    # Rejected rather than re-keyed in place: a rekey here
+                    # would still leave self.tasks correctly pointed (that
+                    # part's fixable), but unique_id is also the join key
+                    # into Qualtrics Q_ExternalData and reminders.csv, which
+                    # this app doesn't own and can't rewrite -- so an
+                    # in-app rekey fixes only half the picture while
+                    # looking like it fixed all of it. Remove-and-re-add is
+                    # the safe path (see I4).
+                    self.app.add_to_transcript(
+                        f"Rejected attempt to edit unique_id for participant {unique_id}: unique_id is "
+                        "immutable (also referenced by Qualtrics Q_ExternalData and reminders.csv, which "
+                        "this app doesn't rewrite). Remove and re-add the participant instead.", "ERROR"
+                    )
+                    return 1
                 participant = self.get_participant(unique_id)
                 if participant:
                     if field in participant:
@@ -165,12 +264,44 @@ class ParticipantManager(TaskManager):
                             else:
                                 self.app.add_to_transcript(f"Invalid value '{value}' for on_study; expected true/false.", "ERROR")
                                 return 1
+                        elif field in self.survey_types.values() and value:
+                            # Validated up front, not left to add_task()'s
+                            # strptime below -- found by an adversarial
+                            # review of these invariants: the old code
+                            # applied the field mutation and persisted it
+                            # BEFORE reaching add_task(), so a bad time
+                            # string (e.g. "", or any non-HH:MM:SS value)
+                            # raised there, was caught by this method's own
+                            # outer except, and reported failure (return 1)
+                            # -- while the field had already been mutated
+                            # and persisted, and the old task already
+                            # removed. Validating first means a rejected
+                            # edit changes nothing at all.
+                            try:
+                                datetime.strptime(str(value).strip(), '%H:%M:%S')
+                            except ValueError:
+                                self.app.add_to_transcript(
+                                    f"Invalid time format '{value}' for {field}; expected HH:MM:SS.", "ERROR"
+                                )
+                                return 1
+                        old_value = participant[field]
                         participant[field] = value
-                        self.save_participants()
+                        if self.save_participants():
+                            participant[field] = old_value  # roll back: mirror on-disk truth (I3)
+                            self.app.add_to_transcript(
+                                f"Failed to update participant {unique_id}: could not persist to CSV.", "ERROR"
+                            )
+                            return 1
                         for task_type, field_name in self.survey_types.items():
                             if field_name == field:
                                 self.remove_task(task_type, participant_id = unique_id)
-                                self.add_task(task_type, value, participant_id = unique_id)
+                                # Matches schedule_participant_tasks' own
+                                # semantics (only add_task for a non-empty
+                                # time) -- clearing a survey time now
+                                # removes that recurring task rather than
+                                # trying to reschedule it for "".
+                                if value:
+                                    self.add_task(task_type, value, participant_id = unique_id)
                         self.app.add_to_transcript(f"Updated {field} for participant {unique_id} to {value}.", "INFO")
                         return 0
                     else:
@@ -184,10 +315,28 @@ class ParticipantManager(TaskManager):
             return 1
 
     def add_participant(self, participant: Participant) -> int:
-        """Rolls back the in-memory append if save_participants() fails, so
-        self.participants stays in sync with what's actually on disk.
+        """Rejects a duplicate unique_id outright (found by an adversarial
+        review of the invariants above, not the original audit: nothing
+        upstream of this call -- not the route, not this method -- checked
+        for an existing participant with the same id, so two
+        add_participant() calls for the same unique_id used to silently
+        produce two participants and two recurring tasks per shared
+        survey_type, violating I2 and the spirit of I4 without ever
+        touching update_participant's unique_id-edit rejection at all).
+
+        Also rolls back the in-memory append if save_participants() fails,
+        so self.participants stays in sync with what's actually on disk.
         """
         with self._tasks_lock:
+            # A direct existence check, not get_participant() -- that logs
+            # an ERROR line for "not found", which is the expected, common
+            # outcome here (most add_participant calls are for a genuinely
+            # new id), not a real error worth alarming on.
+            if any(p['unique_id'] == participant['unique_id'] for p in self.participants):
+                self.app.add_to_transcript(
+                    f"Rejected add_participant: unique_id {participant['unique_id']} already exists.", "ERROR"
+                )
+                return 1
             self.participants.append(participant)
             if self.save_participants():
                 self.participants.remove(participant)
@@ -202,16 +351,27 @@ class ParticipantManager(TaskManager):
                 self.add_task(task_type, task_time_str, participant_id = participant['unique_id'])
 
     def remove_participant(self, unique_id: str) -> int:
+        """Mirrors add_participant's rollback: if the removal can't be
+        persisted, the in-memory list is restored and this participant's
+        tasks are left alone, so memory and disk stay in agreement (I3)
+        instead of a "removed" participant reappearing on the next reload
+        while their tasks are already gone.
+        """
         with self._tasks_lock:
             participant = self.get_participant(unique_id)
-            if participant:
-                self.participants.remove(participant)
-                self.save_participants()
-                for task_type, field_name in self.survey_types.items():
-                    self.remove_task(task_type, participant_id = unique_id)
-                self.app.add_to_transcript(f"Removed participant {unique_id}.", "INFO")
-                return 0
-            return 1
+            if participant is None:
+                return 1
+            self.participants.remove(participant)
+            if self.save_participants():
+                self.participants.append(participant)  # roll back: mirror on-disk truth (I3)
+                self.app.add_to_transcript(
+                    f"Failed to remove participant {unique_id}: could not persist to CSV.", "ERROR"
+                )
+                return 1
+            for task_type, field_name in self.survey_types.items():
+                self.remove_task(task_type, participant_id = unique_id)
+            self.app.add_to_transcript(f"Removed participant {unique_id}.", "INFO")
+            return 0
 
     def remove_task(self, task_type: str, task_time: str | None = None, participant_id: str | None = None) -> int:
         with self._tasks_lock:

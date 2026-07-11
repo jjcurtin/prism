@@ -20,8 +20,13 @@ def individual_participant_menu(self: Interface, participant_id: str) -> None:
         return None
 
     def update_field_menu(self: Interface, choice: str) -> None:
+        # No '3'/unique_id entry -- unique_id is immutable (see
+        # ParticipantManager's I4 invariant and update_participant's
+        # rejection of unique_id edits); remove-and-re-add is the only
+        # supported way to change it. Not renumbered around the gap so
+        # every other key stays stable across this change.
         field_map = {
-            '1': 'initials', '2': 'subid', '3': 'unique_id', '4': 'on_study',
+            '1': 'initials', '2': 'subid', '4': 'on_study',
             '5': 'phone_number', '6': 'ema_time', '7': 'ema_reminder_time',
             '8': 'feedback_time', '9': 'feedback_reminder_time'
         }
@@ -124,7 +129,6 @@ def individual_participant_menu(self: Interface, participant_id: str) -> None:
         menu_options: MenuOptions = {
             '1': {'description': f'initials: {participant.get('initials')}', 'menu_caller': lambda self: update_field_menu(self, '1')},
             '2': {'description': f'subid: {participant.get('subid')}', 'menu_caller': lambda self: update_field_menu(self, '2')},
-            '3': {'description': f'unique_id: {participant.get('unique_id')}', 'menu_caller': lambda self: update_field_menu(self, '3')},
             '4': {'description': f'on_study: {participant.get('on_study')}', 'menu_caller': lambda self: update_field_menu(self, '4')},
             '5': {'description': f'phone_number: {participant.get('phone_number')}', 'menu_caller': lambda self: update_field_menu(self, '5')},
             '6': {'description': f'ema_time: {participant.get('ema_time')}', 'menu_caller': lambda self: update_field_menu(self, '6')},

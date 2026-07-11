@@ -671,7 +671,10 @@ def test_individual_participant_menu_builds_field_options(fake_interface, monkey
     menu_options = _open_individual_menu(fake_interface, monkeypatch, participant)
     assert menu_options['1']['description'] == 'initials: Alice'
     assert menu_options['4']['description'] == 'on_study: True'
-    assert set(menu_options.keys()) >= {'1', '2', '3', '4', '5', '6', '7', '8', '9', 'remove', 'ema', 'feedback', 'message'}
+    # No '3': unique_id is immutable, not editable via this menu (see
+    # update_participant's rejection of unique_id edits).
+    assert set(menu_options.keys()) >= {'1', '2', '4', '5', '6', '7', '8', '9', 'remove', 'ema', 'feedback', 'message'}
+    assert '3' not in menu_options
 
 
 def test_individual_participant_menu_update_field_text_success(fake_interface, monkeypatch, capsys):
