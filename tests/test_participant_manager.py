@@ -103,6 +103,7 @@ def test_get_participants_projects_only_summary_fields(fake_app):
         'subid': '3000',
         'initials': 'JD',
         'on_study': True,
+        'phone_number': '5555550100',
     }]
 
 

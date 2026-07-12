@@ -303,6 +303,13 @@ class ParticipantManager(TaskManager):
                         'subid': participant['subid'],
                         'initials': participant['initials'],
                         'on_study': participant['on_study'],
+                        # Added for the interface's spreadsheet-style
+                        # participant table (requested directly) -- every
+                        # other field already projected here was already
+                        # shown per-participant, phone_number is the one
+                        # genuinely useful at-a-glance field this summary
+                        # view was missing.
+                        'phone_number': participant['phone_number'],
                     } for participant in self.participants
                 ]
         except Exception as e:

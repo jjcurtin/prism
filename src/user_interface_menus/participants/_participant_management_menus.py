@@ -82,6 +82,18 @@ def feedback_off_menu(self: Interface) -> None:
     else:
         error("Failed to pause feedback sends.", self)
 
+def next_participants_page_menu(self: Interface) -> None:
+    # Only ever offered (see participant_management_menu's menu_options
+    # wiring) when a further page genuinely exists -- but clamped again
+    # against the real participant count on the next redraw regardless,
+    # since self.participant_page_offset persists across redraws (same
+    # convention as participant_display_mode/participant_filter_settings)
+    # and a filter/refresh between redraws could shrink the list.
+    self.participant_page_offset = getattr(self, 'participant_page_offset', 0) + ui_state.window_height
+
+def previous_participants_page_menu(self: Interface) -> None:
+    self.participant_page_offset = max(0, getattr(self, 'participant_page_offset', 0) - ui_state.window_height)
+
 def remove_participant_menu(self: Interface) -> int | None:
     participant_id = get_input(self, prompt = "Please enter the unique ID of the participant that you would like to remove: ")
     if not participant_id or participant_id.strip() == '':
@@ -155,6 +167,26 @@ def participant_management_menu(self: Interface) -> None:
                 filtered.append(p)
         return filtered
 
+    def _print_participant_table(page: list[dict[str, Any]]) -> None:
+        # Spreadsheet-style, one row per participant (like the underlying
+        # CSV) -- requested directly, replacing the old 3-column grid
+        # layout, which buried participants in side-by-side columns
+        # instead of a single scannable list.
+        columns = [
+            ("SUBID", "subid", 10), ("INITIALS", "initials", 10),
+            ("UNIQUE_ID", "unique_id", 11), ("ON_STUDY", "on_study", 10),
+            ("PHONE_NUMBER", "phone_number", 14),
+        ]
+        header = "".join(f"{name:<{width}}" for name, _, width in columns)
+        print(yellow(header))
+        print_dashes()
+        for p in page:
+            row = "".join(
+                f"{('yes' if p[field] else 'no') if field == 'on_study' else p[field]:<{width}}"
+                for _, field, width in columns
+            )
+            print(row)
+
     def filter_participants_menu(self: Interface) -> None:
         print("Current filter settings:")
         for key, value in self.participant_filter_settings.items():
@@ -182,8 +214,8 @@ def participant_management_menu(self: Interface) -> None:
             self.participant_filter_settings = {
                 'on_study': "All"
             }
+        self.participant_page_offset = getattr(self, 'participant_page_offset', 0)
         while True:
-            index_and_text = True
             if not self.commands_queue:
                 print_menu_header("participants")
                 assistant_header_write(self, ["Participant Management Menu"])
@@ -193,7 +225,8 @@ def participant_management_menu(self: Interface) -> None:
             participants_ok, data = self.api("GET", "participants/get_participants")
             participants = data.get("participants", []) if participants_ok and data else []
             if participants and not self.commands_queue:
-                for p in _sort(_filter(participants)):
+                sorted_filtered = _sort(_filter(participants))
+                for p in sorted_filtered:
                     key = str(p['subid'])
                     if key in menu_options:
                         # subid isn't uniqueness-enforced anywhere in this
@@ -207,15 +240,39 @@ def participant_management_menu(self: Interface) -> None:
                         'description': f"{p['subid']} ({p['initials']}, {p['unique_id']})",
                         'menu_caller': lambda self, participant_id = p['unique_id']: individual_participant_menu(self, participant_id)
                     }
+
+                # Pagination -- requested directly, replacing the old
+                # 3-column grid with a spreadsheet-style one-row-per-
+                # participant table (like the underlying CSV). Every
+                # participant above is still dispatchable directly by
+                # sub ID regardless of which page is currently on screen
+                # (menu_options is built from the FULL sorted_filtered
+                # list, not just the current page) -- pagination only
+                # affects what gets printed, never what's reachable.
+                page_size = max(1, ui_state.window_height)
+                total = len(sorted_filtered)
+                max_offset = max(0, (total - 1) // page_size * page_size)
+                self.participant_page_offset = max(0, min(self.participant_page_offset, max_offset))
+                offset = self.participant_page_offset
+                page = sorted_filtered[offset:offset + page_size]
+
                 print("Enter a participant's sub ID to select them, or choose another option.")
                 print("Current Display Mode:", red(self.participant_display_mode))
                 print("Current Filter Settings:", self.participant_filter_settings)
                 print_dashes()
+                _print_participant_table(page)
+                print_dashes()
+                print(f"Showing {offset + 1}-{min(offset + page_size, total)} of {total} participants.")
+                if offset + page_size < total:
+                    menu_options['next'] = {'description': 'Show Next Page of Participants', 'menu_caller': next_participants_page_menu}
+                if offset > 0:
+                    menu_options['previous'] = {
+                        'description': 'Show Previous Page of Participants', 'menu_caller': previous_participants_page_menu
+                    }
             else:
                 if not self.commands_queue:
                     print(f"{red('No participants found or failed to retrieve.')}")
                     print()
-                index_and_text = False
             menu_options['add'] = {'description': 'Add a Participant', 'menu_caller': add_participant_menu}
             menu_options['schedule'] = {'description': 'Get Participant Task Schedule', 'menu_caller': print_task_schedule}
             menu_options['refresh'] = {'description': 'Full Participants Refresh from CSV', 'menu_caller': refresh_participants_menu}
@@ -254,7 +311,7 @@ def participant_management_menu(self: Interface) -> None:
                 'menu_caller': feedback_off_menu,
             }
             
-            if print_menu_options(self, menu_options, submenu = True, index_and_text = index_and_text):
+            if print_menu_options(self, menu_options, submenu = True):
                 break
     except ReturnToMainMenu:
         # this menu wraps its whole dispatch loop in a try/except (unlike

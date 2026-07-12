@@ -17,6 +17,7 @@ class PRISMInterface:
     debug: bool
     participant_display_mode: str
     participant_filter_settings: dict[str, str]
+    participant_page_offset: int
     scheduled_tasks: list[dict[str, Any]]
     saved_positions: list[tuple[int | None, int | None]]
     column_width: int

@@ -7,13 +7,18 @@ it through this menu rather than editing that file by hand.
 
 ## The participant list
 
-Opening `participants` shows every participant, each entry keyed by their
-sub ID (`sub_id (initials, unique_id)`) — type a participant's sub ID directly
-to open their record, from anywhere in the list, regardless of current sort
-order. (If two participants ever share a sub ID — not something PRISM
-prevents on load — the second one's entry falls back to being keyed by its
-unique ID instead, so neither becomes unreachable.) Other options on this
-screen:
+Opening `participants` shows every participant as a table, one row per
+participant (sub ID, initials, unique ID, on-study status, phone number) —
+like the underlying CSV. Type a participant's sub ID directly to open their
+record, from anywhere in the list, regardless of current sort order or which
+page is currently on screen. (If two participants ever share a sub ID — not
+something PRISM prevents on load — the second one's entry falls back to
+being keyed by its unique ID instead, so neither becomes unreachable.)
+
+If there are more participants than fit on one screen, only `next`/`previous`
+show up (whichever is actually usable) to page through the table; sub-ID
+entry always works for any participant regardless of which page is showing.
+Other options on this screen:
 
 - `add` — add a new participant (see below)
 - `schedule` — print every participant's upcoming EMA/feedback send times

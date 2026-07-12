@@ -38,12 +38,13 @@ def _no_log_file(monkeypatch):
     monkeypatch.setattr(menu_helper, 'write_to_interface_log', lambda msg: None)
 
 
-def _participant(unique_id, initials, subid, on_study=True):
+def _participant(unique_id, initials, subid, on_study=True, phone_number='5555550100'):
     return {
         'unique_id': unique_id,
         'initials': initials,
         'subid': subid,
         'on_study': on_study,
+        'phone_number': phone_number,
     }
 
 
@@ -322,14 +323,15 @@ def test_send_studywide_feedback_menu_failure(fake_interface, capsys):
     assert 'Failed to send studywide feedback' in capsys.readouterr().out
 
 
-def test_participant_management_menu_no_participants_sets_index_and_text_false(fake_interface, monkeypatch, capsys):
+def test_participant_management_menu_no_participants_prints_nothing_paginated(fake_interface, monkeypatch, capsys):
     fake_interface.api = MagicMock(return_value=(False, None))
     mock_pmo = MagicMock(return_value=True)
     monkeypatch.setattr(pmm, 'print_menu_options', mock_pmo)
 
     pmm.participant_management_menu(fake_interface)
 
-    assert mock_pmo.call_args.kwargs['index_and_text'] is False
+    menu_options = mock_pmo.call_args[0][1]
+    assert 'next' not in menu_options and 'previous' not in menu_options
     assert 'No participants found or failed to retrieve.' in capsys.readouterr().out
 
 
@@ -485,6 +487,139 @@ def test_participant_management_menu_keyed_by_subid_not_position(fake_interface,
     assert '1' not in menu_options and '2' not in menu_options
     assert menu_options['3042']['description'] == '3042 (Alice, 100)'
     assert menu_options['3043']['description'] == '3043 (Bob, 200)'
+
+
+def test_participant_management_menu_prints_spreadsheet_style_table(fake_interface, monkeypatch, capsys):
+    """Requested directly: one row per participant, like the underlying
+    CSV, replacing the old 3-column grid layout."""
+    participants = [_participant('100', 'Alice', '3042', phone_number='5555550100')]
+    fake_interface.api = MagicMock(return_value=(True, {'participants': participants}))
+    monkeypatch.setattr(pmm, 'print_menu_options', MagicMock(return_value=True))
+
+    pmm.participant_management_menu(fake_interface)
+
+    out = capsys.readouterr().out
+    assert 'SUBID' in out and 'INITIALS' in out and 'PHONE_NUMBER' in out
+    assert '3042' in out and 'Alice' in out and '5555550100' in out
+
+
+def test_participant_management_menu_pagination_hides_next_when_everything_fits(fake_interface, monkeypatch):
+    participants = [_participant('100', 'Alice', '3042'), _participant('200', 'Bob', '3043')]
+    fake_interface.api = MagicMock(return_value=(True, {'participants': participants}))
+    mock_pmo = MagicMock(return_value=True)
+    monkeypatch.setattr(pmm, 'print_menu_options', mock_pmo)
+
+    pmm.participant_management_menu(fake_interface)
+
+    menu_options = mock_pmo.call_args[0][1]
+    assert 'next' not in menu_options
+    assert 'previous' not in menu_options
+
+
+def test_participant_management_menu_pagination_shows_next_when_more_than_one_page(fake_interface, monkeypatch):
+    monkeypatch.setattr(menu_helper.ui_state, 'window_height', 2)
+    participants = [
+        _participant(str(i), f'P{i}', str(3000 + i)) for i in range(5)
+    ]
+    fake_interface.api = MagicMock(return_value=(True, {'participants': participants}))
+    mock_pmo = MagicMock(return_value=True)
+    monkeypatch.setattr(pmm, 'print_menu_options', mock_pmo)
+
+    pmm.participant_management_menu(fake_interface)
+
+    menu_options = mock_pmo.call_args[0][1]
+    assert 'next' in menu_options
+    assert 'previous' not in menu_options  # already on the first page
+
+
+def test_participant_management_menu_second_page_only_prints_its_own_rows(fake_interface, monkeypatch, capsys):
+    """The crux of pagination: page 2 only PRINTS its own participants,
+    but every participant (including off-page ones) stays directly
+    dispatchable by sub ID -- pagination affects the table print only,
+    never what menu_options makes reachable.
+    """
+    monkeypatch.setattr(menu_helper.ui_state, 'window_height', 2)
+    fake_interface.participant_page_offset = 2  # page 2 (0-indexed offset)
+    participants = [
+        _participant(str(i), f'P{i}', str(3000 + i)) for i in range(5)
+    ]
+    fake_interface.api = MagicMock(return_value=(True, {'participants': participants}))
+    mock_pmo = MagicMock(return_value=True)
+    monkeypatch.setattr(pmm, 'print_menu_options', mock_pmo)
+
+    pmm.participant_management_menu(fake_interface)
+
+    out = capsys.readouterr().out
+    # sorted by unique_id (default mode): page 2 (offset 2, page_size 2)
+    # covers unique_ids '2' and '3' -- subids 3002/3003.
+    assert '3002' in out and '3003' in out
+    assert '3000' not in out and '3001' not in out and '3004' not in out
+    # ...but every participant, including off-page ones, is still directly
+    # dispatchable by sub ID.
+    menu_options = mock_pmo.call_args[0][1]
+    assert set(menu_options) >= {'3000', '3001', '3002', '3003', '3004'}
+
+
+def test_participant_management_menu_pagination_shows_previous_on_later_page(fake_interface, monkeypatch):
+    monkeypatch.setattr(menu_helper.ui_state, 'window_height', 2)
+    fake_interface.participant_page_offset = 2
+    participants = [
+        _participant(str(i), f'P{i}', str(3000 + i)) for i in range(5)
+    ]
+    fake_interface.api = MagicMock(return_value=(True, {'participants': participants}))
+    mock_pmo = MagicMock(return_value=True)
+    monkeypatch.setattr(pmm, 'print_menu_options', mock_pmo)
+
+    pmm.participant_management_menu(fake_interface)
+
+    menu_options = mock_pmo.call_args[0][1]
+    assert 'next' in menu_options
+    assert 'previous' in menu_options
+
+
+def test_participant_management_menu_pagination_clamps_stale_offset(fake_interface, monkeypatch):
+    """A page offset persisted from a much longer list (e.g. before a
+    filter was applied) must not point past the end of a now-shorter list.
+    """
+    monkeypatch.setattr(menu_helper.ui_state, 'window_height', 2)
+    fake_interface.participant_page_offset = 100
+    participants = [_participant('100', 'Alice', '3042')]
+    fake_interface.api = MagicMock(return_value=(True, {'participants': participants}))
+    mock_pmo = MagicMock(return_value=True)
+    monkeypatch.setattr(pmm, 'print_menu_options', mock_pmo)
+
+    pmm.participant_management_menu(fake_interface)
+
+    menu_options = mock_pmo.call_args[0][1]
+    assert menu_options['3042']['description'] == '3042 (Alice, 100)'
+    assert fake_interface.participant_page_offset == 0
+
+
+def test_next_participants_page_menu_advances_offset(fake_interface, monkeypatch):
+    monkeypatch.setattr(menu_helper.ui_state, 'window_height', 20)
+    fake_interface.participant_page_offset = 0
+
+    pmm.next_participants_page_menu(fake_interface)
+
+    assert fake_interface.participant_page_offset == 20
+
+
+def test_previous_participants_page_menu_decrements_offset(fake_interface, monkeypatch):
+    monkeypatch.setattr(menu_helper.ui_state, 'window_height', 20)
+    fake_interface.participant_page_offset = 20
+
+    pmm.previous_participants_page_menu(fake_interface)
+
+    assert fake_interface.participant_page_offset == 0
+
+
+def test_previous_participants_page_menu_does_not_go_below_zero(fake_interface, monkeypatch):
+    monkeypatch.setattr(menu_helper.ui_state, 'window_height', 20)
+    fake_interface.participant_page_offset = 0
+
+    pmm.previous_participants_page_menu(fake_interface)
+
+    assert fake_interface.participant_page_offset == 0
 
 
 def test_participant_management_menu_duplicate_subid_falls_back_to_unique_id(fake_interface, monkeypatch):
