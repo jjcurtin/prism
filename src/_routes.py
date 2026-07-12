@@ -15,7 +15,7 @@ from _types import App
 from task_managers._participant_manager import (
     ADD_DUPLICATE_ID, ADD_INVALID_VALUE, ADD_SAVE_FAILED,
     UPDATE_IMMUTABLE_FIELD, UPDATE_INVALID_VALUE, UPDATE_NOT_FOUND,
-    UPDATE_SAVE_FAILED, UPDATE_UNKNOWN_FIELD,
+    UPDATE_SAVE_FAILED, UPDATE_UNKNOWN_FIELD, PARTICIPANT_CSV_HEADERS,
 )
 
 # Every route handler below returns either `(jsonify(...), <status code>)`
@@ -215,6 +215,18 @@ def create_flask_app(app_instance: App) -> Flask:
         required_fields = ['unique_id', 'initials', 'subid', 'on_study', 'phone_number', 'ema_time', 'ema_reminder_time', 'feedback_time', 'feedback_reminder_time']
         if not all(field in data for field in required_fields):
             return jsonify({"error": "Missing required fields"}), 400
+        # PARTICIPANT_CSV_HEADERS is exactly this same 9-field set --
+        # rejecting anything outside it here (not just checking presence
+        # of the required ones) closes a memory/disk drift gap: an extra
+        # JSON key used to be kept in self.participants and was
+        # update_participant-able, but save_participants() only ever
+        # writes the known headers, so it silently never made it to disk,
+        # and the I3 invariant check (compares only unique_id sets) never
+        # caught it.
+        if not all(field in PARTICIPANT_CSV_HEADERS for field in data):
+            return jsonify({"error": "Unknown field(s) in request body"}), 400
+        if not str(data['unique_id']).strip():
+            return jsonify({"error": "unique_id cannot be empty"}), 400
         # A blank phone_number is still allowed here -- matches the
         # interface's existing "press enter to skip" behavior
         # (_add_participant_menu.py) -- only a non-empty, malformed value
