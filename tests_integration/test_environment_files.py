@@ -9,7 +9,7 @@ a header row).
 Like every other file in tests_integration/, this is safe to run on any
 machine: if the research drive isn't mounted, or a given environment was
 never set up on it, the test skips (not fails) -- see
-tests_integration/README.md. It only *fails* once an environment is
+prism_help_manual.md Appendix B. It only *fails* once an environment is
 confirmed to exist but something required under it is missing or still a
 template placeholder, which is a real, actionable problem.
 

@@ -18,7 +18,7 @@ from system_tasks._system_task import SystemTask
 # of passively waiting minutes.
 DRIVE_CHECK_TIMEOUT_SECONDS = 20
 
-# config/README.md's documented reminders.csv schema. Named here so
+# prism_help_manual.md's (Appendix A) documented reminders.csv schema. Named here so
 # check_reminders_file() (below) and _participant_manager.py's own reading
 # of this file are checking/reading the same columns.
 REMINDERS_CSV_EXPECTED_COLUMNS = {'subid', 'unique_id', 'on_study', 'remind_ema', 'remind_feedback'}
@@ -48,7 +48,8 @@ class CheckSystem(SystemTask):
             # below (mypy infers one unified type per variable per
             # function scope, not a flow-sensitive one per assignment).
             drive_mount: str = str(raw_drive_mount)
-            # The research drive is assumed pre-mounted (config/README.md) --
+            # The research drive is assumed pre-mounted (prism_help_manual.md
+            # Appendix A) --
             # this just confirms the mount point is actually there and
             # listable, rather than attempting to mount it ourselves.
             # os.path.ismount() alone isn't reliable for network shares on

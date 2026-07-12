@@ -20,8 +20,9 @@ TASK_CLASSES: dict[str, type[SystemTask]] = {
     'RUN_R_SCRIPT': RunRScript,
 }
 
-# The documented on-disk schema for system_task_schedule.csv (config/
-# README.md) -- deliberately excludes `one_time`/`participant_id`, which
+# The documented on-disk schema for system_task_schedule.csv
+# (prism_help_manual.md, Appendix A) -- deliberately excludes
+# `one_time`/`participant_id`, which
 # every task dict may carry (TaskManager.add_task) but which aren't part of
 # this file's persisted format. Named here, once, so save_tasks() (write)
 # and load_task_schedule() (read, via DictReader's header row) can't drift

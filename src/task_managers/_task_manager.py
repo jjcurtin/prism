@@ -182,7 +182,8 @@ class TaskManager():
     def save_to_csv(self, data: list[Task], file_path: str, headers: list[str] | None = None) -> None:
         """`headers` should be passed explicitly by any caller with a
         documented on-disk schema to persist (e.g. SystemTaskManager's
-        system_task_schedule.csv, config/README.md) -- deriving it from
+        system_task_schedule.csv, prism_help_manual.md Appendix A) --
+        deriving it from
         `data[0].keys()` instead is fragile: every task dict does carry
         `one_time` (unconditionally set in add_task above), but only tasks
         given an explicit r_script_path/participant_id carry those keys, so

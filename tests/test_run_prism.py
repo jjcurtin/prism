@@ -1,6 +1,7 @@
 """Regression test locking in real end-to-end PRISM startup behavior when
 the research drive isn't mounted -- e.g. a fresh clone on a machine before
-the drive/VPN is set up (see README's Getting Started). Every individual
+the drive/VPN is set up (see prism_help_manual.md's Getting Started
+chapter). Every individual
 loader (load_paths/load_api_keys/load_participants/load_task_schedule)
 already degrades gracefully (try/except + a warning/error transcript
 entry) rather than raising, but that was never exercised at the level of

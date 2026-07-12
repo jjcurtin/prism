@@ -137,7 +137,7 @@ def cmd_setup(args):
         f"git-ignored file at the repo root containing \"dev\" or \"prod\") "
         f"is missing, PRISM defaults to \"dev\" and expects the research "
         f"drive already mounted with dev credentials in place -- see "
-        f"config/README.md."
+        f"prism_help_manual.md, Appendix A."
     )
 
 
