@@ -436,7 +436,9 @@ def create_flask_app(app_instance: App) -> Flask:
         send_start = datetime.now()
         attempted = 0
         failed = 0
-        for unique_id, _ in participants:
+        for unique_id, phone_number in participants:
+            if not phone_number.strip():
+                continue
             attempted += 1
             task = app_instance.participant_manager.add_task(
                 survey_type, datetime.now().strftime('%H:%M:%S'), participant_id = unique_id,
