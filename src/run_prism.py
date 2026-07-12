@@ -90,7 +90,8 @@ def _acquire_pid_lock(repo_root: Path) -> int:
             try:
                 age = time.time() - lock_path.stat().st_mtime
             except OSError:
-                continue  # lock file vanished between the failed open and this stat -- retry immediately
+                time.sleep(0.01)  # lock file vanished between the failed open and this stat -- brief pause, not a busy-spin, before retrying
+                continue
             if age > PID_LOCK_STALE_AGE_SECONDS:
                 lock_path.unlink(missing_ok = True)
                 continue

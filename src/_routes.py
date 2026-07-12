@@ -393,7 +393,7 @@ def create_flask_app(app_instance: App) -> Flask:
                     app_instance.add_to_transcript(
                         f"Simulated study announcement send to participant {unique_id} (silent mode).", "INFO"
                     )
-        return jsonify({"message": f"Study announcement sent to all participants, require on study: {require_on_study}"}), 200
+        return jsonify({"message": f"Study announcement sent to {scope}."}), 200
 
     @flask_app.route('/participants/get_survey_pause_status', methods = ['GET'])
     def get_survey_pause_status() -> RouteResponse:
