@@ -946,6 +946,17 @@ class ParticipantManager(TaskManager):
                 body = f"{message} {survey_link}"
             except Exception as e:
                 self.app.add_to_transcript(f"Error parsing link: {e}", "ERROR")
+                # Unlike the SMS-send failure block below, this used to
+                # return -1 with no coordinator page -- a misconfigured or
+                # placeholder survey ID silently dropped every scheduled
+                # send for every participant, daily, with nothing but this
+                # transcript line to notice it. Defensively wrapped for the
+                # same reason as the notify_coordinators calls below: a
+                # failure here must never propagate out of process_task.
+                try:
+                    notify_coordinators(self.app, code_prefix('2004') + f"PRISM system failure: could not build survey link for participant {participant_id}. Error: {e}")
+                except Exception as notify_error:
+                    self.app.add_to_transcript(f"Also failed to notify coordinators about that error: {notify_error}", "ERROR")
                 return -1
             try:
                 if self.app.mode == "live":
