@@ -400,7 +400,12 @@ class PRISM():
         print(transcript_message)
         current_date = datetime.now().strftime('%Y-%m-%d')
         if self.mode == "silent":
-            file_path = os.path.join(self.logs_dir, 'transcripts', 'silent_transcript.txt')
+            # Dated the same as live mode's file (below) -- silent mode is
+            # the stated default day-to-day mode, so an unrotated single
+            # file here grew unbounded while live mode rotated daily.
+            # get_transcript()'s read path builds this same name; keep the
+            # two in sync.
+            file_path = os.path.join(self.logs_dir, 'transcripts', f'{current_date}_silent_transcript.txt')
         else:
             file_path = os.path.join(self.logs_dir, 'transcripts', f'{current_date}_transcript.txt')
         os.makedirs(os.path.dirname(file_path), exist_ok = True)
@@ -423,7 +428,8 @@ class PRISM():
         try:
             today_date = datetime.now().strftime('%Y-%m-%d')
             if self.mode == "silent":
-                transcript_path = os.path.join(self.logs_dir, f'{target}s', f'silent_{target}.txt')
+                # Must match add_to_transcript()'s write-side filename above.
+                transcript_path = os.path.join(self.logs_dir, f'{target}s', f'{today_date}_silent_{target}.txt')
             else:
                 transcript_path = os.path.join(self.logs_dir, f'{target}s', f'{today_date}_{target}.txt')
             os.makedirs(os.path.dirname(transcript_path), exist_ok = True)

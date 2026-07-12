@@ -12,6 +12,14 @@ environment where the drive directory doesn't exist at all, so a future
 change can't silently reintroduce a hard crash on a missing drive.
 """
 import pytest
+from datetime import datetime
+
+
+def _today_silent_transcript_name() -> str:
+    """Silent-mode transcripts are now dated the same as live mode's (see
+    run_prism.py's add_to_transcript/get_transcript) -- was a single
+    never-rotated silent_transcript.txt."""
+    return f"{datetime.now().strftime('%Y-%m-%d')}_silent_transcript.txt"
 
 
 @pytest.fixture
@@ -182,7 +190,7 @@ def test_unlink_pid_file_if_owned_leaves_a_mismatched_pid_file(tmp_path):
 
     assert pid_file.exists()
     assert pid_file.read_text() == str(other_pid)
-    transcript_text = (tmp_path / 'logs' / 'transcripts' / 'silent_transcript.txt').read_text()
+    transcript_text = (tmp_path / 'logs' / 'transcripts' / _today_silent_transcript_name()).read_text()
     assert 'WARNING' in transcript_text and str(other_pid) in transcript_text
 
 
@@ -285,7 +293,7 @@ def test_acquire_pid_file_refuses_to_start_when_a_live_pid_is_recorded(tmp_path)
     # (in this test, coincidentally the same, but unmodified) live process,
     # not silently get replaced on the way to refusing.
     assert pid_file.read_text() == str(os.getpid())
-    transcript_text = (tmp_path / 'logs' / 'transcripts' / 'silent_transcript.txt').read_text()
+    transcript_text = (tmp_path / 'logs' / 'transcripts' / _today_silent_transcript_name()).read_text()
     assert 'Refusing to start' in transcript_text
 
 
@@ -305,7 +313,7 @@ def test_acquire_pid_file_overwrites_a_stale_pid_and_warns(tmp_path):
 
     import os
     assert pid_file.read_text() == str(os.getpid())
-    transcript_text = (tmp_path / 'logs' / 'transcripts' / 'silent_transcript.txt').read_text()
+    transcript_text = (tmp_path / 'logs' / 'transcripts' / _today_silent_transcript_name()).read_text()
     assert 'no-longer-running' in transcript_text
 
 
@@ -473,7 +481,7 @@ def test_launch_web_app_or_shutdown_stops_managers_and_exits_nonzero_on_failure(
 
     assert stopped == {'system': True, 'participant': True}
     assert exit_codes == [1]
-    transcript_text = (tmp_path / 'logs' / 'transcripts' / 'silent_transcript.txt').read_text()
+    transcript_text = (tmp_path / 'logs' / 'transcripts' / _today_silent_transcript_name()).read_text()
     assert 'Web server failed to start or crashed' in transcript_text
     assert 'shutting down task managers' in transcript_text
 
@@ -527,7 +535,7 @@ def test_get_transcript_rejects_negative_num_lines(tmp_path):
     p = _make_bare_prism(tmp_path)
     transcript_dir = tmp_path / 'logs' / 'transcripts'
     transcript_dir.mkdir(parents=True)
-    (transcript_dir / 'silent_transcript.txt').write_text(
+    (transcript_dir / _today_silent_transcript_name()).write_text(
         "10:00:00 - INFO - line 1\n"
         "10:00:01 - INFO - line 2\n"
         "10:00:02 - INFO - line 3\n"
@@ -543,7 +551,7 @@ def test_get_transcript_rejects_zero_num_lines(tmp_path):
     p = _make_bare_prism(tmp_path)
     transcript_dir = tmp_path / 'logs' / 'transcripts'
     transcript_dir.mkdir(parents=True)
-    (transcript_dir / 'silent_transcript.txt').write_text(
+    (transcript_dir / _today_silent_transcript_name()).write_text(
         "10:00:00 - INFO - line 1\n"
         "10:00:01 - INFO - line 2\n"
     )
@@ -559,7 +567,7 @@ def test_get_transcript_accepts_positive_num_lines(tmp_path):
     p = _make_bare_prism(tmp_path)
     transcript_dir = tmp_path / 'logs' / 'transcripts'
     transcript_dir.mkdir(parents=True)
-    (transcript_dir / 'silent_transcript.txt').write_text(
+    (transcript_dir / _today_silent_transcript_name()).write_text(
         "10:00:00 - INFO - line 1\n"
         "10:00:01 - INFO - line 2\n"
         "10:00:02 - INFO - line 3\n"
