@@ -241,7 +241,64 @@ def test_participant_management_menu_static_options_wired_correctly(fake_interfa
     assert menu_options['announcement']['menu_caller'] is pmm.send_announcement_menu
     assert menu_options['remove']['menu_caller'] is pmm.remove_participant_menu
     assert menu_options['access']['menu_caller'] is pmm.access_specific_participant_menu
+    assert menu_options['ema_on']['menu_caller'] is pmm.ema_on_menu
+    assert menu_options['ema_off']['menu_caller'] is pmm.ema_off_menu
+    assert menu_options['feedback_on']['menu_caller'] is pmm.feedback_on_menu
+    assert menu_options['feedback_off']['menu_caller'] is pmm.feedback_off_menu
     assert 'sort' in menu_options and 'filter' in menu_options and 'schedule' in menu_options
+
+
+def test_participant_management_menu_pause_status_shown_in_descriptions(fake_interface, monkeypatch):
+    def fake_api(method, endpoint, **kwargs):
+        if endpoint == 'participants/get_survey_pause_status':
+            return True, {'ema_paused': True, 'feedback_paused': False}
+        return True, {'participants': []}
+
+    fake_interface.api = fake_api
+    mock_pmo = MagicMock(return_value=True)
+    monkeypatch.setattr(pmm, 'print_menu_options', mock_pmo)
+
+    pmm.participant_management_menu(fake_interface)
+
+    menu_options = mock_pmo.call_args[0][1]
+    assert 'PAUSED' in menu_options['ema_on']['description']
+    assert 'PAUSED' in menu_options['ema_off']['description']
+    assert 'ON' in menu_options['feedback_on']['description']
+    assert 'PAUSED' not in menu_options['feedback_off']['description']
+
+
+def test_ema_on_menu_success(fake_interface, capsys):
+    fake_interface.api = MagicMock(return_value=(True, {'message': 'EMA sends resumed for today.'}))
+
+    pmm.ema_on_menu(fake_interface)
+
+    assert 'EMA sends resumed for today.' in capsys.readouterr().out
+    fake_interface.api.assert_called_once_with('POST', 'participants/ema_on')
+
+
+def test_ema_off_menu_failure(fake_interface, capsys):
+    fake_interface.api = MagicMock(return_value=(False, None))
+
+    pmm.ema_off_menu(fake_interface)
+
+    assert 'Failed to pause EMA sends.' in capsys.readouterr().out
+
+
+def test_feedback_on_menu_success(fake_interface, capsys):
+    fake_interface.api = MagicMock(return_value=(True, {'message': 'Feedback sends resumed for today.'}))
+
+    pmm.feedback_on_menu(fake_interface)
+
+    assert 'Feedback sends resumed for today.' in capsys.readouterr().out
+    fake_interface.api.assert_called_once_with('POST', 'participants/feedback_on')
+
+
+def test_feedback_off_menu_failure(fake_interface, capsys):
+    fake_interface.api = MagicMock(return_value=(False, None))
+
+    pmm.feedback_off_menu(fake_interface)
+
+    assert 'Failed to pause feedback sends.' in capsys.readouterr().out
 
 
 def test_participant_management_menu_no_participants_sets_index_and_text_false(fake_interface, monkeypatch, capsys):

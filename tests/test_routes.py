@@ -689,6 +689,49 @@ def test_study_announcement_live_mode_logs_elapsed_send_time(routes_client, rout
 
 
 # ------------------------------------------------------------
+# Study-wide EMA/feedback pause switch (ema_on/ema_off/feedback_on/feedback_off)
+# ------------------------------------------------------------
+
+def test_get_survey_pause_status(routes_client, routes_app_instance):
+    routes_app_instance.participant_manager.get_survey_pause_status.return_value = {
+        'ema_paused': True, 'feedback_paused': False,
+    }
+
+    resp = routes_client.get('/participants/get_survey_pause_status')
+
+    assert resp.status_code == 200
+    assert resp.get_json() == {'ema_paused': True, 'feedback_paused': False}
+
+
+def test_ema_on_route_calls_set_ema_paused_false(routes_client, routes_app_instance):
+    resp = routes_client.post('/participants/ema_on')
+
+    assert resp.status_code == 200
+    routes_app_instance.participant_manager.set_ema_paused.assert_called_once_with(False)
+
+
+def test_ema_off_route_calls_set_ema_paused_true(routes_client, routes_app_instance):
+    resp = routes_client.post('/participants/ema_off')
+
+    assert resp.status_code == 200
+    routes_app_instance.participant_manager.set_ema_paused.assert_called_once_with(True)
+
+
+def test_feedback_on_route_calls_set_feedback_paused_false(routes_client, routes_app_instance):
+    resp = routes_client.post('/participants/feedback_on')
+
+    assert resp.status_code == 200
+    routes_app_instance.participant_manager.set_feedback_paused.assert_called_once_with(False)
+
+
+def test_feedback_off_route_calls_set_feedback_paused_true(routes_client, routes_app_instance):
+    resp = routes_client.post('/participants/feedback_off')
+
+    assert resp.status_code == 200
+    routes_app_instance.participant_manager.set_feedback_paused.assert_called_once_with(True)
+
+
+# ------------------------------------------------------------
 # Unhandled-exception error handler
 # ------------------------------------------------------------
 #

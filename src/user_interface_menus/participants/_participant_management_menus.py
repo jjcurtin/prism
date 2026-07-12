@@ -34,6 +34,34 @@ def send_announcement_menu(self: Interface) -> None:
     else:
         error("No participants found or failed to retrieve.", self)
 
+def ema_on_menu(self: Interface) -> None:
+    ok, _ = self.api("POST", "participants/ema_on")
+    if ok:
+        success("EMA sends resumed for today.", self)
+    else:
+        error("Failed to resume EMA sends.", self)
+
+def ema_off_menu(self: Interface) -> None:
+    ok, _ = self.api("POST", "participants/ema_off")
+    if ok:
+        success("EMA sends paused for the rest of today.", self)
+    else:
+        error("Failed to pause EMA sends.", self)
+
+def feedback_on_menu(self: Interface) -> None:
+    ok, _ = self.api("POST", "participants/feedback_on")
+    if ok:
+        success("Feedback sends resumed for today.", self)
+    else:
+        error("Failed to resume feedback sends.", self)
+
+def feedback_off_menu(self: Interface) -> None:
+    ok, _ = self.api("POST", "participants/feedback_off")
+    if ok:
+        success("Feedback sends paused for the rest of today.", self)
+    else:
+        error("Failed to pause feedback sends.", self)
+
 def remove_participant_menu(self: Interface) -> int | None:
     participant_id = get_input(self, prompt = "Please enter the unique ID of the participant that you would like to remove: ")
     if not participant_id or participant_id.strip() == '':
@@ -189,6 +217,32 @@ def participant_management_menu(self: Interface) -> None:
             menu_options['access'] = {'description': 'Access Participant Data', 'menu_caller': access_specific_participant_menu}
             menu_options['sort'] = {'description': f'Sort Participants (Current: {self.participant_display_mode})', 'menu_caller': change_display_mode}
             menu_options['filter'] = {'description': 'Filter Participants', 'menu_caller': filter_participants_menu}
+
+            # Study-wide ema_on/ema_off/feedback_on/feedback_off (requested
+            # directly): both commands always shown, description reflects
+            # current status so the RA can tell at a glance which one is
+            # actionable without having to remember state across menu
+            # redraws. Fails soft (assumes not-paused) if the status fetch
+            # itself fails, rather than blocking the whole menu on it.
+            pause_ok, pause_status = self.api("GET", "participants/get_survey_pause_status")
+            ema_paused = bool(pause_ok and pause_status and pause_status.get('ema_paused'))
+            feedback_paused = bool(pause_ok and pause_status and pause_status.get('feedback_paused'))
+            menu_options['ema_on'] = {
+                'description': f"Resume EMA Sends for Today (currently: {'PAUSED' if ema_paused else 'ON'})",
+                'menu_caller': ema_on_menu,
+            }
+            menu_options['ema_off'] = {
+                'description': f"Pause EMA Sends for Today (currently: {'PAUSED' if ema_paused else 'ON'})",
+                'menu_caller': ema_off_menu,
+            }
+            menu_options['feedback_on'] = {
+                'description': f"Resume Feedback Sends for Today (currently: {'PAUSED' if feedback_paused else 'ON'})",
+                'menu_caller': feedback_on_menu,
+            }
+            menu_options['feedback_off'] = {
+                'description': f"Pause Feedback Sends for Today (currently: {'PAUSED' if feedback_paused else 'ON'})",
+                'menu_caller': feedback_off_menu,
+            }
             
             if print_menu_options(self, menu_options, submenu = True, index_and_text = index_and_text):
                 break

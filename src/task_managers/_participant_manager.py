@@ -81,6 +81,26 @@ class ParticipantManager(TaskManager):
             # broken reminders.csv to once/day -- see that method's own
             # comment for why the fail-open policy pages at all.
             self._last_reminders_failure_page_date: date | None = None
+            # Study-wide "pause today's scheduled sends" switch, one per
+            # survey family (ema covers 'ema'+'ema_reminder', feedback
+            # covers 'feedback'+'feedback_reminder') -- requested directly:
+            # an RA needs to be able to suppress a whole survey type for
+            # the rest of the day (e.g. a Qualtrics outage, a study-wide
+            # pause day) without touching any individual participant's
+            # on_study status. Stored as the DATE it was paused, not a
+            # bare bool -- "today only" falls out for free by comparing
+            # against the current date at read time (see
+            # _is_survey_paused_today below) rather than needing a
+            # separate reset hook run from the polling loop: a pause set
+            # yesterday simply stops matching once the date rolls over,
+            # with no reset code path to get wrong. Deliberately does NOT
+            # gate a one_time task (an RA explicitly triggering a specific
+            # send right now) -- same reasoning as the existing off_study
+            # skip below, which already carves that out: a deliberate,
+            # explicit action shouldn't be silently dropped by a blanket
+            # schedule-wide switch.
+            self.ema_paused_date: date | None = None
+            self.feedback_paused_date: date | None = None
             # Reuses TaskManager.__init__'s _tasks_lock rather than a
             # second, separate lock -- self.participants and self.tasks are
             # frequently mutated together in the same logical operation
@@ -312,6 +332,36 @@ class ParticipantManager(TaskManager):
             if on_study_only:
                 return [(p['unique_id'], p['phone_number']) for p in self.participants if p['on_study']]
             return [(p['unique_id'], p['phone_number']) for p in self.participants]
+
+    def _is_survey_paused_today(self, paused_date: date | None) -> bool:
+        return paused_date is not None and paused_date == self._now().date()
+
+    def get_survey_pause_status(self) -> dict[str, bool]:
+        """Read side for the ema_on/ema_off/feedback_on/feedback_off
+        interface commands -- lets the menu show the current state before
+        the RA picks an action.
+        """
+        with self._tasks_lock:
+            return {
+                'ema_paused': self._is_survey_paused_today(self.ema_paused_date),
+                'feedback_paused': self._is_survey_paused_today(self.feedback_paused_date),
+            }
+
+    def set_ema_paused(self, paused: bool) -> None:
+        with self._tasks_lock:
+            self.ema_paused_date = self._now().date() if paused else None
+        self.app.add_to_transcript(
+            f"EMA sends {'paused' if paused else 'resumed'} for the rest of today "
+            "(scheduled reminders included; one-time/manual sends are unaffected).", "INFO"
+        )
+
+    def set_feedback_paused(self, paused: bool) -> None:
+        with self._tasks_lock:
+            self.feedback_paused_date = self._now().date() if paused else None
+        self.app.add_to_transcript(
+            f"Feedback sends {'paused' if paused else 'resumed'} for the rest of today "
+            "(scheduled reminders included; one-time/manual sends are unaffected).", "INFO"
+        )
 
     def save_participants(self) -> int:
         """Returns 0 on success, 1 on failure -- same convention as every
@@ -685,6 +735,28 @@ class ParticipantManager(TaskManager):
             # a concrete `str` type -- behaviorally identical to the old
             # implicit-None case, since neither dict has "" as a key either.
             task_type: str = task.get('task_type', '')
+
+            # Study-wide ema_on/ema_off/feedback_on/feedback_off switch
+            # (requested directly): a recurring/scheduled task for a
+            # currently-paused survey family is silently skipped, same
+            # shape as the off_study check above and for the same reason
+            # -- a one_time task only exists because an RA deliberately
+            # triggered it right now, so it goes through regardless of the
+            # study-wide pause (which exists to suppress the *automatic*
+            # cadence, not override a specific, explicit action).
+            if not task.get('one_time'):
+                if task_type in ('ema', 'ema_reminder') and self._is_survey_paused_today(self.ema_paused_date):
+                    self.app.add_to_transcript(
+                        f"Skipped {task_type} for participant {participant_id}: EMA sends are paused for today.",
+                        "INFO",
+                    )
+                    return 0
+                if task_type in ('feedback', 'feedback_reminder') and self._is_survey_paused_today(self.feedback_paused_date):
+                    self.app.add_to_transcript(
+                        f"Skipped {task_type} for participant {participant_id}: feedback sends are paused for today.",
+                        "INFO",
+                    )
+                    return 0
 
             # reminder checking logic -- remind_ema/remind_feedback ("yes"/"no",
             # config/README.md's reminders.csv schema) record whether this

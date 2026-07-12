@@ -23,6 +23,8 @@ def make_manager(fake_app):
     pm._now = datetime.now
     pm._last_reset_date = datetime.now().date()
     pm._last_reminders_failure_page_date = None
+    pm.ema_paused_date = None
+    pm.feedback_paused_date = None
     pm.task_queue = queue.Queue()
     pm.participants = []
     pm.survey_types = {
@@ -596,6 +598,70 @@ def test_get_participant_ids_and_phone_numbers_returns_a_copy_not_a_live_referen
     assert pairs == [(PARTICIPANT['unique_id'], PARTICIPANT['phone_number'])]
 
 
+# ------------------------------------------------------------
+# Study-wide EMA/feedback pause switch (ema_on/ema_off/feedback_on/feedback_off)
+# ------------------------------------------------------------
+
+def test_survey_pause_status_defaults_to_not_paused(fake_app):
+    pm = make_manager(fake_app)
+
+    status = pm.get_survey_pause_status()
+
+    assert status == {'ema_paused': False, 'feedback_paused': False}
+
+
+def test_set_ema_paused_true_reflected_in_status(fake_app):
+    pm = make_manager(fake_app)
+
+    pm.set_ema_paused(True)
+
+    assert pm.get_survey_pause_status() == {'ema_paused': True, 'feedback_paused': False}
+
+
+def test_set_ema_paused_false_resumes(fake_app):
+    pm = make_manager(fake_app)
+    pm.set_ema_paused(True)
+
+    pm.set_ema_paused(False)
+
+    assert pm.get_survey_pause_status()['ema_paused'] is False
+
+
+def test_set_feedback_paused_independent_of_ema(fake_app):
+    pm = make_manager(fake_app)
+
+    pm.set_feedback_paused(True)
+
+    assert pm.get_survey_pause_status() == {'ema_paused': False, 'feedback_paused': True}
+
+
+def test_set_ema_paused_logs_transcript(fake_app):
+    pm = make_manager(fake_app)
+
+    pm.set_ema_paused(True)
+    pm.set_ema_paused(False)
+
+    messages = [msg for _, msg in fake_app.transcript]
+    assert any('EMA sends paused for the rest of today' in msg for msg in messages)
+    assert any('EMA sends resumed for the rest of today' in msg for msg in messages)
+
+
+def test_survey_pause_expires_the_next_day(fake_app):
+    """"Today only" falls out of comparing the paused-on date against the
+    current date at read time -- no separate reset step should be needed.
+    """
+    from datetime import datetime as real_datetime
+
+    pm = make_manager(fake_app)
+    pm._now = lambda: real_datetime(2026, 1, 1, 12, 0, 0)
+    pm.set_ema_paused(True)
+    assert pm.get_survey_pause_status()['ema_paused'] is True
+
+    pm._now = lambda: real_datetime(2026, 1, 2, 0, 0, 1)  # a new day
+
+    assert pm.get_survey_pause_status()['ema_paused'] is False
+
+
 def test_concurrent_get_phone_numbers_and_load_participants_no_race(tmp_path, fake_app):
     """Real-thread regression test for the race get_phone_numbers() exists
     to close: one thread repeatedly reloads self.participants from disk
@@ -1046,6 +1112,88 @@ def test_process_task_sends_ema_sms_in_live_mode(fake_app, mocker):
 
     assert result == 0
     send_sms.assert_called_once_with(fake_app, ['5555550100'], mocker.ANY)
+
+
+def test_process_task_scheduled_ema_skipped_while_paused(fake_app, mocker):
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+    pm.set_ema_paused(True)
+    fake_app.mode = 'live'
+    fake_app.ema_survey_id = 'fake_survey'
+    fake_app.ema_message = "Hello, it's time to take your daily survey."
+    send_sms = mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
+
+    result = pm.process_task({'task_type': 'ema', 'participant_id': '000000000'})
+
+    assert result == 0
+    send_sms.assert_not_called()
+    assert any('Skipped ema' in msg and 'paused' in msg for _, msg in fake_app.transcript)
+
+
+def test_process_task_scheduled_ema_reminder_also_skipped_while_ema_paused(fake_app, mocker):
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+    pm.set_ema_paused(True)
+    fake_app.mode = 'live'
+    fake_app.ema_survey_id = 'fake_survey'
+    fake_app.ema_reminder_message = "Reminder!"
+    send_sms = mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
+
+    result = pm.process_task({'task_type': 'ema_reminder', 'participant_id': '000000000'})
+
+    assert result == 0
+    send_sms.assert_not_called()
+
+
+def test_process_task_scheduled_feedback_skipped_while_paused(fake_app, mocker):
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+    pm.set_feedback_paused(True)
+    fake_app.mode = 'live'
+    fake_app.feedback_survey_id = 'fake_survey'
+    fake_app.feedback_message = "Feedback time!"
+    send_sms = mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
+
+    result = pm.process_task({'task_type': 'feedback', 'participant_id': '000000000'})
+
+    assert result == 0
+    send_sms.assert_not_called()
+    assert any('Skipped feedback' in msg and 'paused' in msg for _, msg in fake_app.transcript)
+
+
+def test_process_task_feedback_pause_does_not_affect_ema(fake_app, mocker):
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+    pm.set_feedback_paused(True)
+    fake_app.mode = 'live'
+    fake_app.ema_survey_id = 'fake_survey'
+    fake_app.ema_message = "Hello, it's time to take your daily survey."
+    send_sms = mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
+
+    result = pm.process_task({'task_type': 'ema', 'participant_id': '000000000'})
+
+    assert result == 0
+    send_sms.assert_called_once()
+
+
+def test_process_task_one_time_ema_send_bypasses_pause(fake_app, mocker):
+    """A pause suppresses the automatic/scheduled cadence, not a
+    deliberate, explicit send an RA just triggered (e.g. send_survey, or
+    the studywide bulk-send functions) -- same carve-out as the existing
+    off_study skip.
+    """
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+    pm.set_ema_paused(True)
+    fake_app.mode = 'live'
+    fake_app.ema_survey_id = 'fake_survey'
+    fake_app.ema_message = "Hello, it's time to take your daily survey."
+    send_sms = mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
+
+    result = pm.process_task({'task_type': 'ema', 'participant_id': '000000000', 'one_time': True})
+
+    assert result == 0
+    send_sms.assert_called_once()
 
 
 # ------------------------------------------------------------

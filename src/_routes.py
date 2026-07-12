@@ -360,6 +360,30 @@ def create_flask_app(app_instance: App) -> Flask:
                     )
         return jsonify({"message": f"Study announcement sent to all participants, require on study: {require_on_study}"}), 200
 
+    @flask_app.route('/participants/get_survey_pause_status', methods = ['GET'])
+    def get_survey_pause_status() -> RouteResponse:
+        return jsonify(app_instance.participant_manager.get_survey_pause_status()), 200
+
+    @flask_app.route('/participants/ema_on', methods = ['POST'])
+    def ema_on() -> RouteResponse:
+        app_instance.participant_manager.set_ema_paused(False)
+        return jsonify({"message": "EMA sends resumed for today."}), 200
+
+    @flask_app.route('/participants/ema_off', methods = ['POST'])
+    def ema_off() -> RouteResponse:
+        app_instance.participant_manager.set_ema_paused(True)
+        return jsonify({"message": "EMA sends paused for the rest of today."}), 200
+
+    @flask_app.route('/participants/feedback_on', methods = ['POST'])
+    def feedback_on() -> RouteResponse:
+        app_instance.participant_manager.set_feedback_paused(False)
+        return jsonify({"message": "Feedback sends resumed for today."}), 200
+
+    @flask_app.route('/participants/feedback_off', methods = ['POST'])
+    def feedback_off() -> RouteResponse:
+        app_instance.participant_manager.set_feedback_paused(True)
+        return jsonify({"message": "Feedback sends paused for the rest of today."}), 200
+
     ########################
     #  Error handling      #
     ########################
