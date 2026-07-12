@@ -184,16 +184,22 @@ class ParticipantManager(TaskManager):
         immune to an embedded comma or quote in a field corrupting every
         subsequent field, unlike the old parser.
         """
+        # Read happens before the lock is acquired -- never hold
+        # _tasks_lock across I/O (same rule save_participants() already
+        # follows below); a stalled read of the research-drive CSV must
+        # not block the scheduler thread or any other Flask request
+        # touching participants/tasks.
+        try:
+            with open(self.file_path, 'r', newline = '') as file:
+                reader = csv.DictReader(file)
+                rows = list(reader)
+        except Exception as e:
+            self.app.add_to_transcript(f"Failed to load participants from CSV: {e}", "ERROR")
+            return 1
+
         with self._tasks_lock:
-            try:
-                self.participants.clear()
-                self.tasks.clear()
-                with open(self.file_path, 'r', newline = '') as file:
-                    reader = csv.DictReader(file)
-                    rows = list(reader)
-            except Exception as e:
-                self.app.add_to_transcript(f"Failed to load participants from CSV: {e}", "ERROR")
-                return 1
+            self.participants.clear()
+            self.tasks.clear()
 
             for row_number, row in enumerate(rows, start = 2):
                 if not any((row.get(col) or '').strip() for col in PARTICIPANT_CSV_HEADERS):
@@ -486,11 +492,14 @@ class ParticipantManager(TaskManager):
         collapsing every rejection reason into a generic 404.
         """
         try:
-            # Locked as one unit: field mutation + persist + reschedule
-            # must be atomic, not three independently-interleavable steps
-            # -- get_participant()/save_participants()/remove_task()/
-            # add_task() below all reacquire this same lock themselves
-            # (it's an RLock, so that's safe from this same thread).
+            # Validation + the in-memory field mutation are locked as one
+            # unit -- get_participant()/remove_task()/add_task() below all
+            # reacquire this same lock themselves (it's an RLock, so that's
+            # safe from this same thread). save_participants()'s file write
+            # happens AFTER this block exits, with the lock released --
+            # never hold _tasks_lock across I/O (see load_participants()'s
+            # equivalent comment above); only re-acquired afterward, briefly,
+            # to roll back on failure or to reschedule the task in memory.
             with self._tasks_lock:
                 if field == 'unique_id':
                     # Rejected rather than re-keyed in place: a rekey here
@@ -508,84 +517,85 @@ class ParticipantManager(TaskManager):
                     )
                     return UPDATE_IMMUTABLE_FIELD
                 participant = self.get_participant(unique_id)
-                if participant:
-                    if field in participant:
-                        if field == 'on_study':
-                            if str(value).strip().lower() in ('true', 'yes'):
-                                value = True
-                            elif str(value).strip().lower() in ('false', 'no'):
-                                value = False
-                            else:
-                                self.app.add_to_transcript(f"Invalid value '{value}' for on_study; expected true/false.", "ERROR")
-                                return UPDATE_INVALID_VALUE
-                        elif field in self.survey_types.values() and value:
-                            # Validated up front, not left to add_task()'s
-                            # strptime below -- found by an adversarial
-                            # review of these invariants: the old code
-                            # applied the field mutation and persisted it
-                            # BEFORE reaching add_task(), so a bad time
-                            # string (e.g. "", or any non-HH:MM:SS value)
-                            # raised there, was caught by this method's own
-                            # outer except, and reported failure (return 1)
-                            # -- while the field had already been mutated
-                            # and persisted, and the old task already
-                            # removed. Validating first means a rejected
-                            # edit changes nothing at all.
-                            #
-                            # value is normalized to the stripped form
-                            # (not just validated against one) -- a
-                            # sibling bug to the one already fixed for
-                            # add_participant (e264b83): this used to
-                            # validate a str(value).strip() copy but then
-                            # persist/reschedule the UNSTRIPPED original,
-                            # so a padded time (' 16:00:00 ') validated
-                            # fine here but still raised, unstripped,
-                            # inside add_task()'s own strptime call below
-                            # -- after the field mutation and old-task
-                            # removal had already gone through.
-                            value = str(value).strip()
-                            try:
-                                datetime.strptime(value, '%H:%M:%S')
-                            except ValueError:
-                                self.app.add_to_transcript(
-                                    f"Invalid time format '{value}' for {field}; expected HH:MM:SS.", "ERROR"
-                                )
-                                return UPDATE_INVALID_VALUE
-                        elif field == 'phone_number' and value:
-                            # Same normalize-before-validate-and-persist
-                            # fix as the time-field branch above.
-                            value = str(value).strip()
-                            if value and not is_valid_phone_number(value):
-                                self.app.add_to_transcript(
-                                    f"Invalid phone_number '{value}' for participant {unique_id}; expected 10 digits.", "ERROR"
-                                )
-                                return UPDATE_INVALID_VALUE
-                        old_value = participant[field]
-                        participant[field] = value
-                        if self.save_participants():
-                            participant[field] = old_value  # roll back: mirror on-disk truth (I3)
-                            self.app.add_to_transcript(
-                                f"Failed to update participant {unique_id}: could not persist to CSV.", "ERROR"
-                            )
-                            return UPDATE_SAVE_FAILED
-                        for task_type, field_name in self.survey_types.items():
-                            if field_name == field:
-                                self.remove_task(task_type, participant_id = unique_id)
-                                # Matches schedule_participant_tasks' own
-                                # semantics (only add_task for a non-empty
-                                # time) -- clearing a survey time now
-                                # removes that recurring task rather than
-                                # trying to reschedule it for "".
-                                if value:
-                                    self.add_task(task_type, value, participant_id = unique_id)
-                        self.app.add_to_transcript(f"Updated {field} for participant {unique_id} to {value}.", "INFO")
-                        return UPDATE_OK
-                    else:
-                        self.app.add_to_transcript(f"Field {field} does not exist for participant {unique_id}.", "ERROR")
-                        return UPDATE_UNKNOWN_FIELD
-                else:
+                if not participant:
                     self.app.add_to_transcript(f"Failed to update participant {unique_id}: Participant not found.", "ERROR")
                     return UPDATE_NOT_FOUND
+                if field not in participant:
+                    self.app.add_to_transcript(f"Field {field} does not exist for participant {unique_id}.", "ERROR")
+                    return UPDATE_UNKNOWN_FIELD
+                if field == 'on_study':
+                    if str(value).strip().lower() in ('true', 'yes'):
+                        value = True
+                    elif str(value).strip().lower() in ('false', 'no'):
+                        value = False
+                    else:
+                        self.app.add_to_transcript(f"Invalid value '{value}' for on_study; expected true/false.", "ERROR")
+                        return UPDATE_INVALID_VALUE
+                elif field in self.survey_types.values() and value:
+                    # Validated up front, not left to add_task()'s
+                    # strptime below -- found by an adversarial
+                    # review of these invariants: the old code
+                    # applied the field mutation and persisted it
+                    # BEFORE reaching add_task(), so a bad time
+                    # string (e.g. "", or any non-HH:MM:SS value)
+                    # raised there, was caught by this method's own
+                    # outer except, and reported failure (return 1)
+                    # -- while the field had already been mutated
+                    # and persisted, and the old task already
+                    # removed. Validating first means a rejected
+                    # edit changes nothing at all.
+                    #
+                    # value is normalized to the stripped form
+                    # (not just validated against one) -- a
+                    # sibling bug to the one already fixed for
+                    # add_participant (e264b83): this used to
+                    # validate a str(value).strip() copy but then
+                    # persist/reschedule the UNSTRIPPED original,
+                    # so a padded time (' 16:00:00 ') validated
+                    # fine here but still raised, unstripped,
+                    # inside add_task()'s own strptime call below
+                    # -- after the field mutation and old-task
+                    # removal had already gone through.
+                    value = str(value).strip()
+                    try:
+                        datetime.strptime(value, '%H:%M:%S')
+                    except ValueError:
+                        self.app.add_to_transcript(
+                            f"Invalid time format '{value}' for {field}; expected HH:MM:SS.", "ERROR"
+                        )
+                        return UPDATE_INVALID_VALUE
+                elif field == 'phone_number' and value:
+                    # Same normalize-before-validate-and-persist
+                    # fix as the time-field branch above.
+                    value = str(value).strip()
+                    if value and not is_valid_phone_number(value):
+                        self.app.add_to_transcript(
+                            f"Invalid phone_number '{value}' for participant {unique_id}; expected 10 digits.", "ERROR"
+                        )
+                        return UPDATE_INVALID_VALUE
+                old_value = participant[field]
+                participant[field] = value
+
+            if self.save_participants():
+                with self._tasks_lock:
+                    participant[field] = old_value  # roll back: mirror on-disk truth (I3)
+                self.app.add_to_transcript(
+                    f"Failed to update participant {unique_id}: could not persist to CSV.", "ERROR"
+                )
+                return UPDATE_SAVE_FAILED
+            with self._tasks_lock:
+                for task_type, field_name in self.survey_types.items():
+                    if field_name == field:
+                        self.remove_task(task_type, participant_id = unique_id)
+                        # Matches schedule_participant_tasks' own
+                        # semantics (only add_task for a non-empty
+                        # time) -- clearing a survey time now
+                        # removes that recurring task rather than
+                        # trying to reschedule it for "".
+                        if value:
+                            self.add_task(task_type, value, participant_id = unique_id)
+            self.app.add_to_transcript(f"Updated {field} for participant {unique_id} to {value}.", "INFO")
+            return UPDATE_OK
         except Exception as e:
             self.app.add_to_transcript(f"An error occurred while updating participant {unique_id}: {e}", "ERROR")
             return UPDATE_UNEXPECTED_ERROR
@@ -682,11 +692,17 @@ class ParticipantManager(TaskManager):
                         )
                         return ADD_INVALID_VALUE
             self.participants.append(participant)
-            if self.save_participants():
-                self.participants.remove(participant)
-                return ADD_SAVE_FAILED
-            self.schedule_participant_tasks(participant)
-            return ADD_OK
+        # save_participants() does its own file I/O -- never hold
+        # _tasks_lock across that write (see load_participants()'s
+        # equivalent comment above); only re-acquire the lock to roll back
+        # on failure.
+        if self.save_participants():
+            with self._tasks_lock:
+                if participant in self.participants:
+                    self.participants.remove(participant)
+            return ADD_SAVE_FAILED
+        self.schedule_participant_tasks(participant)
+        return ADD_OK
 
     def schedule_participant_tasks(self, participant: Participant) -> None:
         for task_type, field_name in self.survey_types.items():
@@ -706,16 +722,21 @@ class ParticipantManager(TaskManager):
             if participant is None:
                 return 1
             self.participants.remove(participant)
-            if self.save_participants():
+        # save_participants() does its own file I/O -- never hold
+        # _tasks_lock across that write (see load_participants()'s
+        # equivalent comment above); only re-acquire the lock to roll back
+        # on failure or to remove the now-orphaned tasks in memory.
+        if self.save_participants():
+            with self._tasks_lock:
                 self.participants.append(participant)  # roll back: mirror on-disk truth (I3)
-                self.app.add_to_transcript(
-                    f"Failed to remove participant {unique_id}: could not persist to CSV.", "ERROR"
-                )
-                return 1
-            for task_type, field_name in self.survey_types.items():
-                self.remove_task(task_type, participant_id = unique_id)
-            self.app.add_to_transcript(f"Removed participant {unique_id}.", "INFO")
-            return 0
+            self.app.add_to_transcript(
+                f"Failed to remove participant {unique_id}: could not persist to CSV.", "ERROR"
+            )
+            return 1
+        for task_type, field_name in self.survey_types.items():
+            self.remove_task(task_type, participant_id = unique_id)
+        self.app.add_to_transcript(f"Removed participant {unique_id}.", "INFO")
+        return 0
 
     def remove_task(self, task_type: str, task_time: str | None = None, participant_id: str | None = None) -> int:
         with self._tasks_lock:
