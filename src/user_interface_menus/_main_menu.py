@@ -33,7 +33,7 @@ def main_menu(self: Interface) -> None:
     # crash the interface) or being reported as an error.
     while True:
         try:
-            menu_loop(self, menu_options, submenu = False, recommended_actions = ['participants', 'tasks'])
+            menu_loop(self, menu_options, submenu = False)
             break
         except ReturnToMainMenu:
             continue

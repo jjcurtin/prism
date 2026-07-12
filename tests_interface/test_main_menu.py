@@ -34,4 +34,3 @@ def test_main_menu_options_structure(fake_interface, monkeypatch):
         assert callable(option['menu_caller']), f"{key} menu_caller not callable"
         assert option['description']
     assert kwargs['submenu'] is False
-    assert kwargs['recommended_actions'] == ['participants', 'tasks']

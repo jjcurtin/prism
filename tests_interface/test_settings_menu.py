@@ -115,7 +115,6 @@ def test_display_settings_options_structure(fake_interface, monkeypatch):
     mock.assert_called_once()
     args, kwargs = mock.call_args
     assert set(args[1]) == {'print', 'width', 'height', 'align', 'color'}
-    assert kwargs['recommended_actions'] == ['color']
 
 
 # ------------------------------------------------------------
@@ -288,7 +287,6 @@ def test_parameter_settings_options_structure(fake_interface, monkeypatch):
         'print', 'threshold', 'best threshold',
         'type speed', 'delay', 'timeout',
     }
-    assert kwargs['recommended_actions'] == ['print']
 
 
 # ------------------------------------------------------------

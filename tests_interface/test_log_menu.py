@@ -38,7 +38,6 @@ def test_log_menu_options_structure(fake_interface, monkeypatch):
     mock.assert_called_once()
     args, kwargs = mock.call_args
     assert set(args[1]) == {'transcript', 'interface'}
-    assert kwargs['recommended_actions'] == ['transcript']
 
 
 # ------------------------------------------------------------

@@ -13,7 +13,7 @@ def log_menu(self: Interface) -> None:
         if not self.commands_queue:
             print_menu_header("logs")
             assistant_header_write(self, ["Logs Menu"])
-        if print_menu_options(self, menu_options, submenu = True, recommended_actions = ['transcript']):
+        if print_menu_options(self, menu_options, submenu = True):
             break
 
 def print_transcript(self: Interface, log_type: str) -> None:

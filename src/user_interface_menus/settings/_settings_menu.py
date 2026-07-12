@@ -52,7 +52,7 @@ def display_settings(self: Interface) -> None:
         if not self.commands_queue:
             print_menu_header("settings display")
             assistant_header_write(self, ["Display Settings Menu"])
-        if print_menu_options(self, menu_options, submenu = True, recommended_actions = ['color']):
+        if print_menu_options(self, menu_options, submenu = True):
             break
 
 def related_parameter(self: Interface) -> int | None:
@@ -154,7 +154,7 @@ def parameter_settings(self: Interface) -> None:
     while True:
         if not self.commands_queue:
             print_menu_header("settings system params")
-        if print_menu_options(self, menu_options, submenu = True, recommended_actions = ['print']):
+        if print_menu_options(self, menu_options, submenu = True):
             break
 
 def readme(self: Interface) -> None:

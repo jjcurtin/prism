@@ -18,7 +18,6 @@ def print_menu_options(
     submenu: bool = False,
     index_and_text: bool = False,
     choice: str | None = None,
-    recommended_actions: list[str] | None = None,
 ) -> int:
     from user_interface_menus._menu_helper import add_recent_command, set_local_menu_options
 
@@ -38,8 +37,6 @@ def print_menu_options(
         item3: dict[str, Any] | None = None,
     ) -> None:
         try:
-            recommended_text = f" (recommended)" if recommended_actions is not None and key in recommended_actions else ""
-
             if top_window:
                 if key2 is not None and item2 is not None and key3 is not None and item3 is not None:
                     items = [
@@ -67,7 +64,7 @@ def print_menu_options(
                 items = [
                     # can have up to four columns
                     # {"text": f"", "align_right" : False, "locked": True, "bordered": "left"}, # empty window
-                    {"text": f"{yellow(key + green(recommended_text))}", "align_right" : False, "locked": True, "bordered": "both"},
+                    {"text": f"{yellow(key)}", "align_right" : False, "locked": True, "bordered": "both"},
                     {"text": f"{item['description']}", "align_right": False, "locked": False, "bordered": "both"},
                 ]
             columns_result = display_in_columns(self, items)

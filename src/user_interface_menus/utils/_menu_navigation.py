@@ -45,7 +45,6 @@ def menu_loop(
     header: str = "main",
     name: str = "Main Menu",
     submenu: bool = True,
-    recommended_actions: list[str] = [],
     additional_content: list[str] | None = None,
 ) -> None:
     if 'print_menu_options' not in globals():
@@ -65,7 +64,7 @@ def menu_loop(
                     else:
                         print(line)
             assistant_header_write(self, [name])
-        if print_menu_options(self, menu_options, submenu = submenu, recommended_actions = recommended_actions) and submenu:
+        if print_menu_options(self, menu_options, submenu = submenu) and submenu:
             break
 
 def get_menu_options() -> MenuOptions:
