@@ -97,19 +97,6 @@ def remove_participant_menu(self: Interface) -> int | None:
             return 0
     return None
 
-def access_specific_participant_menu(self: Interface) -> int | None:
-    participant_id = get_input(self, prompt = "Please enter the unique ID of the participant that you would like to access: ")
-    if not participant_id or participant_id.strip() == '':
-        error("Participant ID cannot be empty.")
-        return 0
-    ok, data = self.api("GET", f"participants/get_participant/{url_segment(participant_id)}")
-    if ok:
-        individual_participant_menu(self, participant_id)
-        return None
-    else:
-        error("Failed to retrieve participant data. Unique ID not found.", self)
-        return 0
-
 def participant_management_menu(self: Interface) -> None:
     def print_task_schedule(self: Interface) -> None:
         if not self.commands_queue:
@@ -238,7 +225,6 @@ def participant_management_menu(self: Interface) -> None:
                 'description': 'Send Feedback to Everyone Now', 'menu_caller': send_studywide_feedback_menu
             }
             menu_options['remove'] = {'description': 'Remove a Participant', 'menu_caller': remove_participant_menu}
-            menu_options['access'] = {'description': 'Access Participant Data', 'menu_caller': access_specific_participant_menu}
             menu_options['sort'] = {'description': f'Sort Participants (Current: {self.participant_display_mode})', 'menu_caller': change_display_mode}
             menu_options['filter'] = {'description': 'Filter Participants', 'menu_caller': filter_participants_menu}
 

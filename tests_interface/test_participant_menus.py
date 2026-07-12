@@ -179,38 +179,6 @@ def test_remove_participant_menu_not_confirmed_no_api_call(fake_interface):
 
 
 # ------------------------------------------------------------
-# access_specific_participant_menu
-# ------------------------------------------------------------
-
-def test_access_specific_participant_menu_empty_id_errors(fake_interface, capsys):
-    fake_interface.inputs_queue.put('')
-    fake_interface.api = MagicMock()
-    result = pmm.access_specific_participant_menu(fake_interface)
-    assert result == 0
-    assert 'Participant ID cannot be empty.' in capsys.readouterr().out
-
-
-def test_access_specific_participant_menu_found_delegates(fake_interface, monkeypatch):
-    fake_interface.inputs_queue.put('123456789')
-    fake_interface.api = MagicMock(return_value=(True, {'participant': {'unique_id': '123456789'}}))
-    calls = []
-    monkeypatch.setattr(pmm, 'individual_participant_menu', lambda self, pid: calls.append((self, pid)))
-
-    pmm.access_specific_participant_menu(fake_interface)
-
-    assert calls == [(fake_interface, '123456789')]
-    fake_interface.api.assert_called_once_with('GET', 'participants/get_participant/123456789')
-
-
-def test_access_specific_participant_menu_not_found_errors(fake_interface, capsys):
-    fake_interface.inputs_queue.put('999')
-    fake_interface.api = MagicMock(return_value=(False, None))
-    result = pmm.access_specific_participant_menu(fake_interface)
-    assert result == 0
-    assert 'Unique ID not found' in capsys.readouterr().out
-
-
-# ------------------------------------------------------------
 # participant_management_menu
 # ------------------------------------------------------------
 
@@ -240,7 +208,7 @@ def test_participant_management_menu_static_options_wired_correctly(fake_interfa
     assert menu_options['refresh']['menu_caller'] is pmm.refresh_participants_menu
     assert menu_options['announcement']['menu_caller'] is pmm.send_announcement_menu
     assert menu_options['remove']['menu_caller'] is pmm.remove_participant_menu
-    assert menu_options['access']['menu_caller'] is pmm.access_specific_participant_menu
+    assert 'access' not in menu_options
     assert menu_options['ema_on']['menu_caller'] is pmm.ema_on_menu
     assert menu_options['ema_off']['menu_caller'] is pmm.ema_off_menu
     assert menu_options['feedback_on']['menu_caller'] is pmm.feedback_on_menu

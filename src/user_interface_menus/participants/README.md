@@ -7,9 +7,13 @@ it through this menu rather than editing that file by hand.
 
 ## The participant list
 
-Opening `participants` shows every participant as a numbered entry
-(`Last, First (unique_id)`) — type the number to open that participant's
-record. Other options on this screen:
+Opening `participants` shows every participant, each entry keyed by their
+sub ID (`sub_id (initials, unique_id)`) — type a participant's sub ID directly
+to open their record, from anywhere in the list, regardless of current sort
+order. (If two participants ever share a sub ID — not something PRISM
+prevents on load — the second one's entry falls back to being keyed by its
+unique ID instead, so neither becomes unreachable.) Other options on this
+screen:
 
 - `add` — add a new participant (see below)
 - `schedule` — print every participant's upcoming EMA/feedback send times
@@ -17,9 +21,16 @@ record. Other options on this screen:
   was edited outside of PRISM)
 - `announcement` — send an SMS to some or all participants (asks whether to
   restrict to participants currently on-study)
+- `send_ema` / `send_feedback` — send today's EMA or feedback survey to
+  every participant right now, in one action (also asks whether to
+  restrict to participants currently on-study)
+- `ema_on` / `ema_off` / `feedback_on` / `feedback_off` — pause or resume a
+  survey type's scheduled sends study-wide for the rest of the day (e.g. a
+  Qualtrics outage). Doesn't affect `send_ema`/`send_feedback` above, or an
+  individual participant's ad hoc `survey` send — those are explicit,
+  deliberate actions, not part of the automatic schedule this pauses. Each
+  command's description shows the survey type's current status.
 - `remove` — remove a participant by their unique ID
-- `access` — jump straight to a participant's record by unique ID (handy if
-  you don't want to scroll the list)
 - `sort` — change list ordering: by name, unique ID, or on-study status
 - `filter` — show only on-study, only off-study, or all participants
 
