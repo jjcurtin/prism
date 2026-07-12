@@ -37,7 +37,7 @@ def make_manager(fake_app):
 
 
 # Matches the real study_participants.csv schema (verified against the
-# actual file on the research drive, see prism_help_manual.md Appendix A):
+# actual file on the research drive, see README.md Appendix A):
 # initials,subid,unique_id,on_study,phone_number,ema_time,ema_reminder_time,
 # feedback_time,feedback_reminder_time
 PARTICIPANT = {
@@ -808,7 +808,7 @@ def test_participant_manager_invariants_hold_after_random_operation_sequences(fa
 # load_participants() used to parse each CSV row assuming
 # first_name,last_name,unique_id,... and check on_study == 'true'. Fixed to
 # match the real study_participants.csv schema (verified against the actual
-# file on the research drive, see prism_help_manual.md Appendix A):
+# file on the research drive, see README.md Appendix A):
 # initials,subid,unique_id,on_study(yes/no),phone_number,...
 
 def test_load_participants_matches_real_csv_schema(tmp_path, fake_app):
@@ -1290,7 +1290,7 @@ def test_finish_task_one_time_survey_send_removed_even_on_failure(fake_app, mock
 def test_process_task_ema_reminder_skipped_when_already_opened(tmp_path, fake_app, mocker):
     """Regression test for a fixed bug: process_task used to check
     ema_opened/feedback_opened columns that don't exist in the real
-    reminders.csv schema (prism_help_manual.md Appendix A: remind_ema/remind_feedback),
+    reminders.csv schema (README.md Appendix A: remind_ema/remind_feedback),
     so a KeyError was silently swallowed and every reminder fired regardless
     of whether the participant had already opened that survey today.
     remind_ema/remind_feedback == "no" means already opened -- skip (the

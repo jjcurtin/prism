@@ -32,7 +32,7 @@ REMINDERS_CSV = 'subid,unique_id,on_study,remind_ema,remind_feedback\n'
 def fake_prism_env(tmp_path):
     """Builds a fake repo checkout + fake research drive, both fully offline,
     matching the real config_base/paths.csv/environment-marker layout
-    (prism_help_manual.md, Appendix A), and returns the fake repo_root for tests to point a
+    (README.md, Appendix A), and returns the fake repo_root for tests to point a
     PRISM instance at via `p.repo_root = fake_prism_env`.
     """
     repo_root = tmp_path / 'repo'

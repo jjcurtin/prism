@@ -16,7 +16,7 @@ import csv
 Participant = dict[str, Any]
 
 # The documented on-disk schema for study_participants.csv
-# (prism_help_manual.md, Appendix A). Named once here so save_participants()
+# (README.md, Appendix A). Named once here so save_participants()
 # (write) and
 # load_participants() (read, via DictReader's header row) can't drift out
 # of sync with each other -- same reasoning as SystemTaskManager's
@@ -783,7 +783,7 @@ class ParticipantManager(TaskManager):
                     return 0
 
             # reminder checking logic -- remind_ema/remind_feedback ("yes"/"no",
-            # prism_help_manual.md Appendix A's reminders.csv schema) record whether this
+            # README.md Appendix A's reminders.csv schema) record whether this
             # participant should still be reminded about that survey today;
             # "no" means they've already opened it, so skip the reminder.
             # Confirmed against main's original semantics -- the dev-branch

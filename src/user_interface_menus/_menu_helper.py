@@ -3,7 +3,7 @@
 import re
 from urllib.parse import quote
 
-# prism_help_manual.md's (Appendix A) documented phone_number format: 10
+# README.md's (Appendix A) documented phone_number format: 10
 # digits, no separators. Kept in sync by hand with _helper.py's PHONE_NUMBER_RE -- the
 # interface layer never imports backend modules from src/ (see
 # prism_interface.py's own self.api() chokepoint), so this is a deliberate

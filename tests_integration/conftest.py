@@ -2,9 +2,9 @@
 
 These fixtures build a real PRISM app instance the same way run_prism.py
 does -- against the real, git-ignored `environment` marker file and the
-real drive-sourced config_base (see prism_help_manual.md Appendix A) --
+real drive-sourced config_base (see README.md Appendix A) --
 instead of the fully-offline fake_prism_env fixture that tests/conftest.py
-uses. See prism_help_manual.md Appendix B for what this directory is and
+uses. See README.md Appendix B for what this directory is and
 how to run it.
 """
 
@@ -64,5 +64,5 @@ def require_real_credentials(app, *attrs):
         pytest.skip(
             "dev credentials not available: "
             f"{', '.join(missing)} missing or still a placeholder value "
-            "in the drive-sourced .api file(s) -- see prism_help_manual.md Appendix A"
+            "in the drive-sourced .api file(s) -- see README.md Appendix A"
         )
