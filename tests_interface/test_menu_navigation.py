@@ -9,6 +9,7 @@ from collections import deque
 import pytest
 
 import user_interface_menus._menu_helper as _menu_helper
+import user_interface_menus.utils._menu_navigation as _menu_navigation
 from user_interface_menus.utils._menu_navigation import (
     CommandInjector,
     ReturnToMainMenu,
@@ -19,6 +20,7 @@ from user_interface_menus.utils._menu_navigation import (
     get_menu_options,
     get_relevant_menu_options,
     goto_menu,
+    menu_loop,
     process_chained_command,
     prompt_confirmation,
 )
@@ -480,3 +482,56 @@ def test_home_from_three_levels_deep_returns_to_main_menu_in_one_shot(fake_inter
     # more 'main' redraws (which repeated single-level ENTER-style unwinding
     # would have produced) and not a repeat of 'tasks'/'tasks add'.
     assert headers_shown == ['main', 'tasks', 'tasks add', 'main']
+
+
+# ------------------------------------------------------------
+# menu_loop's additional_content callback
+# ------------------------------------------------------------
+
+def test_menu_loop_calls_additional_content_fresh_each_redraw(fake_interface, monkeypatch):
+    """additional_content is a callable re-invoked on every redraw (not a
+    static list computed once by the caller) -- so a status display built
+    from it (e.g. the main menu's recent-tasks/send-count panel) stays
+    live across this loop's redraws instead of going stale after the
+    first screen. Regression test for that callable-vs-static-list shape.
+    """
+    monkeypatch.setattr(_menu_navigation, 'print_menu_header', lambda *a, **k: None)
+    monkeypatch.setattr(_menu_navigation, 'assistant_header_write', lambda *a, **k: None)
+    monkeypatch.setattr(_menu_navigation, 'print_dashes', lambda *a, **k: None)
+
+    redraw_count = {'n': 0}
+
+    def fake_print_menu_options(self, menu_options, submenu=True):
+        redraw_count['n'] += 1
+        return redraw_count['n'] >= 3  # break out of menu_loop's while True after 3 redraws
+
+    # menu_loop resolves print_menu_options via its own lazy
+    # `from user_interface_menus.utils._menu_display import
+    # print_menu_options` on every call (that name never lands in
+    # _menu_navigation's own module globals, so the "already imported"
+    # check is always false) -- patch it at its real source module so
+    # menu_loop's fresh import picks up the fake.
+    import user_interface_menus.utils._menu_display as _menu_display
+    monkeypatch.setattr(_menu_display, 'print_menu_options', fake_print_menu_options)
+
+    calls = []
+
+    def additional_content(interface):
+        calls.append(interface)
+        return ['status line', '-', '']
+
+    menu_loop(fake_interface, {}, header='test', name='Test Menu', submenu=True, additional_content=additional_content)
+
+    assert len(calls) == 3
+    assert all(c is fake_interface for c in calls)
+
+
+def test_menu_loop_skips_additional_content_when_none(fake_interface, monkeypatch):
+    monkeypatch.setattr(_menu_navigation, 'print_menu_header', lambda *a, **k: None)
+    monkeypatch.setattr(_menu_navigation, 'assistant_header_write', lambda *a, **k: None)
+    import user_interface_menus.utils._menu_display as _menu_display
+    monkeypatch.setattr(_menu_display, 'print_menu_options', lambda self, menu_options, submenu=True: True)
+
+    # No exception/AttributeError with additional_content left at its
+    # default (None) -- the common case for every menu besides the main one.
+    menu_loop(fake_interface, {}, header='test', name='Test Menu', submenu=True)

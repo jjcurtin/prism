@@ -102,6 +102,25 @@ class ParticipantManager(TaskManager):
             # schedule-wide switch.
             self.ema_paused_date: date | None = None
             self.feedback_paused_date: date | None = None
+            # Study-wide daily send counters (requested directly): unique
+            # participants successfully sent an EMA/feedback survey today,
+            # split by on-study vs. all -- backs the main menu's send-count
+            # display. Stored as sets of participant_id (not raw counts) so
+            # a participant sent to twice in one day (e.g. once scheduled,
+            # once via an ad hoc resend) is counted once, keeping the
+            # displayed fraction naturally bounded by its own denominator;
+            # only primary 'ema'/'feedback' sends count, not their
+            # _reminder variants, so the fraction reads as "how many
+            # participants got today's survey" rather than being inflated
+            # by reminder nudges. Reset lazily at read/record time
+            # (_reset_daily_send_tracking_if_stale), same date-comparison
+            # pattern as ema_paused_date/feedback_paused_date above -- no
+            # separate reset hook needed.
+            self.send_counts_date: date | None = None
+            self.ema_sent_on_study_ids: set[str] = set()
+            self.ema_sent_all_ids: set[str] = set()
+            self.feedback_sent_on_study_ids: set[str] = set()
+            self.feedback_sent_all_ids: set[str] = set()
             # Reuses TaskManager.__init__'s _tasks_lock rather than a
             # second, separate lock -- self.participants and self.tasks are
             # frequently mutated together in the same logical operation
@@ -370,6 +389,52 @@ class ParticipantManager(TaskManager):
             f"Feedback sends {'paused' if paused else 'resumed'} for the rest of today "
             "(scheduled reminders included; one-time/manual sends are unaffected).", "INFO"
         )
+
+    def _reset_daily_send_tracking_if_stale(self) -> None:
+        """Caller must hold _tasks_lock. Same lazy-reset-at-read-or-record
+        shape as _is_survey_paused_today's date comparison -- see the
+        counters' own comment in __init__.
+        """
+        today = self._now().date()
+        if self.send_counts_date != today:
+            self.send_counts_date = today
+            self.ema_sent_on_study_ids = set()
+            self.ema_sent_all_ids = set()
+            self.feedback_sent_on_study_ids = set()
+            self.feedback_sent_all_ids = set()
+
+    def _record_send(self, task_type: str, participant_id: str, on_study: bool) -> None:
+        """Called from process_task() on each successful (real or
+        simulated) SMS send. Only 'ema'/'feedback' primary sends count,
+        not their _reminder variants -- see the counters' own comment in
+        __init__.
+        """
+        if task_type not in ('ema', 'feedback'):
+            return
+        with self._tasks_lock:
+            self._reset_daily_send_tracking_if_stale()
+            all_ids = self.ema_sent_all_ids if task_type == 'ema' else self.feedback_sent_all_ids
+            all_ids.add(participant_id)
+            if on_study:
+                on_study_ids = self.ema_sent_on_study_ids if task_type == 'ema' else self.feedback_sent_on_study_ids
+                on_study_ids.add(participant_id)
+
+    def get_send_counts(self) -> dict[str, int]:
+        """Read side for the main menu's send-count display."""
+        with self._tasks_lock:
+            self._reset_daily_send_tracking_if_stale()
+            on_study_total = sum(1 for p in self.participants if p['on_study'])
+            all_total = len(self.participants)
+            return {
+                'ema_on_study_sent': len(self.ema_sent_on_study_ids),
+                'ema_on_study_total': on_study_total,
+                'ema_all_sent': len(self.ema_sent_all_ids),
+                'ema_all_total': all_total,
+                'feedback_on_study_sent': len(self.feedback_sent_on_study_ids),
+                'feedback_on_study_total': on_study_total,
+                'feedback_all_sent': len(self.feedback_sent_all_ids),
+                'feedback_all_total': all_total,
+            }
 
     def save_participants(self) -> int:
         """Returns 0 on success, 1 on failure -- same convention as every
@@ -889,6 +954,11 @@ class ParticipantManager(TaskManager):
                     # the transcript couldn't distinguish a real send from
                     # a simulated one.
                     self.app.add_to_transcript(f"Simulated SMS send to {participant_id} (silent mode).", "INFO")
+                # Counted in both real and simulated modes -- silent mode is
+                # the default day-to-day mode, and an RA testing the
+                # schedule still wants to see today's send counts reflect
+                # what actually happened in that mode.
+                self._record_send(task_type, participant_id, participant['on_study'])
                 return 0
             except Exception as e:
                 self.app.add_to_transcript(f"Failed to send SMS to {participant_id}: {e}", "ERROR")

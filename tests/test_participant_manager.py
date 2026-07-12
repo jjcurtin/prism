@@ -25,6 +25,11 @@ def make_manager(fake_app):
     pm._last_reminders_failure_page_date = None
     pm.ema_paused_date = None
     pm.feedback_paused_date = None
+    pm.send_counts_date = None
+    pm.ema_sent_on_study_ids = set()
+    pm.ema_sent_all_ids = set()
+    pm.feedback_sent_on_study_ids = set()
+    pm.feedback_sent_all_ids = set()
     pm.task_queue = queue.Queue()
     pm.participants = []
     pm.survey_types = {
@@ -1651,3 +1656,130 @@ def test_save_participants_ignores_extra_dict_keys(tmp_path, fake_app):
     assert result == 0
     pm.load_participants()
     assert pm.participants[0]['unique_id'] == PARTICIPANT['unique_id']
+
+
+# ------------------------------------------------------------
+# Daily send counts (main menu status panel)
+# ------------------------------------------------------------
+
+def test_record_send_counts_new_participant_once(fake_app):
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+
+    pm._record_send('ema', '000000000', on_study=True)
+    pm._record_send('ema', '000000000', on_study=True)  # duplicate send, same participant
+
+    counts = pm.get_send_counts()
+    assert counts['ema_on_study_sent'] == 1
+    assert counts['ema_all_sent'] == 1
+
+
+def test_record_send_counts_off_study_only_counts_toward_all(fake_app):
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT, on_study=False)]
+
+    pm._record_send('ema', '000000000', on_study=False)
+
+    counts = pm.get_send_counts()
+    assert counts['ema_on_study_sent'] == 0
+    assert counts['ema_all_sent'] == 1
+
+
+def test_record_send_counts_ignores_reminder_task_types(fake_app):
+    """Only primary 'ema'/'feedback' sends count -- see _record_send's own
+    docstring for why reminders are excluded (keeps the displayed fraction
+    naturally bounded by its own denominator).
+    """
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+
+    pm._record_send('ema_reminder', '000000000', on_study=True)
+    pm._record_send('feedback_reminder', '000000000', on_study=True)
+
+    counts = pm.get_send_counts()
+    assert counts['ema_on_study_sent'] == 0
+    assert counts['feedback_on_study_sent'] == 0
+
+
+def test_record_send_counts_ema_and_feedback_tracked_separately(fake_app):
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+
+    pm._record_send('ema', '000000000', on_study=True)
+
+    counts = pm.get_send_counts()
+    assert counts['ema_on_study_sent'] == 1
+    assert counts['feedback_on_study_sent'] == 0
+
+
+def test_get_send_counts_totals_match_participant_roster(fake_app):
+    pm = make_manager(fake_app)
+    pm.participants = [
+        dict(PARTICIPANT, unique_id='000000001', on_study=True),
+        dict(PARTICIPANT, unique_id='000000002', on_study=True),
+        dict(PARTICIPANT, unique_id='000000003', on_study=False),
+    ]
+
+    counts = pm.get_send_counts()
+
+    assert counts['ema_on_study_total'] == 2
+    assert counts['ema_all_total'] == 3
+    assert counts['feedback_on_study_total'] == 2
+    assert counts['feedback_all_total'] == 3
+
+
+def test_send_counts_reset_the_next_day(fake_app):
+    """Same lazy date-comparison reset shape as the survey-pause switch
+    (test_survey_pause_expires_the_next_day) -- no separate reset step
+    should be needed.
+    """
+    from datetime import datetime as real_datetime
+
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+    pm._now = lambda: real_datetime(2026, 1, 1, 12, 0, 0)
+    pm._record_send('ema', '000000000', on_study=True)
+    assert pm.get_send_counts()['ema_on_study_sent'] == 1
+
+    pm._now = lambda: real_datetime(2026, 1, 2, 0, 0, 1)  # a new day
+
+    assert pm.get_send_counts()['ema_on_study_sent'] == 0
+
+
+def test_process_task_records_send_count_on_success_live_mode(fake_app, mocker):
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+    fake_app.mode = 'live'
+    fake_app.ema_survey_id = 'fake_survey'
+    fake_app.ema_message = "Hello, it's time to take your daily survey."
+    mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
+
+    pm.process_task({'task_type': 'ema', 'participant_id': '000000000'})
+
+    assert pm.get_send_counts()['ema_on_study_sent'] == 1
+
+
+def test_process_task_records_send_count_on_success_silent_mode(fake_app):
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+    fake_app.mode = 'silent'
+    fake_app.feedback_survey_id = 'fake_survey'
+    fake_app.feedback_message = "Please give us your feedback."
+
+    pm.process_task({'task_type': 'feedback', 'participant_id': '000000000'})
+
+    assert pm.get_send_counts()['feedback_on_study_sent'] == 1
+
+
+def test_process_task_does_not_record_send_count_on_failure(fake_app, mocker):
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+    fake_app.mode = 'live'
+    fake_app.ema_survey_id = 'fake_survey'
+    fake_app.ema_message = "Hello, it's time to take your daily survey."
+    mocker.patch('task_managers._participant_manager.send_sms', return_value=1)  # 1 recipient failed
+    mocker.patch('task_managers._participant_manager.notify_coordinators')
+
+    pm.process_task({'task_type': 'ema', 'participant_id': '000000000'})
+
+    assert pm.get_send_counts()['ema_on_study_sent'] == 0

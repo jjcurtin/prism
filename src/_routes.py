@@ -48,7 +48,16 @@ def create_flask_app(app_instance: App) -> Flask:
     @flask_app.route('/system/uptime', methods = ['GET'])
     def get_uptime() -> RouteResponse:
         return jsonify({"uptime": time.strftime('%H:%M:%S', time.gmtime((datetime.now() - app_instance.start_time).total_seconds()))})
-    
+
+    @flask_app.route('/system/start_time', methods = ['GET'])
+    def get_start_time() -> RouteResponse:
+        # The exact wall-clock moment PRISM started, as already stored in
+        # app_instance.start_time -- distinct from /system/uptime above,
+        # which only ever exposed the elapsed *duration* since then, not
+        # the timestamp itself. Requested directly for the main menu's new
+        # status panel.
+        return jsonify({"start_time": app_instance.start_time.strftime('%Y-%m-%d %H:%M:%S')})
+
     @flask_app.route('/system/get_transcript/<num_lines>', methods = ['GET'])
     def get_transcript(num_lines: str) -> RouteResponse:
         ok, transcript = app_instance.get_transcript(num_lines)
@@ -363,6 +372,10 @@ def create_flask_app(app_instance: App) -> Flask:
     @flask_app.route('/participants/get_survey_pause_status', methods = ['GET'])
     def get_survey_pause_status() -> RouteResponse:
         return jsonify(app_instance.participant_manager.get_survey_pause_status()), 200
+
+    @flask_app.route('/participants/get_send_counts', methods = ['GET'])
+    def get_send_counts() -> RouteResponse:
+        return jsonify(app_instance.participant_manager.get_send_counts()), 200
 
     @flask_app.route('/participants/ema_on', methods = ['POST'])
     def ema_on() -> RouteResponse:

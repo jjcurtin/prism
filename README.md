@@ -363,12 +363,25 @@ expects from you:
 
 ## 2.2 Main Menu
 
-After starting the interface, you land on the Main Menu:
+After starting the interface, you land on the Main Menu. Above the list of
+commands is a status panel — recent system task activity, today's EMA/
+feedback send counts, and when PRISM started — refreshed every time this
+screen redraws:
 
 ```
 ===================================================================================================================================================
                                                                        Main Menu
 ===================================================================================================================================================
+
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Recent System Tasks
+  09:00:00  CHECK_SYSTEM #482910 - SUCCESS
+  23:30:05  RUN_R_SCRIPT #119284 - FAILURE
+------------------------------------------------------------------------------------------------------------------------------------------------------
+  PRISM started: 2026-07-12 08:00:03
+  EMA sent today - on study: 3/10   all participants: 3/12
+  Feedback sent today - on study: 1/10   all participants: 1/12
+------------------------------------------------------------------------------------------------------------------------------------------------------
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------
 | command      | Global Command Menu                                                                                                                |
@@ -384,6 +397,22 @@ After starting the interface, you land on the Main Menu:
 
 (Exact column widths depend on your configured window width —
 [2.7](#27-settings) — this is illustrative, not pixel-exact.)
+
+**Recent System Tasks** shows up to the last 5 completed system tasks (see
+[2.4](#24-tasks--manage-system-tasksr-scripts)), scanned from the transcript
+— each task logs a "completed with status: SUCCESS/FAILURE" line when it
+finishes, whether run on schedule or via `tasks execute`.
+
+**Send counts** show how many *unique* participants have received today's
+EMA/feedback survey so far — a participant sent to more than once today
+(e.g. once by the schedule, once by an RA's ad hoc resend) still only
+counts once, so the fraction never exceeds its own total. Reminders don't
+count toward this — only the primary EMA/feedback send does. Both counts
+reset automatically at midnight.
+
+**PRISM started** shows the exact moment the currently-running server
+process started (not how long it's been running — for that, see `check`'s
+uptime, [2.3](#23-check--system-status-and-diagnostics)).
 
 - `check` — system status and diagnostics ([2.3](#23-check--system-status-and-diagnostics))
 - `tasks` — schedule, run, or remove system tasks and R scripts ([2.4](#24-tasks--manage-system-tasksr-scripts))

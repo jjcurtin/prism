@@ -45,7 +45,7 @@ def menu_loop(
     header: str = "main",
     name: str = "Main Menu",
     submenu: bool = True,
-    additional_content: list[str] | None = None,
+    additional_content: Callable[[Interface], list[str]] | None = None,
 ) -> None:
     if 'print_menu_options' not in globals():
         from user_interface_menus.utils._menu_display import print_menu_options
@@ -56,7 +56,12 @@ def menu_loop(
         if not self.commands_queue:
             print_menu_header(header)
             if additional_content:
-                for line in additional_content:
+                # Called fresh on every redraw (not computed once by the
+                # caller) so a status display built from it -- e.g. the main
+                # menu's recent-tasks/send-count panel -- stays live across
+                # this loop's redraws instead of going stale after the
+                # first screen.
+                for line in additional_content(self):
                     if line == "-":
                         print_dashes()
                     elif line == "":

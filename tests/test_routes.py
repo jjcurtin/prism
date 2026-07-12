@@ -32,6 +32,16 @@ def test_get_uptime(routes_client):
     assert 'uptime' in resp.get_json()
 
 
+def test_get_start_time_returns_formatted_timestamp(routes_client, routes_app_instance):
+    from datetime import datetime
+    routes_app_instance.start_time = datetime(2026, 7, 12, 8, 0, 3)
+
+    resp = routes_client.get('/system/start_time')
+
+    assert resp.status_code == 200
+    assert resp.get_json() == {'start_time': '2026-07-12 08:00:03'}
+
+
 def test_get_transcript_found(routes_client, routes_app_instance):
     resp = routes_client.get('/system/get_transcript/10')
     assert resp.status_code == 200
@@ -729,6 +739,29 @@ def test_feedback_off_route_calls_set_feedback_paused_true(routes_client, routes
 
     assert resp.status_code == 200
     routes_app_instance.participant_manager.set_feedback_paused.assert_called_once_with(True)
+
+
+# ------------------------------------------------------------
+# Daily send counts (main menu status panel)
+# ------------------------------------------------------------
+
+def test_get_send_counts(routes_client, routes_app_instance):
+    routes_app_instance.participant_manager.get_send_counts.return_value = {
+        'ema_on_study_sent': 3, 'ema_on_study_total': 10,
+        'ema_all_sent': 3, 'ema_all_total': 12,
+        'feedback_on_study_sent': 1, 'feedback_on_study_total': 10,
+        'feedback_all_sent': 1, 'feedback_all_total': 12,
+    }
+
+    resp = routes_client.get('/participants/get_send_counts')
+
+    assert resp.status_code == 200
+    assert resp.get_json() == {
+        'ema_on_study_sent': 3, 'ema_on_study_total': 10,
+        'ema_all_sent': 3, 'ema_all_total': 12,
+        'feedback_on_study_sent': 1, 'feedback_on_study_total': 10,
+        'feedback_all_sent': 1, 'feedback_all_total': 12,
+    }
 
 
 # ------------------------------------------------------------
