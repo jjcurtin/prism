@@ -384,6 +384,66 @@ def create_flask_app(app_instance: App) -> Flask:
         app_instance.participant_manager.set_feedback_paused(True)
         return jsonify({"message": "Feedback sends paused for the rest of today."}), 200
 
+    @flask_app.route('/participants/send_studywide_survey/<survey_type>/<require_on_study>', methods = ['POST'])
+    def send_studywide_survey(survey_type: str, require_on_study: str) -> RouteResponse:
+        """Sends a one-off ema/feedback survey to every (optionally
+        on-study-filtered) participant right now, synchronously -- the
+        studywide counterpart to send_survey above, looped per participant
+        the same way study_announcement loops its own sends. Each
+        participant's send goes through add_task(one_time=True,
+        track=False) + finish_task(), the exact same mechanism (and the
+        exact same duplicate-send race fix) send_survey already uses for
+        a single participant; process_task() internally handles the
+        silent-vs-live mode branch and the ema_paused_date/
+        feedback_paused_date pause switch's one_time carve-out, so
+        neither needs to be re-checked here.
+
+        Runs the whole loop synchronously within this one request, same
+        as study_announcement -- for a very large roster this could hold
+        the request open for a while (each send is bounded by
+        SMS_SEND_TIMEOUT_SECONDS), a known, pre-existing tradeoff of that
+        established pattern, not something newly introduced here.
+        """
+        if survey_type not in ['ema', 'feedback']:
+            return jsonify({"error": "Invalid survey type"}), 400
+
+        on_study_only = require_on_study.lower() == 'yes'
+        participants = app_instance.participant_manager.get_participant_ids_and_phone_numbers(
+            on_study_only = on_study_only
+        )
+        if not participants:
+            app_instance.add_to_transcript(f"Studywide {survey_type} send failed: no participants found", "ERROR")
+            return jsonify({"error": "No participants found"}), 404
+
+        scope = "on-study participants only" if on_study_only else "all participants"
+        app_instance.add_to_transcript(
+            f"Studywide {survey_type} send ({scope}): {len(participants)} participant(s).", "INFO"
+        )
+
+        send_start = datetime.now()
+        attempted = 0
+        failed = 0
+        for unique_id, _ in participants:
+            attempted += 1
+            task = app_instance.participant_manager.add_task(
+                survey_type, datetime.now().strftime('%H:%M:%S'), participant_id = unique_id,
+                one_time = True, track = False,
+            )
+            if app_instance.participant_manager.finish_task(task) != 0:
+                failed += 1
+        elapsed_seconds = (datetime.now() - send_start).total_seconds()
+        app_instance.add_to_transcript(
+            f"Studywide {survey_type} send finished in {elapsed_seconds:.1f}s "
+            f"({attempted} attempted, {failed} failed).", "INFO"
+        )
+        if attempted and failed == attempted:
+            return jsonify({"error": f"Failed to send {survey_type} to any participant"}), 502
+        if failed:
+            return jsonify({
+                "message": f"Studywide {survey_type} sent, but failed for {failed} of {attempted} participants."
+            }), 200
+        return jsonify({"message": f"Studywide {survey_type} sent to {scope}."}), 200
+
     ########################
     #  Error handling      #
     ########################

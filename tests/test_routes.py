@@ -732,6 +732,102 @@ def test_feedback_off_route_calls_set_feedback_paused_true(routes_client, routes
 
 
 # ------------------------------------------------------------
+# send_studywide_survey -- studywide EMA/feedback bulk send
+# ------------------------------------------------------------
+
+def test_send_studywide_survey_invalid_type(routes_client):
+    resp = routes_client.post('/participants/send_studywide_survey/not_a_type/yes')
+    assert resp.status_code == 400
+
+
+def test_send_studywide_survey_no_participants_is_404(routes_client, routes_app_instance):
+    routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.return_value = []
+
+    resp = routes_client.post('/participants/send_studywide_survey/ema/yes')
+
+    assert resp.status_code == 404
+    routes_app_instance.participant_manager.add_task.assert_not_called()
+
+
+def test_send_studywide_survey_sends_one_time_task_per_participant(routes_client, routes_app_instance):
+    routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.return_value = [
+        ('000000000', '5555550100'), ('000000001', '5555550101'),
+    ]
+    fake_task = {'task_type': 'ema', 'one_time': True}
+    routes_app_instance.participant_manager.add_task.return_value = fake_task
+    routes_app_instance.participant_manager.finish_task.return_value = 0
+
+    resp = routes_client.post('/participants/send_studywide_survey/ema/yes')
+
+    assert resp.status_code == 200
+    assert routes_app_instance.participant_manager.add_task.call_count == 2
+    for call in routes_app_instance.participant_manager.add_task.call_args_list:
+        args, kwargs = call
+        assert args[0] == 'ema'
+        assert kwargs['one_time'] is True
+        assert kwargs['track'] is False
+    assert {c.kwargs['participant_id'] for c in routes_app_instance.participant_manager.add_task.call_args_list} == {
+        '000000000', '000000001',
+    }
+    assert routes_app_instance.participant_manager.finish_task.call_count == 2
+
+
+def test_send_studywide_survey_passes_on_study_only_flag_through(routes_client, routes_app_instance):
+    routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.return_value = [
+        ('000000000', '5555550100')
+    ]
+    routes_app_instance.participant_manager.add_task.return_value = {'task_type': 'feedback', 'one_time': True}
+    routes_app_instance.participant_manager.finish_task.return_value = 0
+
+    resp = routes_client.post('/participants/send_studywide_survey/feedback/yes')
+
+    assert resp.status_code == 200
+    routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.assert_called_once_with(
+        on_study_only = True
+    )
+
+
+def test_send_studywide_survey_all_fail_is_502(routes_client, routes_app_instance):
+    routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.return_value = [
+        ('000000000', '5555550100'), ('000000001', '5555550101'),
+    ]
+    routes_app_instance.participant_manager.add_task.return_value = {'task_type': 'ema', 'one_time': True}
+    routes_app_instance.participant_manager.finish_task.return_value = -1
+
+    resp = routes_client.post('/participants/send_studywide_survey/ema/yes')
+
+    assert resp.status_code == 502
+
+
+def test_send_studywide_survey_partial_failure_notes_count(routes_client, routes_app_instance):
+    routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.return_value = [
+        ('000000000', '5555550100'), ('000000001', '5555550101'),
+    ]
+    routes_app_instance.participant_manager.add_task.return_value = {'task_type': 'ema', 'one_time': True}
+    routes_app_instance.participant_manager.finish_task.side_effect = [0, -1]
+
+    resp = routes_client.post('/participants/send_studywide_survey/ema/yes')
+
+    assert resp.status_code == 200
+    assert '1 of 2' in resp.get_json()['message']
+
+
+def test_send_studywide_survey_logs_scope_and_elapsed_time(routes_client, routes_app_instance):
+    routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.return_value = [
+        ('000000000', '5555550100')
+    ]
+    routes_app_instance.participant_manager.add_task.return_value = {'task_type': 'ema', 'one_time': True}
+    routes_app_instance.participant_manager.finish_task.return_value = 0
+
+    resp = routes_client.post('/participants/send_studywide_survey/ema/no')
+
+    assert resp.status_code == 200
+    messages = [msg for _, msg in routes_app_instance.transcript]
+    assert any('Studywide ema send' in msg and 'all participants' in msg for msg in messages)
+    assert any('Studywide ema send finished in' in msg for msg in messages)
+
+
+# ------------------------------------------------------------
 # Unhandled-exception error handler
 # ------------------------------------------------------------
 #

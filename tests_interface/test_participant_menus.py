@@ -245,6 +245,8 @@ def test_participant_management_menu_static_options_wired_correctly(fake_interfa
     assert menu_options['ema_off']['menu_caller'] is pmm.ema_off_menu
     assert menu_options['feedback_on']['menu_caller'] is pmm.feedback_on_menu
     assert menu_options['feedback_off']['menu_caller'] is pmm.feedback_off_menu
+    assert menu_options['send_ema']['menu_caller'] is pmm.send_studywide_ema_menu
+    assert menu_options['send_feedback']['menu_caller'] is pmm.send_studywide_feedback_menu
     assert 'sort' in menu_options and 'filter' in menu_options and 'schedule' in menu_options
 
 
@@ -299,6 +301,57 @@ def test_feedback_off_menu_failure(fake_interface, capsys):
     pmm.feedback_off_menu(fake_interface)
 
     assert 'Failed to pause feedback sends.' in capsys.readouterr().out
+
+
+# ------------------------------------------------------------
+# send_studywide_ema_menu / send_studywide_feedback_menu
+# ------------------------------------------------------------
+
+def test_send_studywide_ema_menu_on_study_only_formats_yes_in_url(fake_interface, capsys):
+    fake_interface.inputs_queue.put('y')
+    fake_interface.api = MagicMock(return_value=(True, {'message': 'sent'}))
+
+    pmm.send_studywide_ema_menu(fake_interface)
+
+    fake_interface.api.assert_called_once_with('POST', 'participants/send_studywide_survey/ema/yes')
+    assert 'Studywide EMA sent.' in capsys.readouterr().out
+
+
+def test_send_studywide_ema_menu_all_participants_formats_no_in_url(fake_interface):
+    fake_interface.inputs_queue.put('n')
+    fake_interface.api = MagicMock(return_value=(True, {'message': 'sent'}))
+
+    pmm.send_studywide_ema_menu(fake_interface)
+
+    fake_interface.api.assert_called_once_with('POST', 'participants/send_studywide_survey/ema/no')
+
+
+def test_send_studywide_ema_menu_failure(fake_interface, capsys):
+    fake_interface.inputs_queue.put('y')
+    fake_interface.api = MagicMock(return_value=(False, None))
+
+    pmm.send_studywide_ema_menu(fake_interface)
+
+    assert 'Failed to send studywide EMA' in capsys.readouterr().out
+
+
+def test_send_studywide_feedback_menu_on_study_only_formats_yes_in_url(fake_interface, capsys):
+    fake_interface.inputs_queue.put('y')
+    fake_interface.api = MagicMock(return_value=(True, {'message': 'sent'}))
+
+    pmm.send_studywide_feedback_menu(fake_interface)
+
+    fake_interface.api.assert_called_once_with('POST', 'participants/send_studywide_survey/feedback/yes')
+    assert 'Studywide feedback sent.' in capsys.readouterr().out
+
+
+def test_send_studywide_feedback_menu_failure(fake_interface, capsys):
+    fake_interface.inputs_queue.put('y')
+    fake_interface.api = MagicMock(return_value=(False, None))
+
+    pmm.send_studywide_feedback_menu(fake_interface)
+
+    assert 'Failed to send studywide feedback' in capsys.readouterr().out
 
 
 def test_participant_management_menu_no_participants_sets_index_and_text_false(fake_interface, monkeypatch, capsys):

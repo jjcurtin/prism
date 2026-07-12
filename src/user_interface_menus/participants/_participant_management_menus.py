@@ -34,6 +34,26 @@ def send_announcement_menu(self: Interface) -> None:
     else:
         error("No participants found or failed to retrieve.", self)
 
+def send_studywide_ema_menu(self: Interface) -> None:
+    require_on_study = prompt_confirmation(self, prompt = "Send to participants on study only?", default_value = "y")
+    print("Sending to participants on study only." if require_on_study else "Sending to all participants.")
+    require_on_study_param = "yes" if require_on_study else "no"
+    ok, _ = self.api("POST", f"participants/send_studywide_survey/ema/{url_segment(require_on_study_param)}")
+    if ok:
+        success("Studywide EMA sent.", self)
+    else:
+        error("Failed to send studywide EMA (no participants found, or every send failed).", self)
+
+def send_studywide_feedback_menu(self: Interface) -> None:
+    require_on_study = prompt_confirmation(self, prompt = "Send to participants on study only?", default_value = "y")
+    print("Sending to participants on study only." if require_on_study else "Sending to all participants.")
+    require_on_study_param = "yes" if require_on_study else "no"
+    ok, _ = self.api("POST", f"participants/send_studywide_survey/feedback/{url_segment(require_on_study_param)}")
+    if ok:
+        success("Studywide feedback sent.", self)
+    else:
+        error("Failed to send studywide feedback (no participants found, or every send failed).", self)
+
 def ema_on_menu(self: Interface) -> None:
     ok, _ = self.api("POST", "participants/ema_on")
     if ok:
@@ -213,6 +233,10 @@ def participant_management_menu(self: Interface) -> None:
             menu_options['schedule'] = {'description': 'Get Participant Task Schedule', 'menu_caller': print_task_schedule}
             menu_options['refresh'] = {'description': 'Full Participants Refresh from CSV', 'menu_caller': refresh_participants_menu}
             menu_options['announcement'] = {'description': 'Send Study Announcement', 'menu_caller': send_announcement_menu}
+            menu_options['send_ema'] = {'description': 'Send EMA to Everyone Now', 'menu_caller': send_studywide_ema_menu}
+            menu_options['send_feedback'] = {
+                'description': 'Send Feedback to Everyone Now', 'menu_caller': send_studywide_feedback_menu
+            }
             menu_options['remove'] = {'description': 'Remove a Participant', 'menu_caller': remove_participant_menu}
             menu_options['access'] = {'description': 'Access Participant Data', 'menu_caller': access_specific_participant_menu}
             menu_options['sort'] = {'description': f'Sort Participants (Current: {self.participant_display_mode})', 'menu_caller': change_display_mode}
