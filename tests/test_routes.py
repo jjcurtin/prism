@@ -141,6 +141,19 @@ def test_add_system_task_invalid_time_is_clean_400(routes_client):
     assert 'Invalid time format' in resp.get_json()['error']
 
 
+def test_add_system_task_rejects_run_r_script(routes_client, routes_app_instance):
+    """Regression test for a fixed bug: this route always calls add_task
+    with r_script_path="", but RunRScript.__init__ requires a real path --
+    a persisted RUN_R_SCRIPT row added this way threw TypeError every time
+    it fired, paging coordinators daily (error 3001) until manually
+    removed. Now rejected outright, before add_task/save_tasks is reached.
+    """
+    resp = routes_client.post('/system/add_system_task/RUN_R_SCRIPT/03:00:00')
+    assert resp.status_code == 400
+    routes_app_instance.system_task_manager.add_task.assert_not_called()
+    routes_app_instance.system_task_manager.save_tasks.assert_not_called()
+
+
 def test_remove_system_task_success(routes_client, routes_app_instance):
     routes_app_instance.system_task_manager.remove_task.return_value = 0
     resp = routes_client.delete('/system/remove_system_task/CHECK_SYSTEM/03:00:00')
@@ -179,6 +192,17 @@ def test_execute_task_failure(routes_client, routes_app_instance):
 def test_execute_task_invalid_type(routes_client):
     resp = routes_client.post('/system/execute_task/NOT_A_TYPE')
     assert resp.status_code == 400
+
+
+def test_execute_task_rejects_run_r_script(routes_client, routes_app_instance):
+    """Regression test for a fixed bug: this route calls process_task with
+    no r_script_path key at all -- RunRScript.__init__ requires it, so this
+    used to raise TypeError. Now rejected outright, before process_task is
+    reached.
+    """
+    resp = routes_client.post('/system/execute_task/RUN_R_SCRIPT')
+    assert resp.status_code == 400
+    routes_app_instance.system_task_manager.process_task.assert_not_called()
 
 
 def test_add_r_script_task_success(routes_client, routes_app_instance):
@@ -329,6 +353,38 @@ def test_add_participant_invalid_value_is_400(routes_client, routes_app_instance
 def test_add_participant_missing_fields(routes_client):
     resp = routes_client.post('/participants/add_participant', json={'unique_id': '1'})
     assert resp.status_code == 400
+
+
+def test_add_participant_empty_unique_id_is_400(routes_client, routes_app_instance):
+    """Regression test for a fixed bug: the route checked field presence,
+    not non-emptiness, so {"unique_id": ""} used to create a participant
+    whose scheduled tasks then failed every day in process_task
+    ("Participant ID is missing").
+    """
+    payload = dict(ADD_PARTICIPANT_PAYLOAD, unique_id='')
+    resp = routes_client.post('/participants/add_participant', json=payload)
+    assert resp.status_code == 400
+    routes_app_instance.participant_manager.add_participant.assert_not_called()
+
+
+def test_add_participant_whitespace_only_unique_id_is_400(routes_client, routes_app_instance):
+    payload = dict(ADD_PARTICIPANT_PAYLOAD, unique_id='   ')
+    resp = routes_client.post('/participants/add_participant', json=payload)
+    assert resp.status_code == 400
+    routes_app_instance.participant_manager.add_participant.assert_not_called()
+
+
+def test_add_participant_unknown_field_is_400(routes_client, routes_app_instance):
+    """Regression test for a fixed bug: an unrecognized JSON key used to be
+    accepted, kept in memory, and update_participant-able, but
+    save_participants() only ever writes the known CSV headers, so it
+    silently never made it to disk -- a memory/disk drift the I3 invariant
+    check (compares only unique_id sets) couldn't catch.
+    """
+    payload = dict(ADD_PARTICIPANT_PAYLOAD, favorite_color='blue')
+    resp = routes_client.post('/participants/add_participant', json=payload)
+    assert resp.status_code == 400
+    routes_app_instance.participant_manager.add_participant.assert_not_called()
 
 
 def test_add_participant_non_dict_body_is_clean_400(routes_client):
@@ -599,6 +655,33 @@ def test_study_announcement_passes_on_study_only_flag_through(routes_client, rou
     send_sms_mock.assert_not_called()
 
 
+def test_study_announcement_response_message_reflects_on_study_only_scope(routes_client, routes_app_instance):
+    """Regression test for a fixed bug: the final response message always
+    said "sent to all participants" even when require_on_study scoped the
+    send to on-study participants only -- now uses the same `scope` wording
+    already logged to the transcript.
+    """
+    routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.return_value = [
+        ('000000000', '5555550100')
+    ]
+
+    resp = routes_client.post('/participants/study_announcement/yes', json={'message': 'hi'})
+
+    assert resp.status_code == 200
+    assert resp.get_json()['message'] == 'Study announcement sent to on-study participants only.'
+
+
+def test_study_announcement_response_message_reflects_all_participants_scope(routes_client, routes_app_instance):
+    routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.return_value = [
+        ('000000000', '5555550100')
+    ]
+
+    resp = routes_client.post('/participants/study_announcement/no', json={'message': 'hi'})
+
+    assert resp.status_code == 200
+    assert resp.get_json()['message'] == 'Study announcement sent to all participants.'
+
+
 def test_study_announcement_silent_mode_logs_simulated_send_per_participant(routes_client, routes_app_instance):
     """Regression test for a real gap: the silent-mode transcript line used
     to be a single generic "Simulated sending messages." with no per-
@@ -803,6 +886,28 @@ def test_send_studywide_survey_sends_one_time_task_per_participant(routes_client
         '000000000', '000000001',
     }
     assert routes_app_instance.participant_manager.finish_task.call_count == 2
+
+
+def test_send_studywide_survey_skips_blank_phone_numbers(routes_client, routes_app_instance):
+    """Regression test for a fixed bug: unlike study_announcement right
+    above it, this route discarded the phone number entirely and attempted
+    every participant regardless. In live mode that meant a Twilio failure
+    plus an un-rate-limited coordinator page per phone-less participant; in
+    silent mode they were counted as sent, inflating the status panel.
+    """
+    routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.return_value = [
+        ('000000000', '5555550100'), ('000000001', ''), ('000000002', '   '),
+    ]
+    fake_task = {'task_type': 'ema', 'one_time': True}
+    routes_app_instance.participant_manager.add_task.return_value = fake_task
+    routes_app_instance.participant_manager.finish_task.return_value = 0
+
+    resp = routes_client.post('/participants/send_studywide_survey/ema/yes')
+
+    assert resp.status_code == 200
+    assert routes_app_instance.participant_manager.add_task.call_count == 1
+    assert routes_app_instance.participant_manager.add_task.call_args.kwargs['participant_id'] == '000000000'
+    assert resp.get_json()['message'] == 'Studywide ema sent to on-study participants only.'
 
 
 def test_send_studywide_survey_passes_on_study_only_flag_through(routes_client, routes_app_instance):

@@ -1,5 +1,6 @@
 import queue
 import threading
+import time
 from datetime import datetime
 
 from task_managers._participant_manager import (
@@ -766,6 +767,121 @@ def test_concurrent_get_phone_numbers_and_load_participants_no_race(tmp_path, fa
     assert errors == []
 
 
+# ------------------------------------------------------------
+# _tasks_lock must not be held across file I/O
+# ------------------------------------------------------------
+#
+# Regression tests for a real bug: add_participant/update_participant/
+# remove_participant/load_participants used to hold _tasks_lock across
+# save_participants()'s file write (or, for load_participants, across its
+# own CSV read) -- despite save_participants() itself already following the
+# "snapshot under lock, I/O outside it" rule. A stall on the CIFS-mounted
+# research drive during any of those calls would block check_tasks() (same
+# lock) and every Flask thread touching participants/tasks. Each test below
+# makes the I/O step block on an Event, and confirms _tasks_lock can still
+# be acquired from another thread while that "I/O" is in flight -- this
+# would time out (fail) against the old, pre-fix code.
+
+def _lock_is_free_during(pm, io_started, trigger):
+    """Runs `trigger` (which internally performs some blocking "I/O" that
+    sets `io_started` once it begins) on a background thread, waits for the
+    I/O to start, then asserts pm._tasks_lock can be acquired immediately
+    from this thread -- proving the lock isn't held across that I/O.
+    """
+    errors: list[Exception] = []
+
+    def run():
+        try:
+            trigger()
+        except Exception as e:
+            errors.append(e)
+
+    t = threading.Thread(target=run)
+    t.start()
+    assert io_started.wait(timeout=2), "background thread never reached the blocking I/O step"
+    # trigger's "I/O" step sleeps for TRIGGER_IO_DELAY_SECONDS after setting
+    # io_started (see each slow_* helper below) -- a short acquire timeout,
+    # well under that delay, means this only succeeds quickly if the lock
+    # is genuinely free right now, not merely free by the time the
+    # background thread eventually finishes.
+    acquired = pm._tasks_lock.acquire(timeout=0.1)
+    if acquired:
+        pm._tasks_lock.release()
+    t.join(timeout=2)
+
+    assert errors == []
+    assert acquired, "_tasks_lock was still held while save_participants()/the CSV read was in flight"
+
+
+def test_add_participant_releases_lock_before_save(fake_app, mocker):
+    pm = make_manager(fake_app)
+    io_started = threading.Event()
+
+    def slow_save():
+        io_started.set()
+        time.sleep(0.3)  # simulates a stalled research-drive write
+        return 0
+
+    mocker.patch.object(pm, 'save_participants', side_effect=slow_save)
+    new_participant = dict(PARTICIPANT, unique_id='111111111')
+
+    _lock_is_free_during(pm, io_started, lambda: pm.add_participant(new_participant))
+
+
+def test_update_participant_releases_lock_before_save(fake_app, mocker):
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+    io_started = threading.Event()
+
+    def slow_save():
+        io_started.set()
+        time.sleep(0.3)  # simulates a stalled research-drive write
+        return 0
+
+    mocker.patch.object(pm, 'save_participants', side_effect=slow_save)
+
+    _lock_is_free_during(pm, io_started, lambda: pm.update_participant('000000000', 'initials', 'ZZ'))
+
+
+def test_remove_participant_releases_lock_before_save(fake_app, mocker):
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+    io_started = threading.Event()
+
+    def slow_save():
+        io_started.set()
+        time.sleep(0.3)  # simulates a stalled research-drive write
+        return 0
+
+    mocker.patch.object(pm, 'save_participants', side_effect=slow_save)
+
+    _lock_is_free_during(pm, io_started, lambda: pm.remove_participant('000000000'))
+
+
+def test_load_participants_releases_lock_before_reading_csv(tmp_path, fake_app, mocker):
+    csv_file = tmp_path / 'study_participants.csv'
+    csv_file.write_text(
+        'initials,subid,unique_id,on_study,phone_number,ema_time,'
+        'ema_reminder_time,feedback_time,feedback_reminder_time\n'
+        'JD,3000,000000000,yes,5555550100,09:00:00,10:00:00,19:00:00,20:00:00\n'
+    )
+    fake_app.participants_path = str(csv_file)
+    pm = make_manager(fake_app)
+    pm.file_path = str(csv_file)
+    io_started = threading.Event()
+    real_open = open
+
+    def slow_open(path, *args, **kwargs):
+        if str(path) == str(csv_file):
+            io_started.set()
+            time.sleep(0.3)  # simulates a stalled research-drive read
+        return real_open(path, *args, **kwargs)
+
+    mocker.patch('task_managers._participant_manager.open', side_effect=slow_open)
+
+    _lock_is_free_during(pm, io_started, pm.load_participants)
+
+
 def test_participant_manager_invariants_hold_after_random_operation_sequences(fake_app):
     """Property-style regression test (deterministic seeded random, no new
     test dependency): per-method tests alone verify local correctness, but
@@ -1063,6 +1179,32 @@ def test_process_task_link_parsing_failure_returns_neg1_no_crash(fake_app, mocke
     assert result == -1
     send_sms.assert_not_called()
     assert any('Error parsing link' in msg for _, msg in fake_app.transcript)
+
+
+def test_process_task_link_parsing_failure_notifies_coordinators(fake_app, mocker):
+    """Regression test for a real bug: unlike the SMS-send failure path
+    below, a link-parsing failure (misconfigured/placeholder survey ID)
+    used to return -1 with no coordinator alert at all -- a
+    misconfiguration silently dropped every scheduled send for every
+    participant, daily, with nothing but a transcript line to notice it.
+    Now pages via the dedicated 2004 error code.
+    """
+    fake_app.mode = 'live'
+    pm = make_manager(fake_app)
+    pm.participants = [dict(PARTICIPANT)]
+    # Deliberately don't set fake_app.ema_survey_id/ema_message, so the
+    # getattr() lookups inside process_task()'s link-building try block
+    # raise AttributeError.
+    mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
+    notify = mocker.patch('task_managers._participant_manager.notify_coordinators', return_value=0)
+
+    result = pm.process_task({'task_type': 'ema', 'participant_id': '000000000'})
+
+    assert result == -1
+    notify.assert_called_once()
+    message = notify.call_args[0][1]
+    assert message.startswith('[2004] ')
+    assert '000000000' in message
 
 
 def test_process_task_blank_survey_id_returns_neg1_no_send(fake_app, mocker):

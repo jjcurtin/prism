@@ -1,4 +1,11 @@
+from datetime import datetime
 from pathlib import Path
+
+
+def _today_silent_transcript_name() -> str:
+    """Silent-mode transcripts are dated the same as live mode's (see
+    run_prism.py's add_to_transcript/get_transcript)."""
+    return f"{datetime.now().strftime('%Y-%m-%d')}_silent_transcript.txt"
 
 
 def test_load_paths_resolves_everything_under_the_fake_drive(prism_instance, fake_prism_env):
@@ -35,7 +42,7 @@ def test_load_paths_corrupt_repo_paths_csv_falls_back_and_warns(prism_instance, 
     prism_instance.load_paths()  # must not raise
 
     assert prism_instance.logs_dir == str((fake_prism_env / 'logs').resolve())  # still falls back correctly
-    transcript_text = (Path(prism_instance.logs_dir) / 'transcripts' / 'silent_transcript.txt').read_text()
+    transcript_text = (Path(prism_instance.logs_dir) / 'transcripts' / _today_silent_transcript_name()).read_text()
     assert 'WARNING' in transcript_text
     assert 'Failed to load repo_paths.csv' in transcript_text
 

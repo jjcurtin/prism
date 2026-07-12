@@ -17,3 +17,12 @@ def test_every_registered_code_is_a_4_digit_string():
         assert isinstance(code, str)
         assert len(code) == 4
         assert code.isdigit()
+
+
+def test_2004_survey_link_error_code_is_registered():
+    """Regression test for the misconfigured-survey-ID coordinator page
+    (ParticipantManager.process_task) -- that fix pages with code 2004,
+    added specifically because reusing 2001 ("SMS send failed") would have
+    misattributed a link-parsing failure as a send failure."""
+    assert '2004' in ERROR_CODES
+    assert code_prefix('2004') == '[2004] '
