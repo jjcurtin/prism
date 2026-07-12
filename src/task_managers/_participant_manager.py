@@ -662,6 +662,20 @@ class ParticipantManager(TaskManager):
         return 1
 
     def get_task_schedule(self) -> list[dict[str, Any]]:
+        """Only includes on-study participants' tasks (requested directly)
+        -- an off-study participant's recurring tasks stay in self.tasks
+        (removing them isn't how off_study works; see process_task's own
+        skip check), but they're not actually going out, so showing them
+        in "the schedule" alongside tasks that really are firing today is
+        misleading. Sorted by task_time (also requested directly, replacing
+        the old participant_id-first sort) so this reads as an actual
+        chronological schedule, not a per-participant listing -- task_time
+        is already the zero-padded "HH:MM:SS" string form by the time this
+        sorts, so lexicographic and chronological order agree.
+        participant_id is kept as a secondary sort key purely for stable,
+        readable ordering when multiple participants share an identical
+        task_time (common, since default survey times are often shared).
+        """
         try:
             data: list[dict[str, Any]] = []
             with self._tasks_lock:
@@ -681,6 +695,8 @@ class ParticipantManager(TaskManager):
                         on_study: Any = participant['on_study']
                     else:
                         on_study = 'N/A'
+                    if on_study is not True:
+                        continue
                     data.append({
                         "participant_id": task.get('participant_id', 'N/A'),
                         "on_study": on_study,
@@ -688,7 +704,7 @@ class ParticipantManager(TaskManager):
                         "task_time": task['task_time'].strftime('%H:%M:%S'),
                         "run_today": task.get('run_today', False)
                     })
-            data.sort(key = lambda x: (x['participant_id'], x['task_time']))
+            data.sort(key = lambda x: (x['task_time'], x['participant_id']))
             return data
         except Exception as e:
             self.app.add_to_transcript(f"Failed to retrieve system task schedule: {e}", "ERROR")

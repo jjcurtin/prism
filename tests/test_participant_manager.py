@@ -142,7 +142,7 @@ def test_remove_participant_removes_participant_and_all_their_tasks(fake_app):
     assert pm.tasks == []
 
 
-def test_get_task_schedule_sorts_by_participant_then_time(fake_app):
+def test_get_task_schedule_sorts_by_time(fake_app):
     from datetime import time
     pm = make_manager(fake_app)
     pm.participants = [PARTICIPANT]
@@ -155,6 +155,54 @@ def test_get_task_schedule_sorts_by_participant_then_time(fake_app):
 
     assert [r['task_type'] for r in result] == ['ema', 'feedback']
     assert result[0]['on_study'] is True
+
+
+def test_get_task_schedule_sorts_by_time_across_participants(fake_app):
+    """Requested directly: sort chronologically (by task_time), not
+    per-participant -- an earlier task belonging to a LATER-sorting
+    participant_id must still come first. participant_id/task_time are
+    deliberately inverted relative to each other ('000000001' -- sorts
+    FIRST by id -- gets the LATE 19:00 task; '999999999' -- sorts LAST by
+    id -- gets the EARLY 09:00 task) so a participant_id-first sort and a
+    time-first sort produce genuinely different, disagreeing orders --
+    this test would fail against the old participant_id-first sort.
+    """
+    from datetime import time
+    pm = make_manager(fake_app)
+    participant_a = dict(PARTICIPANT, unique_id='999999999', subid='9999')
+    participant_b = dict(PARTICIPANT, unique_id='000000001', subid='1')
+    pm.participants = [participant_a, participant_b]
+    pm.tasks = [
+        {'task_type': 'feedback', 'task_time': time(19, 0, 0), 'participant_id': '000000001'},
+        {'task_type': 'ema', 'task_time': time(9, 0, 0), 'participant_id': '999999999'},
+    ]
+
+    result = pm.get_task_schedule()
+
+    assert [r['task_type'] for r in result] == ['ema', 'feedback']
+    assert [r['task_time'] for r in result] == ['09:00:00', '19:00:00']
+
+
+def test_get_task_schedule_excludes_off_study_participants(fake_app):
+    """Requested directly: an off-study participant's recurring tasks
+    stay in self.tasks (that's not how off_study works -- see
+    process_task's own skip check), but they're not actually going out,
+    so they shouldn't appear in "the schedule" alongside tasks that are.
+    """
+    from datetime import time
+    pm = make_manager(fake_app)
+    on_study_participant = dict(PARTICIPANT, unique_id='100', on_study=True)
+    off_study_participant = dict(PARTICIPANT, unique_id='200', on_study=False)
+    pm.participants = [on_study_participant, off_study_participant]
+    pm.tasks = [
+        {'task_type': 'ema', 'task_time': time(9, 0, 0), 'participant_id': '100'},
+        {'task_type': 'ema', 'task_time': time(9, 0, 0), 'participant_id': '200'},
+    ]
+
+    result = pm.get_task_schedule()
+
+    assert len(result) == 1
+    assert result[0]['participant_id'] == '100'
 
 
 def test_get_task_schedule_excludes_task_for_since_removed_participant(fake_app):
