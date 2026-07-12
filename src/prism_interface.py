@@ -25,7 +25,7 @@ class PRISMInterface:
     num_columns: int
 
     def __init__(self) -> None:
-        self.base_url = "http://localhost:5000/"
+        self.base_url = "http://localhost:5000"
         ok, _ = self.api("GET", "system/uptime")
         if not ok:
             print("PRISM instance is not running or is not accessible. Please start the PRISM server first.")
