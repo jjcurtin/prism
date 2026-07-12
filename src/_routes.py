@@ -92,6 +92,14 @@ def create_flask_app(app_instance: App) -> Flask:
     def add_system_task(task_type: str, task_time: str) -> RouteResponse:
         if task_type not in app_instance.system_task_manager.task_types:
             return jsonify({"error": "Invalid task type"}), 400
+        if task_type == "RUN_R_SCRIPT":
+            # This route always adds with r_script_path="" -- RunRScript
+            # requires a real path, so a task added here would persist as
+            # a schedule row that raises TypeError every time it fires,
+            # paging coordinators daily until manually removed. Use
+            # /system/add_r_script_task/<r_script_path>/<task_time> instead,
+            # which already validates a non-empty path.
+            return jsonify({"error": "Use /system/add_r_script_task/<r_script_path>/<task_time> for RUN_R_SCRIPT."}), 400
         try:
             datetime.strptime(task_time, '%H:%M:%S')
         except ValueError:
@@ -123,6 +131,12 @@ def create_flask_app(app_instance: App) -> Flask:
     def execute_task(task_type: str) -> RouteResponse:
         if task_type not in app_instance.system_task_manager.task_types:
             return jsonify({"error": "Invalid task type."}), 400
+        if task_type == "RUN_R_SCRIPT":
+            # process_task would call RunRScript(app) with no r_script_path
+            # at all -- TypeError. Use
+            # /system/execute_r_script_task/<r_script_path> instead, which
+            # already validates a non-empty path.
+            return jsonify({"error": "Use /system/execute_r_script_task/<r_script_path> for RUN_R_SCRIPT."}), 400
         elif app_instance.system_task_manager.process_task({'task_type': task_type}) != 0:
             return jsonify({"error": f"Failed to execute {task_type}."}), 500
         return jsonify({"message": f"{task_type} executed successfully."}), 200
