@@ -41,7 +41,7 @@ class SystemTask:
             result = 1
         self.outcome = "SUCCESS" if result == 0 else "FAILURE"
         self.app.add_to_transcript(f"{self.task_type} #{self.task_number} completed with status: {self.outcome}.", "INFO")
-        if self.app.mode == "prod":
+        if self.app.mode == "live":
             # Defensively wrapped: notify_via_sms() itself failing (Twilio
             # down, credentials broken, coordinators file unreadable, etc.)
             # must never propagate out of execute() -- this runs for every

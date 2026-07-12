@@ -12,7 +12,7 @@
 
 .EXAMPLE
     .\prism.ps1 setup
-    .\prism.ps1 run-test
+    .\prism.ps1 run-silent
     .\prism.ps1 interface
     .\prism.ps1 test-all
 #>
@@ -36,8 +36,8 @@ $tasksPy = Join-Path $repo "tasks.py"
 # (mirrors the two-implementation split tasks.py itself already has for
 # Linux/macOS `make` vs this).
 $targets = @{
-    'run-test'         = @('run', '--mode', 'test')
-    'run-prod'         = @('run', '--mode', 'prod')
+    'run-silent'       = @('run', '--mode', 'silent')
+    'run-live'         = @('run', '--mode', 'live')
     'interface'        = @('interface')
     'test-server'      = @('test', 'server')
     'test-client'      = @('test', 'client')
@@ -77,7 +77,7 @@ if ($targets.ContainsKey($target)) {
 } else {
     # Not a Makefile-style target -- pass everything straight through to
     # tasks.py, so its own raw subcommands still work (e.g.
-    # `.\prism.ps1 run --mode test`).
+    # `.\prism.ps1 run --mode silent`).
     & $venvPy $tasksPy @RestArgs
 }
 exit $LASTEXITCODE

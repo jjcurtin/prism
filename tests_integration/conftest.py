@@ -30,7 +30,7 @@ def real_app():
     """A PRISM instance with __init__ bypassed (no signal handlers, no web
     server launch, no clear()), loaded against the real repo checkout's
     real `environment` marker + real drive-sourced config_base -- exactly
-    what run_prism.py itself would load. mode='test' so add_to_transcript
+    what run_prism.py itself would load. mode='silent' so add_to_transcript
     writes to the local test transcript, not a dated prod one, and so
     SystemTask.execute() (not used directly by these tests, which call
     .run() instead) wouldn't fire coordinator SMS even if it were.
@@ -44,7 +44,7 @@ def real_app():
     from run_prism import PRISM
 
     app = PRISM.__new__(PRISM)
-    app.mode = 'test'
+    app.mode = 'silent'
     app.load_paths()
     app.load_api_keys()
     return app

@@ -48,7 +48,7 @@ def booted_prism_no_drive(fake_prism_env_no_drive):
     from task_managers._participant_manager import ParticipantManager
 
     p = PRISM.__new__(PRISM)
-    p.mode = 'test'
+    p.mode = 'silent'
     p.repo_root = fake_prism_env_no_drive
     p.load_paths()
     p.load_api_keys()
@@ -82,7 +82,7 @@ def test_prism_still_serves_requests_when_research_drive_is_unmounted(booted_pri
 
     ok = client.get('/system/get_mode')
     assert ok.status_code == 200
-    assert ok.get_json() == {'mode': 'test'}
+    assert ok.get_json() == {'mode': 'silent'}
 
     # Nothing loaded (no participants.csv/schedule found with the drive
     # unmounted) is a legitimately empty result, not a request failure --
@@ -150,7 +150,7 @@ def _make_bare_prism(repo_root):
     from run_prism import PRISM
     p = PRISM.__new__(PRISM)
     p.repo_root = repo_root
-    p.mode = 'test'
+    p.mode = 'silent'
     p.logs_dir = str(repo_root / 'logs')
     return p
 
@@ -181,7 +181,7 @@ def test_unlink_pid_file_if_owned_leaves_a_mismatched_pid_file(tmp_path):
 
     assert pid_file.exists()
     assert pid_file.read_text() == str(other_pid)
-    transcript_text = (tmp_path / 'logs' / 'transcripts' / 'test_transcript.txt').read_text()
+    transcript_text = (tmp_path / 'logs' / 'transcripts' / 'silent_transcript.txt').read_text()
     assert 'WARNING' in transcript_text and str(other_pid) in transcript_text
 
 
@@ -206,7 +206,7 @@ def test_init_succeeds_regardless_of_invocation_directory(monkeypatch, fake_pris
             # can't be pointed at a fake repo_root directly), but repeated
             # per-cwd to prove the outcome doesn't depend on it.
             p = PRISM.__new__(PRISM)
-            p.mode = 'test'
+            p.mode = 'silent'
             p.repo_root = fake_prism_env_no_drive
             p.load_paths()  # must not raise regardless of cwd
             p.load_api_keys()
@@ -284,7 +284,7 @@ def test_acquire_pid_file_refuses_to_start_when_a_live_pid_is_recorded(tmp_path)
     # (in this test, coincidentally the same, but unmodified) live process,
     # not silently get replaced on the way to refusing.
     assert pid_file.read_text() == str(os.getpid())
-    transcript_text = (tmp_path / 'logs' / 'transcripts' / 'test_transcript.txt').read_text()
+    transcript_text = (tmp_path / 'logs' / 'transcripts' / 'silent_transcript.txt').read_text()
     assert 'Refusing to start' in transcript_text
 
 
@@ -304,7 +304,7 @@ def test_acquire_pid_file_overwrites_a_stale_pid_and_warns(tmp_path):
 
     import os
     assert pid_file.read_text() == str(os.getpid())
-    transcript_text = (tmp_path / 'logs' / 'transcripts' / 'test_transcript.txt').read_text()
+    transcript_text = (tmp_path / 'logs' / 'transcripts' / 'silent_transcript.txt').read_text()
     assert 'no-longer-running' in transcript_text
 
 
@@ -472,7 +472,7 @@ def test_launch_web_app_or_shutdown_stops_managers_and_exits_nonzero_on_failure(
 
     assert stopped == {'system': True, 'participant': True}
     assert exit_codes == [1]
-    transcript_text = (tmp_path / 'logs' / 'transcripts' / 'test_transcript.txt').read_text()
+    transcript_text = (tmp_path / 'logs' / 'transcripts' / 'silent_transcript.txt').read_text()
     assert 'Web server failed to start or crashed' in transcript_text
     assert 'shutting down task managers' in transcript_text
 
@@ -526,7 +526,7 @@ def test_get_transcript_rejects_negative_num_lines(tmp_path):
     p = _make_bare_prism(tmp_path)
     transcript_dir = tmp_path / 'logs' / 'transcripts'
     transcript_dir.mkdir(parents=True)
-    (transcript_dir / 'test_transcript.txt').write_text(
+    (transcript_dir / 'silent_transcript.txt').write_text(
         "10:00:00 - INFO - line 1\n"
         "10:00:01 - INFO - line 2\n"
         "10:00:02 - INFO - line 3\n"
@@ -542,7 +542,7 @@ def test_get_transcript_rejects_zero_num_lines(tmp_path):
     p = _make_bare_prism(tmp_path)
     transcript_dir = tmp_path / 'logs' / 'transcripts'
     transcript_dir.mkdir(parents=True)
-    (transcript_dir / 'test_transcript.txt').write_text(
+    (transcript_dir / 'silent_transcript.txt').write_text(
         "10:00:00 - INFO - line 1\n"
         "10:00:01 - INFO - line 2\n"
     )
@@ -558,7 +558,7 @@ def test_get_transcript_accepts_positive_num_lines(tmp_path):
     p = _make_bare_prism(tmp_path)
     transcript_dir = tmp_path / 'logs' / 'transcripts'
     transcript_dir.mkdir(parents=True)
-    (transcript_dir / 'test_transcript.txt').write_text(
+    (transcript_dir / 'silent_transcript.txt').write_text(
         "10:00:00 - INFO - line 1\n"
         "10:00:01 - INFO - line 2\n"
         "10:00:02 - INFO - line 3\n"

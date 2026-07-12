@@ -125,14 +125,14 @@ def cmd_setup(args):
     # assuming the user knows to invoke tasks.py via .venv's interpreter
     # (or has activated the venv) instead of a bare `python`/`python3` on
     # PATH, which would silently hit the system interpreter and fail with
-    # missing-dependency errors. `make run-test`/`make run-prod` already
+    # missing-dependency errors. `make run-silent`/`make run-live` already
     # get this right automatically; this message matters most for Windows
     # users, who don't have `make` to shield them from the distinction.
     print(
         f"\nSetup complete. Start PRISM with:\n"
-        f"  {venv_python} tasks.py run --mode test\n"
+        f"  {venv_python} tasks.py run --mode silent\n"
         f"or, once ready for a real run:\n"
-        f"  {venv_python} tasks.py run --mode prod\n"
+        f"  {venv_python} tasks.py run --mode live\n"
         f"\nNote: this only sets up the code. If the `environment` file (a "
         f"git-ignored file at the repo root containing \"dev\" or \"prod\") "
         f"is missing, PRISM defaults to \"dev\" and expects the research "
@@ -213,10 +213,10 @@ def build_parser():
     )
     p_run.add_argument(
         "--mode",
-        choices=["test", "prod"],
+        choices=["silent", "live"],
         required=True,
-        help="Mode to run PRISM in. 'test' for development, 'prod' for production. "
-        "No default: never boot -mode prod casually.",
+        help="Mode to run PRISM in. 'silent' does not send real texts. 'live' does. "
+        "No default: never boot -mode live casually.",
     )
     p_run.set_defaults(func=cmd_run)
 

@@ -287,22 +287,22 @@ def create_flask_app(app_instance: App) -> Flask:
         participant = app_instance.participant_manager.get_participant(unique_id)
         if not participant:
             return jsonify({"error": "Participant not found"}), 404
-        if app_instance.mode == "prod":
+        if app_instance.mode == "live":
             if send_sms(app_instance, [participant['phone_number']], [data['message']]) != 0:
                 return jsonify({"error": f"Failed to send SMS to participant {unique_id}"}), 502
         else:
             # Found by an external adversarial review: unlike
-            # study_announcement's own test-mode branch just below (which
+            # study_announcement's own silent-mode branch just below (which
             # logs "Simulated sending messages."), this route had no
-            # test-mode transcript line at all -- nothing here or in
-            # send_sms() (only called in the prod branch above) ever
+            # silent-mode transcript line at all -- nothing here or in
+            # send_sms() (only called in the live branch above) ever
             # recorded that a "Custom SMS sent" response was actually a
             # no-op simulation, not a real send. The HTTP response message
             # itself is unchanged (matches study_announcement's own
             # precedent of leaving the response text identical between
             # modes) -- only the transcript, server-side, now tells them
             # apart.
-            app_instance.add_to_transcript(f"Simulated custom SMS send to participant {unique_id} (test mode).", "INFO")
+            app_instance.add_to_transcript(f"Simulated custom SMS send to participant {unique_id} (silent mode).", "INFO")
         return jsonify({"message": f"Custom SMS sent to participant {unique_id}"}), 200
     
     @flask_app.route('/participants/study_announcement/<require_on_study>', methods = ['POST'])
@@ -316,7 +316,7 @@ def create_flask_app(app_instance: App) -> Flask:
         # .participants directly -- the old code read it 3 separate times
         # here with no lock, racing a concurrent refresh_participants()
         # clearing the list mid-iteration. Paired with unique_id (not just
-        # phone_number) so both the prod send log and the test-mode
+        # phone_number) so both the live send log and the silent-mode
         # simulated-send log can name which participant a message was
         # sent/simulated for.
         on_study_only = require_on_study.lower() == 'yes'
@@ -332,7 +332,7 @@ def create_flask_app(app_instance: App) -> Flask:
             f"Study announcement ({scope}): {len(participants)} participant(s).", "INFO"
         )
 
-        if app_instance.mode == "prod":
+        if app_instance.mode == "live":
             send_start = datetime.now()
             attempted = 0
             failed = 0
@@ -356,7 +356,7 @@ def create_flask_app(app_instance: App) -> Flask:
             for unique_id, phone_number in participants:
                 if phone_number.strip():
                     app_instance.add_to_transcript(
-                        f"Simulated study announcement send to participant {unique_id} (test mode).", "INFO"
+                        f"Simulated study announcement send to participant {unique_id} (silent mode).", "INFO"
                     )
         return jsonify({"message": f"Study announcement sent to all participants, require on study: {require_on_study}"}), 200
 

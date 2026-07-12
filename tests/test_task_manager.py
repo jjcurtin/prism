@@ -484,7 +484,7 @@ def test_run_notify_coordinators_failure_does_not_crash_loop(fake_app, mocker):
     out of the handler entirely and silently killed the background
     thread the first time anything went wrong.
     """
-    fake_app.mode = 'prod'
+    fake_app.mode = 'live'
     tm = make_manager(fake_app)
     tm.running = True
     mocker.patch(
@@ -547,7 +547,7 @@ def test_run_outer_catch_all_notifies_coordinators(fake_app, mocker):
     represents a genuine system-level malfunction and should alert
     coordinators.
     """
-    fake_app.mode = 'prod'
+    fake_app.mode = 'live'
     tm = make_manager(fake_app)
     tm.running = True
     notify = mocker.patch('task_managers._task_manager.notify_coordinators', return_value=0)

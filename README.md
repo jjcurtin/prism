@@ -90,7 +90,7 @@ dependencies. The first time you run PRISM (below), it will look for a
 git-ignored `environment` file at the repo root containing either `dev` or
 `prod`; if that file is missing, PRISM creates one defaulting to `dev` and
 expects the research drive to already be mounted with dev credentials in
-place. **Never run PRISM in `prod` mode unless you mean to send real texts
+place. **Never run PRISM in `live` mode unless you mean to send real texts
 to real participants** — see `config/README.md`.
 
 ## Setting up the files PRISM needs
@@ -144,12 +144,26 @@ terminals: the **server** (the background process that actually sends
 scheduled surveys) and the **interface** (the terminal menu you use to
 manage participants and tasks day-to-day). Start the server first.
 
+Two settings look similar but control different things, so it's worth
+being clear on which is which:
+- **Mode** (`silent`/`live`, below) — whether the server actually sends
+  real texts. Chosen every time you start the server; there's no default.
+- **Environment** (`dev`/`prod`, the `environment` file from "Setting up
+  the files PRISM needs" above) — which set of credentials and study data
+  the server loads from the research drive. Set once per checkout.
+
+A `dev`-environment checkout run in `live` mode still sends real texts —
+just using whatever dev-environment Twilio credentials are configured. The
+two aren't the same axis, and mixing up their same-sounding values
+(`prod` used to also be a mode name here) is exactly what this section is
+written to keep separate.
+
 ### Windows
 
-Start the server (test mode — safe, does not send real texts):
+Start the server (silent mode — safe, does not send real texts):
 
 ```powershell
-.\prism.ps1 run-test
+.\prism.ps1 run-silent
 ```
 
 Leave that terminal running, open a **second** PowerShell window in the same
@@ -163,10 +177,10 @@ To stop the server, go back to its terminal window and press `Ctrl+C`.
 
 ### Linux / macOS
 
-Start the server (test mode):
+Start the server (silent mode):
 
 ```bash
-make run-test
+make run-silent
 ```
 
 In a second terminal, launch the interface:
@@ -177,13 +191,13 @@ make interface
 
 Stop the server with `Ctrl+C` in its terminal.
 
-### Going to production
+### Going live
 
 Once you're actually ready to run the live study (real participants, real
-texts), the equivalent commands are `.\prism.ps1 run-prod` (Windows) /
-`make run-prod` (Linux/macOS) — but don't do this without explicit sign-off
+texts), the equivalent commands are `.\prism.ps1 run-live` (Windows) /
+`make run-live` (Linux/macOS) — but don't do this without explicit sign-off
 from whoever runs the study. There is deliberately no default mode; you must
-type `test` or `prod` every time so you can't boot production by accident.
+type `silent` or `live` every time so you can't boot a real send by accident.
 
 ## Running tests
 

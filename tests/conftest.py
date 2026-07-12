@@ -86,7 +86,7 @@ def prism_instance(fake_prism_env):
     from run_prism import PRISM
 
     p = PRISM.__new__(PRISM)
-    p.mode = 'test'
+    p.mode = 'silent'
     p.repo_root = fake_prism_env
     return p
 
@@ -99,7 +99,7 @@ class FakeApp:
     PRISM instance would set is a plain settable attribute here — tests set
     only what the code path under test actually reads.
     """
-    def __init__(self, mode='test', environment='dev'):
+    def __init__(self, mode='silent', environment='dev'):
         self.mode = mode
         self.environment = environment
         self.transcript = []
@@ -122,7 +122,7 @@ def routes_app_instance():
     from datetime import datetime
     from unittest.mock import MagicMock
 
-    app = FakeApp(mode='test')
+    app = FakeApp(mode='silent')
     app.start_time = datetime.now()
     app.system_task_manager = MagicMock()
     app.system_task_manager.task_types = {'CHECK_SYSTEM': 'CheckSystem', 'RUN_R_SCRIPT': 'RunRScript'}

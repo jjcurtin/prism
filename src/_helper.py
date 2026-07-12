@@ -92,7 +92,7 @@ def send_sms(app: App, receiver_numbers: list[str], messages: list[str], is_coor
 
     This is `app.environment` (the "which environment's data/credentials"
     marker set by `run_prism.py::load_paths()`) -- not `app.mode` (the
-    `-mode test`/`-mode prod` flag gating whether sends happen at all),
+    `-mode silent`/`-mode live` flag gating whether sends happen at all),
     which is an orthogonal axis. `getattr(app, 'environment', 'dev')` is
     used instead of a bare attribute access so a caller whose app object
     doesn't have `environment` set yet (e.g. a test fixture, or
@@ -180,7 +180,7 @@ def send_sms(app: App, receiver_numbers: list[str], messages: list[str], is_coor
 def notify_coordinators(app: App, message: str) -> int:
     """Send `message` to every study coordinator listed in
     `app.study_coordinators_path`, via send_sms(). Gated internally on
-    `app.mode == "prod"` -- returns 0 immediately otherwise, matching the
+    `app.mode == "live"` -- returns 0 immediately otherwise, matching the
     gating SystemTask.execute() already applies at its own call site (so
     this is a no-op safety net, not a second independent gate in practice).
 
@@ -194,7 +194,7 @@ def notify_coordinators(app: App, message: str) -> int:
     helper. Returns the number of coordinators the send failed for (0 on
     success, or when there's nothing to send), same contract as send_sms().
     """
-    if app.mode != "prod":
+    if app.mode != "live":
         return 0
 
     try:

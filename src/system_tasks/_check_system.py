@@ -34,7 +34,7 @@ class CheckSystem(SystemTask):
         return research_drive_check + rscript_check + participant_check + reminders_file_check
 
     def check_research_drive(self) -> int:
-        if self.app.mode == "prod":
+        if self.app.mode == "live":
             self.app.add_to_transcript(f"INFO: Now checking Research Drive connection...")
             raw_drive_mount = getattr(self.app, 'drive_mount', None)
             if not raw_drive_mount:
@@ -113,7 +113,7 @@ class CheckSystem(SystemTask):
         return True
 
     def check_rscript_available(self) -> int:
-        """Unlike check_research_drive above, not gated on mode == "prod" --
+        """Unlike check_research_drive above, not gated on mode == "live" --
         RUN_R_SCRIPT tasks can be scheduled and tested in either mode, and
         this is genuinely a live runtime-environment concern (is R actually
         installed and is its bin/ directory, containing the Rscript

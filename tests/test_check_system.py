@@ -19,7 +19,7 @@ def test_run_only_checks_live_system_state_not_static_files(fake_app, monkeypatc
     shutil.which is mocked so this doesn't depend on whether R actually
     happens to be installed on whatever machine runs the test suite.
     """
-    fake_app.mode = 'test'
+    fake_app.mode = 'silent'
     fake_app.participant_manager = MagicMock()
     fake_app.participant_manager.get_participants.return_value = []
     reminders_file = tmp_path / 'reminders.csv'
@@ -55,8 +55,8 @@ def test_check_rscript_available_missing_returns_1_and_errors(fake_app, monkeypa
     )
 
 
-def test_check_research_drive_skipped_in_test_mode(fake_app):
-    fake_app.mode = 'test'
+def test_check_research_drive_skipped_in_silent_mode(fake_app):
+    fake_app.mode = 'silent'
 
     result = CheckSystem(fake_app).check_research_drive()
 
@@ -64,8 +64,8 @@ def test_check_research_drive_skipped_in_test_mode(fake_app):
     assert fake_app.transcript == []
 
 
-def test_check_research_drive_prod_mode_mounted_and_listable_returns_0(tmp_path, fake_app):
-    fake_app.mode = 'prod'
+def test_check_research_drive_live_mode_mounted_and_listable_returns_0(tmp_path, fake_app):
+    fake_app.mode = 'live'
     drive_mount = tmp_path / 'drive'
     drive_mount.mkdir()
     fake_app.drive_mount = str(drive_mount)
@@ -76,8 +76,8 @@ def test_check_research_drive_prod_mode_mounted_and_listable_returns_0(tmp_path,
     assert any('Successfully connected to Research Drive' in msg for _, msg in fake_app.transcript)
 
 
-def test_check_research_drive_prod_mode_missing_mount_returns_1(tmp_path, fake_app):
-    fake_app.mode = 'prod'
+def test_check_research_drive_live_mode_missing_mount_returns_1(tmp_path, fake_app):
+    fake_app.mode = 'live'
     fake_app.drive_mount = str(tmp_path / 'not_actually_mounted')
 
     result = CheckSystem(fake_app).check_research_drive()
@@ -100,7 +100,7 @@ def test_check_research_drive_hang_times_out_and_does_not_block(fake_app, mocker
     """
     import time
 
-    fake_app.mode = 'prod'
+    fake_app.mode = 'live'
     fake_app.drive_mount = '/some/mount'
     mocker.patch('system_tasks._check_system.DRIVE_CHECK_TIMEOUT_SECONDS', 0.1)
     mocker.patch.object(
@@ -116,8 +116,8 @@ def test_check_research_drive_hang_times_out_and_does_not_block(fake_app, mocker
     assert any('did not respond within' in msg for _, msg in fake_app.transcript)
 
 
-def test_check_research_drive_prod_mode_unset_drive_mount_returns_1(fake_app):
-    fake_app.mode = 'prod'
+def test_check_research_drive_live_mode_unset_drive_mount_returns_1(fake_app):
+    fake_app.mode = 'live'
 
     result = CheckSystem(fake_app).check_research_drive()
 
@@ -172,7 +172,7 @@ def test_run_includes_reminders_file_check(fake_app, monkeypatch, tmp_path):
     state at all -- a broken file only ever surfaced later, at reminder
     send time.
     """
-    fake_app.mode = 'test'
+    fake_app.mode = 'silent'
     fake_app.participant_manager = MagicMock()
     fake_app.participant_manager.get_participants.return_value = []
     fake_app.reminders_path = str(tmp_path / 'does_not_exist.csv')

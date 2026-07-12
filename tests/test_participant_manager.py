@@ -930,7 +930,7 @@ def test_process_task_link_parsing_failure_returns_neg1_no_crash(fake_app, mocke
     returns -1 immediately, matching every other failure path in this
     function.
     """
-    fake_app.mode = 'prod'
+    fake_app.mode = 'live'
     pm = make_manager(fake_app)
     pm.participants = [dict(PARTICIPANT)]
     # Deliberately don't set fake_app.ema_survey_id/ema_message, so the
@@ -954,7 +954,7 @@ def test_process_task_blank_survey_id_returns_neg1_no_send(fake_app, mocker):
     participant. process_task now applies the same _is_real_value() guard
     send_sms already applies to Twilio credentials.
     """
-    fake_app.mode = 'prod'
+    fake_app.mode = 'live'
     fake_app.ema_survey_id = float('nan')
     fake_app.ema_message = 'Time for your survey.'
     pm = make_manager(fake_app)
@@ -969,7 +969,7 @@ def test_process_task_blank_survey_id_returns_neg1_no_send(fake_app, mocker):
 
 
 def test_process_task_placeholder_survey_id_returns_neg1_no_send(fake_app, mocker):
-    fake_app.mode = 'prod'
+    fake_app.mode = 'live'
     fake_app.ema_survey_id = 'REPLACE_WITH_QUALTRICS_EMA_SURVEY_ID'
     fake_app.ema_message = 'Time for your survey.'
     pm = make_manager(fake_app)
@@ -990,7 +990,7 @@ def test_process_task_unknown_sms_task_type_does_not_notify_coordinators(fake_ap
     functionality is actually broken, so it's deliberately excluded from
     coordinator alerting here (unlike the genuine send-failure paths below).
     """
-    fake_app.mode = 'prod'
+    fake_app.mode = 'live'
     pm = make_manager(fake_app)
     pm.participants = [dict(PARTICIPANT)]
     notify = mocker.patch('task_managers._participant_manager.notify_coordinators')
@@ -1023,7 +1023,7 @@ def test_process_task_off_study_one_time_task_still_sends(fake_app, mocker):
     pm = make_manager(fake_app)
     participant = dict(PARTICIPANT, on_study=False)
     pm.participants = [participant]
-    fake_app.mode = 'prod'
+    fake_app.mode = 'live'
     fake_app.ema_survey_id = 'fake_survey'
     fake_app.ema_message = "Hello, it's time to take your daily survey."
     send_sms = mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
@@ -1034,10 +1034,10 @@ def test_process_task_off_study_one_time_task_still_sends(fake_app, mocker):
     send_sms.assert_called_once_with(fake_app, ['5555550100'], mocker.ANY)
 
 
-def test_process_task_sends_ema_sms_in_prod_mode(fake_app, mocker):
+def test_process_task_sends_ema_sms_in_live_mode(fake_app, mocker):
     pm = make_manager(fake_app)
     pm.participants = [dict(PARTICIPANT)]
-    fake_app.mode = 'prod'
+    fake_app.mode = 'live'
     fake_app.ema_survey_id = 'fake_survey'
     fake_app.ema_message = "Hello, it's time to take your daily survey."
     send_sms = mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
@@ -1077,7 +1077,7 @@ def test_finish_task_one_time_survey_send_removes_only_the_one_time_task(fake_ap
 def test_finish_task_one_time_survey_send_removed_even_on_failure(fake_app, mocker):
     pm = make_manager(fake_app)
     pm.participants = [dict(PARTICIPANT)]
-    fake_app.mode = 'prod'
+    fake_app.mode = 'live'
     fake_app.ema_survey_id = 'fake_survey'
     fake_app.ema_message = "Hello, it's time to take your daily survey."
     mocker.patch('task_managers._participant_manager.send_sms', side_effect=Exception('boom'))
@@ -1107,7 +1107,7 @@ def test_process_task_ema_reminder_skipped_when_already_opened(tmp_path, fake_ap
         '3000,000000000,yes,no,yes\n'
     )
     fake_app.reminders_path = str(reminders_file)
-    fake_app.mode = 'prod'
+    fake_app.mode = 'live'
     pm = make_manager(fake_app)
     pm.participants = [dict(PARTICIPANT)]
     send_sms = mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
@@ -1125,7 +1125,7 @@ def test_process_task_ema_reminder_sent_when_not_yet_opened(tmp_path, fake_app, 
         '3000,000000000,yes,yes,no\n'
     )
     fake_app.reminders_path = str(reminders_file)
-    fake_app.mode = 'prod'
+    fake_app.mode = 'live'
     fake_app.ema_survey_id = 'fake_survey'
     fake_app.ema_reminder_message = "Hello, you have not yet completed your daily survey for today."
     pm = make_manager(fake_app)
@@ -1148,7 +1148,7 @@ def test_process_task_reminders_file_missing_sends_reminder_anyway(fake_app, moc
     recoverable; a wrongly-suppressed one is data loss), and page
     coordinators, rate-limited to once/day (see the pair of tests below).
     """
-    fake_app.mode = 'prod'
+    fake_app.mode = 'live'
     fake_app.reminders_path = '/nonexistent/reminders.csv'
     fake_app.ema_survey_id = 'fake_survey'
     fake_app.ema_reminder_message = "Hello, you have not yet completed your daily survey for today."
@@ -1166,7 +1166,7 @@ def test_process_task_reminders_file_missing_sends_reminder_anyway(fake_app, moc
 
 
 def test_process_task_reminders_file_failure_pages_coordinators_once_per_day(fake_app, mocker):
-    fake_app.mode = 'prod'
+    fake_app.mode = 'live'
     fake_app.reminders_path = '/nonexistent/reminders.csv'
     fake_app.ema_survey_id = 'fake_survey'
     fake_app.ema_reminder_message = "reminder"
@@ -1183,7 +1183,7 @@ def test_process_task_reminders_file_failure_pages_coordinators_once_per_day(fak
 
 
 def test_process_task_reminders_file_failure_pages_again_next_day(fake_app, mocker):
-    fake_app.mode = 'prod'
+    fake_app.mode = 'live'
     fake_app.reminders_path = '/nonexistent/reminders.csv'
     fake_app.ema_survey_id = 'fake_survey'
     fake_app.ema_reminder_message = "reminder"
@@ -1206,12 +1206,12 @@ def test_process_task_reminders_file_failure_three_tasks_two_days_pages_twice(fa
     tasks across 2 fake-clock days (2 tasks on day 1, 1 on day 2) through
     the same process_task() entry point a real scheduler tick would use,
     to confirm the once/day gate holds across more than a single pair of
-    calls -- notify_coordinators is mocked at the seam (not test-mode
+    calls -- notify_coordinators is mocked at the seam (not silent-mode
     gated away, since notify_coordinators itself no-ops outside
-    mode == 'prod') so the rate-limit path is actually exercised rather
+    mode == 'live') so the rate-limit path is actually exercised rather
     than skipped.
     """
-    fake_app.mode = 'prod'
+    fake_app.mode = 'live'
     fake_app.reminders_path = '/nonexistent/reminders.csv'
     fake_app.ema_survey_id = 'fake_survey'
     fake_app.ema_reminder_message = "reminder"
@@ -1239,7 +1239,7 @@ def test_process_task_reminders_file_readable_does_not_page(tmp_path, fake_app, 
         '3000,000000000,yes,yes,no\n'
     )
     fake_app.reminders_path = str(reminders_file)
-    fake_app.mode = 'prod'
+    fake_app.mode = 'live'
     fake_app.ema_survey_id = 'fake_survey'
     fake_app.ema_reminder_message = "reminder"
     pm = make_manager(fake_app)
@@ -1259,7 +1259,7 @@ def test_process_task_send_sms_failure_notifies_coordinators_and_returns_neg1(fa
     via the shared notify_coordinators() helper and return -1 for a
     consistent failure contract.
     """
-    fake_app.mode = 'prod'
+    fake_app.mode = 'live'
     pm = make_manager(fake_app)
     pm.participants = [dict(PARTICIPANT)]
     fake_app.ema_survey_id = 'fake_survey'
@@ -1289,7 +1289,7 @@ def test_process_task_send_sms_reports_failure_via_return_value_notifies_coordin
     (send_sms raising) is the much rarer case of a bug inside send_sms
     itself.
     """
-    fake_app.mode = 'prod'
+    fake_app.mode = 'live'
     pm = make_manager(fake_app)
     pm.participants = [dict(PARTICIPANT)]
     fake_app.ema_survey_id = 'fake_survey'
@@ -1306,9 +1306,9 @@ def test_process_task_send_sms_reports_failure_via_return_value_notifies_coordin
     assert not any('SMS sent to 000000000' in msg for _, msg in fake_app.transcript)
 
 
-def test_process_task_test_mode_logs_simulated_send_not_sms_sent(fake_app, mocker):
+def test_process_task_silent_mode_logs_simulated_send_not_sms_sent(fake_app, mocker):
     """Regression test: the old code logged the same "SMS sent" text in
-    test mode as in a real prod send, even though no send is attempted --
+    silent mode as in a real live send, even though no send is attempted --
     the transcript couldn't distinguish a real send from a simulated one.
     """
     pm = make_manager(fake_app)
@@ -1334,7 +1334,7 @@ def test_process_task_unexpected_error_notifies_coordinators_and_returns_neg1(fa
     also alert coordinators.
     """
     pm = make_manager(fake_app)
-    fake_app.mode = 'prod'
+    fake_app.mode = 'live'
     notify = mocker.patch('task_managers._participant_manager.notify_coordinators', return_value=0)
     # get_participant() is called early in process_task(); make it blow up
     # with something other than the handled lookup-failure path to exercise
@@ -1359,7 +1359,7 @@ def test_process_task_notify_coordinators_failure_after_send_failure_does_not_pr
     scheduler thread -- used to be exactly the cascade that silently
     killed that thread the first time anything went wrong.
     """
-    fake_app.mode = 'prod'
+    fake_app.mode = 'live'
     pm = make_manager(fake_app)
     pm.participants = [dict(PARTICIPANT)]
     fake_app.ema_survey_id = 'fake_survey'
@@ -1383,7 +1383,7 @@ def test_process_task_notify_coordinators_failure_after_unexpected_error_does_no
     """Same regression as above, for the outermost catch-all's
     notify_coordinators() call."""
     pm = make_manager(fake_app)
-    fake_app.mode = 'prod'
+    fake_app.mode = 'live'
     mocker.patch(
         'task_managers._participant_manager.notify_coordinators',
         side_effect=RuntimeError('twilio also broken'),

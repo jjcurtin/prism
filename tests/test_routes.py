@@ -23,7 +23,7 @@ from task_managers._participant_manager import (
 def test_get_mode(routes_client):
     resp = routes_client.get('/system/get_mode')
     assert resp.status_code == 200
-    assert resp.get_json() == {'mode': 'test'}
+    assert resp.get_json() == {'mode': 'silent'}
 
 
 def test_get_uptime(routes_client):
@@ -504,7 +504,7 @@ def test_send_custom_sms_participant_not_found(routes_client, routes_app_instanc
     assert resp.status_code == 404
 
 
-def test_send_custom_sms_test_mode_does_not_send(routes_client, routes_app_instance, monkeypatch):
+def test_send_custom_sms_silent_mode_does_not_send(routes_client, routes_app_instance, monkeypatch):
     routes_app_instance.participant_manager.get_participant.return_value = {'phone_number': '5555550100'}
     send_sms_mock = MagicMock()
     monkeypatch.setattr('_routes.send_sms', send_sms_mock)
@@ -515,10 +515,10 @@ def test_send_custom_sms_test_mode_does_not_send(routes_client, routes_app_insta
     send_sms_mock.assert_not_called()
 
 
-def test_send_custom_sms_test_mode_logs_simulated_send(routes_client, routes_app_instance, monkeypatch):
+def test_send_custom_sms_silent_mode_logs_simulated_send(routes_client, routes_app_instance, monkeypatch):
     """Regression test for a real bug (external adversarial review,
-    confirmed by inspection): this route had no test-mode transcript line
-    at all -- unlike study_announcement's own test-mode branch, which logs
+    confirmed by inspection): this route had no silent-mode transcript line
+    at all -- unlike study_announcement's own silent-mode branch, which logs
     "Simulated sending messages." Nothing anywhere recorded that a "Custom
     SMS sent" response was actually a no-op simulation, not a real send.
     """
@@ -529,12 +529,12 @@ def test_send_custom_sms_test_mode_logs_simulated_send(routes_client, routes_app
 
     assert resp.status_code == 200
     assert any(
-        'Simulated' in msg and 'test mode' in msg for _, msg in routes_app_instance.transcript
+        'Simulated' in msg and 'silent mode' in msg for _, msg in routes_app_instance.transcript
     )
 
 
-def test_send_custom_sms_prod_mode_success(routes_client, routes_app_instance, monkeypatch):
-    routes_app_instance.mode = 'prod'
+def test_send_custom_sms_live_mode_success(routes_client, routes_app_instance, monkeypatch):
+    routes_app_instance.mode = 'live'
     routes_app_instance.participant_manager.get_participant.return_value = {'phone_number': '5555550100'}
     monkeypatch.setattr('_routes.send_sms', MagicMock(return_value=0))
 
@@ -543,11 +543,11 @@ def test_send_custom_sms_prod_mode_success(routes_client, routes_app_instance, m
     assert resp.status_code == 200
 
 
-def test_send_custom_sms_prod_mode_failure_is_502(routes_client, routes_app_instance, monkeypatch):
+def test_send_custom_sms_live_mode_failure_is_502(routes_client, routes_app_instance, monkeypatch):
     """Regression test for a fixed bug: this route used to ignore
     send_sms()'s return value and always report success.
     """
-    routes_app_instance.mode = 'prod'
+    routes_app_instance.mode = 'live'
     routes_app_instance.participant_manager.get_participant.return_value = {'phone_number': '5555550100'}
     monkeypatch.setattr('_routes.send_sms', MagicMock(return_value=1))
 
@@ -585,12 +585,12 @@ def test_study_announcement_passes_on_study_only_flag_through(routes_client, rou
     routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.assert_called_once_with(
         on_study_only=True
     )
-    # test mode -- send_sms should never be invoked regardless of filtering
+    # silent mode -- send_sms should never be invoked regardless of filtering
     send_sms_mock.assert_not_called()
 
 
-def test_study_announcement_test_mode_logs_simulated_send_per_participant(routes_client, routes_app_instance):
-    """Regression test for a real gap: the test-mode transcript line used
+def test_study_announcement_silent_mode_logs_simulated_send_per_participant(routes_client, routes_app_instance):
+    """Regression test for a real gap: the silent-mode transcript line used
     to be a single generic "Simulated sending messages." with no per-
     participant detail and no indication of the announcement's scope
     (on-study-only vs. all participants). Now names each recipient by
@@ -608,11 +608,11 @@ def test_study_announcement_test_mode_logs_simulated_send_per_participant(routes
         'Study announcement' in msg and 'on-study participants only' in msg for msg in transcript_messages
     )
     assert any(
-        'Simulated study announcement send to participant 000000000' in msg and 'test mode' in msg
+        'Simulated study announcement send to participant 000000000' in msg and 'silent mode' in msg
         for msg in transcript_messages
     )
     assert any(
-        'Simulated study announcement send to participant 000000001' in msg and 'test mode' in msg
+        'Simulated study announcement send to participant 000000001' in msg and 'silent mode' in msg
         for msg in transcript_messages
     )
 
@@ -630,8 +630,8 @@ def test_study_announcement_logs_all_participants_scope(routes_client, routes_ap
     )
 
 
-def test_study_announcement_prod_mode_all_succeed(routes_client, routes_app_instance, monkeypatch):
-    routes_app_instance.mode = 'prod'
+def test_study_announcement_live_mode_all_succeed(routes_client, routes_app_instance, monkeypatch):
+    routes_app_instance.mode = 'live'
     routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.return_value = [
         ('000000000', '5555550100'), ('000000001', '5555550101')
     ]
@@ -646,12 +646,12 @@ def test_study_announcement_prod_mode_all_succeed(routes_client, routes_app_inst
     )
 
 
-def test_study_announcement_prod_mode_all_fail_is_502(routes_client, routes_app_instance, monkeypatch):
+def test_study_announcement_live_mode_all_fail_is_502(routes_client, routes_app_instance, monkeypatch):
     """Regression test for a fixed bug: this route used to ignore
     send_sms()'s return value entirely and always report success even if
     every single SMS failed to send.
     """
-    routes_app_instance.mode = 'prod'
+    routes_app_instance.mode = 'live'
     routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.return_value = [
         ('000000000', '5555550100'), ('000000001', '5555550101')
     ]
@@ -662,8 +662,8 @@ def test_study_announcement_prod_mode_all_fail_is_502(routes_client, routes_app_
     assert resp.status_code == 502
 
 
-def test_study_announcement_prod_mode_partial_failure_notes_count(routes_client, routes_app_instance, monkeypatch):
-    routes_app_instance.mode = 'prod'
+def test_study_announcement_live_mode_partial_failure_notes_count(routes_client, routes_app_instance, monkeypatch):
+    routes_app_instance.mode = 'live'
     routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.return_value = [
         ('000000000', '5555550100'), ('000000001', '5555550101')
     ]
@@ -675,8 +675,8 @@ def test_study_announcement_prod_mode_partial_failure_notes_count(routes_client,
     assert '1 of 2' in resp.get_json()['message']
 
 
-def test_study_announcement_prod_mode_logs_elapsed_send_time(routes_client, routes_app_instance, monkeypatch):
-    routes_app_instance.mode = 'prod'
+def test_study_announcement_live_mode_logs_elapsed_send_time(routes_client, routes_app_instance, monkeypatch):
+    routes_app_instance.mode = 'live'
     routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.return_value = [
         ('000000000', '5555550100')
     ]

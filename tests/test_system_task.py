@@ -13,10 +13,10 @@ class FailingTask(SystemTask):
         return 1
 
 
-def test_execute_success_in_prod_mode_also_notifies(fake_app, mocker):
+def test_execute_success_in_live_mode_also_notifies(fake_app, mocker):
     """Coordinators are notified on both success and failure, per Colin's
     explicit request -- not just on failure as before."""
-    fake_app.mode = 'prod'
+    fake_app.mode = 'live'
     notify = mocker.patch.object(SucceedingTask, 'notify_via_sms', return_value=0)
 
     result = SucceedingTask(fake_app).execute()
@@ -25,8 +25,8 @@ def test_execute_success_in_prod_mode_also_notifies(fake_app, mocker):
     notify.assert_called_once()
 
 
-def test_execute_success_in_test_mode_does_not_notify(fake_app, mocker):
-    fake_app.mode = 'test'
+def test_execute_success_in_silent_mode_does_not_notify(fake_app, mocker):
+    fake_app.mode = 'silent'
     notify = mocker.patch.object(SucceedingTask, 'notify_via_sms')
 
     result = SucceedingTask(fake_app).execute()
@@ -35,8 +35,8 @@ def test_execute_success_in_test_mode_does_not_notify(fake_app, mocker):
     notify.assert_not_called()
 
 
-def test_execute_failure_in_prod_mode_notifies(fake_app, mocker):
-    fake_app.mode = 'prod'
+def test_execute_failure_in_live_mode_notifies(fake_app, mocker):
+    fake_app.mode = 'live'
     notify = mocker.patch.object(FailingTask, 'notify_via_sms', return_value=0)
 
     result = FailingTask(fake_app).execute()
@@ -45,8 +45,8 @@ def test_execute_failure_in_prod_mode_notifies(fake_app, mocker):
     notify.assert_called_once()
 
 
-def test_execute_failure_in_test_mode_does_not_notify(fake_app, mocker):
-    fake_app.mode = 'test'
+def test_execute_failure_in_silent_mode_does_not_notify(fake_app, mocker):
+    fake_app.mode = 'silent'
     notify = mocker.patch.object(FailingTask, 'notify_via_sms')
 
     result = FailingTask(fake_app).execute()
@@ -56,7 +56,7 @@ def test_execute_failure_in_test_mode_does_not_notify(fake_app, mocker):
 
 
 def test_execute_logs_outcome(fake_app):
-    fake_app.mode = 'test'
+    fake_app.mode = 'silent'
 
     SucceedingTask(fake_app).execute()
 
@@ -72,7 +72,7 @@ def test_execute_notify_via_sms_failure_does_not_propagate(fake_app, mocker):
     a *notification* failure, not the task's own actual work, which had
     already completed successfully.
     """
-    fake_app.mode = 'prod'
+    fake_app.mode = 'live'
     mocker.patch.object(SucceedingTask, 'notify_via_sms', side_effect=RuntimeError('twilio broken'))
 
     result = SucceedingTask(fake_app).execute()  # must not raise
@@ -92,10 +92,10 @@ def test_notify_via_sms_sends_to_each_coordinator(tmp_path, fake_app, mocker):
     shared _helper.notify_coordinators() (which itself calls _helper.send_sms),
     so that's what gets mocked here instead of system_tasks._system_task.send_sms
     (which no longer exists -- notify_via_sms() no longer imports send_sms
-    directly). notify_coordinators() is gated on app.mode == "prod", same as
-    the real dispatch path via SystemTask.execute(), so mode is set to 'prod'.
+    directly). notify_coordinators() is gated on app.mode == "live", same as
+    the real dispatch path via SystemTask.execute(), so mode is set to 'live'.
     """
-    fake_app.mode = 'prod'
+    fake_app.mode = 'live'
     coordinators_file = tmp_path / 'study_coordinators.csv'
     coordinators_file.write_text('"name","phone_number"\n"Alice","5555550100"\n"Bob","5555550101"\n')
     fake_app.study_coordinators_path = str(coordinators_file)
@@ -113,7 +113,7 @@ def test_notify_via_sms_sends_to_each_coordinator(tmp_path, fake_app, mocker):
 
 
 def test_notify_via_sms_missing_file_returns_1_and_warns(fake_app):
-    fake_app.mode = 'prod'
+    fake_app.mode = 'live'
     fake_app.study_coordinators_path = '/nonexistent/study_coordinators.csv'
 
     task = SucceedingTask(fake_app)
@@ -126,7 +126,7 @@ def test_notify_via_sms_missing_file_returns_1_and_warns(fake_app):
 
 
 def test_notify_via_sms_uses_default_template_when_app_has_no_override(tmp_path, fake_app, mocker):
-    fake_app.mode = 'prod'
+    fake_app.mode = 'live'
     coordinators_file = tmp_path / 'study_coordinators.csv'
     coordinators_file.write_text('"name","phone_number"\n"Alice","5555550100"\n')
     fake_app.study_coordinators_path = str(coordinators_file)
@@ -143,7 +143,7 @@ def test_notify_via_sms_uses_default_template_when_app_has_no_override(tmp_path,
 
 
 def test_notify_via_sms_uses_app_coordinator_alert_message_template(tmp_path, fake_app, mocker):
-    fake_app.mode = 'prod'
+    fake_app.mode = 'live'
     coordinators_file = tmp_path / 'study_coordinators.csv'
     coordinators_file.write_text('"name","phone_number"\n"Alice","5555550100"\n')
     fake_app.study_coordinators_path = str(coordinators_file)
@@ -162,7 +162,7 @@ def test_notify_via_sms_uses_app_coordinator_alert_message_template(tmp_path, fa
 def test_notify_via_sms_success_outcome_has_no_error_code(tmp_path, fake_app, mocker):
     """A SUCCESS outcome isn't an error, so its message shouldn't carry an
     error code -- only the FAILURE branch gets code_prefix('1001')."""
-    fake_app.mode = 'prod'
+    fake_app.mode = 'live'
     coordinators_file = tmp_path / 'study_coordinators.csv'
     coordinators_file.write_text('"name","phone_number"\n"Alice","5555550100"\n')
     fake_app.study_coordinators_path = str(coordinators_file)
@@ -180,7 +180,7 @@ def test_notify_via_sms_success_outcome_has_no_error_code(tmp_path, fake_app, mo
 
 
 def test_notify_via_sms_skips_coordinators_with_blank_phone(tmp_path, fake_app, mocker):
-    fake_app.mode = 'prod'
+    fake_app.mode = 'live'
     coordinators_file = tmp_path / 'study_coordinators.csv'
     coordinators_file.write_text('"name","phone_number"\n"Alice",""\n"Bob","5555550101"\n')
     fake_app.study_coordinators_path = str(coordinators_file)
@@ -196,12 +196,12 @@ def test_notify_via_sms_skips_coordinators_with_blank_phone(tmp_path, fake_app, 
 
 def test_notify_via_sms_noop_when_not_prod(tmp_path, fake_app, mocker):
     """notify_coordinators() (and therefore notify_via_sms(), which now
-    delegates to it) is a no-op outside prod mode -- in real dispatch this is
+    delegates to it) is a no-op outside live mode -- in real dispatch this is
     redundant with SystemTask.execute()'s own "only call notify_via_sms() in
     prod" gate, but notify_via_sms() can also be called directly (as these
     tests do), so the gate needs to hold on its own too.
     """
-    fake_app.mode = 'test'
+    fake_app.mode = 'silent'
     coordinators_file = tmp_path / 'study_coordinators.csv'
     coordinators_file.write_text('"name","phone_number"\n"Alice","5555550100"\n')
     fake_app.study_coordinators_path = str(coordinators_file)

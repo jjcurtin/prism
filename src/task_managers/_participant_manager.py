@@ -766,7 +766,7 @@ class ParticipantManager(TaskManager):
                 self.app.add_to_transcript(f"Error parsing link: {e}", "ERROR")
                 return -1
             try:
-                if self.app.mode == "prod":
+                if self.app.mode == "live":
                     # send_sms() communicates a per-recipient failure by
                     # RETURN COUNT, not by raising -- it catches
                     # TwilioRestException (and any other exception)
@@ -789,10 +789,10 @@ class ParticipantManager(TaskManager):
                 else:
                     # Distinct from the real "SMS sent" line above -- the
                     # old code logged the same "SMS sent" text here too,
-                    # even though no send is attempted in test mode, so
+                    # even though no send is attempted in silent mode, so
                     # the transcript couldn't distinguish a real send from
                     # a simulated one.
-                    self.app.add_to_transcript(f"Simulated SMS send to {participant_id} (test mode).", "INFO")
+                    self.app.add_to_transcript(f"Simulated SMS send to {participant_id} (silent mode).", "INFO")
                 return 0
             except Exception as e:
                 self.app.add_to_transcript(f"Failed to send SMS to {participant_id}: {e}", "ERROR")

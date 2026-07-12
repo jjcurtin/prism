@@ -35,7 +35,7 @@ def test_load_paths_corrupt_repo_paths_csv_falls_back_and_warns(prism_instance, 
     prism_instance.load_paths()  # must not raise
 
     assert prism_instance.logs_dir == str((fake_prism_env / 'logs').resolve())  # still falls back correctly
-    transcript_text = (Path(prism_instance.logs_dir) / 'transcripts' / 'test_transcript.txt').read_text()
+    transcript_text = (Path(prism_instance.logs_dir) / 'transcripts' / 'silent_transcript.txt').read_text()
     assert 'WARNING' in transcript_text
     assert 'Failed to load repo_paths.csv' in transcript_text
 

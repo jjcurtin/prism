@@ -8,7 +8,7 @@ PYTHON := $(CURDIR)/$(VENV)/bin/python
 PY_SYS := python3
 endif
 
-.PHONY: help setup run-test run-prod interface test-server test-client test-all test-integration typecheck
+.PHONY: help setup run-silent run-live interface test-server test-client test-all test-integration typecheck
 
 .DEFAULT_GOAL := help
 
@@ -21,13 +21,13 @@ help:
 setup:
 	$(PY_SYS) tasks.py setup
 
-# Stop any running server and start PRISM in test mode.
-run-test:
-	$(PYTHON) tasks.py run --mode test
+# Stop any running server and start PRISM in silent mode (no real texts sent).
+run-silent:
+	$(PYTHON) tasks.py run --mode silent
 
-# Stop any running server and start PRISM in production mode.
-run-prod:
-	$(PYTHON) tasks.py run --mode prod
+# Stop any running server and start PRISM in live mode (sends real texts).
+run-live:
+	$(PYTHON) tasks.py run --mode live
 
 # Launch the RA terminal interface.
 interface:

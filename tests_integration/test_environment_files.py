@@ -62,7 +62,7 @@ def _load_app_for_environment(environment):
     same run.
     """
     app = PRISM.__new__(PRISM)
-    app.mode = 'test'
+    app.mode = 'silent'
     app.load_paths(environment=environment)
     return app
 

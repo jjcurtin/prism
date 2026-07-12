@@ -16,7 +16,7 @@ menus (see `src/user_interface_menus/tasks/README.md`).
   anywhere.
 
 If a scheduled task fails, whoever is on `config/study_coordinators.csv`
-gets a text about it (in prod mode).
+gets a text about it (in live mode).
 
 ## Adding a new task type (for whoever maintains PRISM's code)
 
