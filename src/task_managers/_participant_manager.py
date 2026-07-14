@@ -134,18 +134,38 @@ class ParticipantManager(TaskManager):
             self.file_path = self.app.participants_path
             # Serializes only the disk-write portion of save_participants()
             # (see that method's own comment) -- distinct from _tasks_lock,
-            # which still must never be held across I/O. Without this,
+            # which still must never be held across, or while blocked
+            # waiting to acquire, _file_write_lock. Without this,
             # two overlapping save_participants() calls each snapshot
             # self.participants under _tasks_lock, release it, and then
             # race each other to the actual file write; if the call that
             # took the OLDER snapshot happens to finish writing last, its
             # stale snapshot silently overwrites the newer one already on
-            # disk, violating I3. save_participants() acquires this lock
-            # while STILL holding _tasks_lock (nested, then releases
-            # _tasks_lock) so snapshots are queued for the write lock in
-            # the same order they were taken, guaranteeing writes land in
-            # that same order.
+            # disk, violating I3.
+            #
+            # An earlier version of this fix acquired _file_write_lock
+            # while STILL holding _tasks_lock (nested, then released
+            # _tasks_lock afterward) so snapshots would queue for the write
+            # lock in the order they were taken -- but that let a second
+            # overlapping caller block on _file_write_lock.acquire() while
+            # it was still holding _tasks_lock, which gates nearly every
+            # method on this class (reads included); a third, unrelated
+            # thread doing a plain read was transitively blocked for the
+            # full duration of another thread's disk write. save_participants()
+            # instead pairs this lock with a monotonic version stamp
+            # (_participants_version/_last_written_version, see that
+            # method's own comment) so write ordering is preserved without
+            # ever holding both locks at once.
             self._file_write_lock = threading.Lock()
+            # Monotonically increasing "how recent is this snapshot"
+            # counter, bumped under _tasks_lock every time
+            # save_participants() takes a snapshot of self.participants.
+            # _last_written_version records the version of the snapshot
+            # actually last written to disk (protected only by
+            # _file_write_lock, never by _tasks_lock) -- see
+            # save_participants()'s own comment for how the pair is used.
+            self._participants_version = 0
+            self._last_written_version = 0
             self.load_participants()
         except Exception as e:
             self.app.add_to_transcript(f"Failed to initialize ParticipantManager: {e}", "ERROR")
@@ -466,45 +486,60 @@ class ParticipantManager(TaskManager):
         this and discarded the result entirely rather than getting it
         wrong -- see their own docstrings.)
         """
-        # Snapshot taken under _tasks_lock, file write happens outside it --
-        # same "never hold this lock across I/O" rule as
-        # SystemTaskManager.save_tasks(), even though this write is small.
-        # _file_write_lock is acquired here while _tasks_lock is STILL held
-        # (nested), then _tasks_lock is released by exiting the `with`
-        # block -- this queues concurrent callers for the write lock in the
-        # exact order their snapshots were taken, so whichever snapshot is
-        # older always writes first, and a lost update (an older snapshot's
-        # write landing after a newer one's, silently reverting it on disk)
-        # can't happen. The write itself still happens with _tasks_lock
-        # released -- only _file_write_lock, not _tasks_lock, is held
-        # across the actual I/O.
+        # Snapshot (plus a monotonic version stamp, captured together so
+        # the stamp reflects exactly how recent this snapshot is) is taken
+        # under _tasks_lock; _tasks_lock is then released COMPLETELY --
+        # exiting the `with` block -- before this method ever touches
+        # _file_write_lock. _tasks_lock must never be held during, or
+        # while blocked waiting to acquire, _file_write_lock: it gates
+        # nearly every method on this class (reads included), so holding
+        # it across a slow disk write -- or across another thread's disk
+        # write -- would starve every other caller for that entire
+        # duration.
+        #
+        # Because the write itself can't happen atomically with the
+        # snapshot, two overlapping calls can still finish their writes
+        # out of order. Rather than forcing an order (which is what
+        # required nesting the locks before), a stale write detects itself
+        # and no-ops: _last_written_version (protected only by
+        # _file_write_lock) records the version of the snapshot actually
+        # on disk. If this call's version is <= that value, some other
+        # call already wrote an equal-or-newer snapshot -- writing this
+        # older one now would silently revert that newer data (the exact
+        # lost-update this locking exists to prevent), so it's skipped
+        # entirely and treated as success (the on-disk file already
+        # reflects this state or a later one).
         with self._tasks_lock:
             snapshot = list(self.participants)
-            self._file_write_lock.acquire()
-        try:
-            with open(self.file_path, 'w', newline = '') as file:
-                writer = csv.DictWriter(file, fieldnames = PARTICIPANT_CSV_HEADERS, quoting = csv.QUOTE_ALL)
-                writer.writeheader()
-                for participant in snapshot:
-                    # Built from PARTICIPANT_CSV_HEADERS explicitly, not
-                    # dict(participant) -- csv.DictWriter defaults to
-                    # extrasaction='raise', so passing the participant dict
-                    # through unfiltered would fail the entire write (a
-                    # regression from the old writer's explicit
-                    # participant["field"] access, which silently ignored
-                    # any extra key) the moment a caller's dict carries a
-                    # field this schema doesn't know about -- e.g. any API
-                    # client that sends more than the 9 documented fields,
-                    # not just the interface's own menu.
-                    row = {header: participant.get(header, '') for header in PARTICIPANT_CSV_HEADERS}
-                    row['on_study'] = 'yes' if participant['on_study'] else 'no'
-                    writer.writerow(row)
-            return 0
-        except Exception as e:
-            self.app.add_to_transcript(f"Failed to save participants to CSV: {e}", "ERROR")
-            return 1
-        finally:
-            self._file_write_lock.release()
+            self._participants_version += 1
+            my_version = self._participants_version
+
+        with self._file_write_lock:
+            if my_version <= self._last_written_version:
+                return 0
+            try:
+                with open(self.file_path, 'w', newline = '') as file:
+                    writer = csv.DictWriter(file, fieldnames = PARTICIPANT_CSV_HEADERS, quoting = csv.QUOTE_ALL)
+                    writer.writeheader()
+                    for participant in snapshot:
+                        # Built from PARTICIPANT_CSV_HEADERS explicitly, not
+                        # dict(participant) -- csv.DictWriter defaults to
+                        # extrasaction='raise', so passing the participant dict
+                        # through unfiltered would fail the entire write (a
+                        # regression from the old writer's explicit
+                        # participant["field"] access, which silently ignored
+                        # any extra key) the moment a caller's dict carries a
+                        # field this schema doesn't know about -- e.g. any API
+                        # client that sends more than the 9 documented fields,
+                        # not just the interface's own menu.
+                        row = {header: participant.get(header, '') for header in PARTICIPANT_CSV_HEADERS}
+                        row['on_study'] = 'yes' if participant['on_study'] else 'no'
+                        writer.writerow(row)
+                self._last_written_version = my_version
+                return 0
+            except Exception as e:
+                self.app.add_to_transcript(f"Failed to save participants to CSV: {e}", "ERROR")
+                return 1
 
     def update_participant(self, unique_id: str, field: str, value: Any) -> int:
         """Enforces I4 (unique_id is immutable) and I3 (memory/disk agree

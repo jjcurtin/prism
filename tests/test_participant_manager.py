@@ -22,6 +22,8 @@ def make_manager(fake_app):
     pm.tasks = []
     pm._tasks_lock = threading.RLock()
     pm._file_write_lock = threading.Lock()
+    pm._participants_version = 0
+    pm._last_written_version = 0
     pm._now = datetime.now
     pm._last_reset_date = datetime.now().date()
     pm._last_reminders_failure_page_date = None
@@ -884,6 +886,82 @@ def test_load_participants_releases_lock_before_reading_csv(tmp_path, fake_app, 
     mocker.patch('task_managers._participant_manager.open', side_effect=slow_open)
 
     _lock_is_free_during(pm, io_started, pm.load_participants)
+
+
+def test_concurrent_save_participants_does_not_hold_tasks_lock_while_second_caller_blocks_on_file_lock(
+    tmp_path, fake_app, mocker
+):
+    """Real-thread regression test for a fixed bug: save_participants() used
+    to acquire _file_write_lock while STILL holding _tasks_lock (nested,
+    then release _tasks_lock afterward). That's fine for a single caller,
+    but a SECOND, genuinely concurrent save_participants() call would enter
+    `with self._tasks_lock:`, take its own snapshot, and then call
+    `self._file_write_lock.acquire()` -- which blocks until the first
+    call's write finishes -- all while that second call was still holding
+    _tasks_lock. Since _tasks_lock gates nearly every method on this class
+    (reads included), a third, unrelated thread doing a plain read was
+    transitively blocked for the entire duration of the first call's disk
+    write.
+
+    Fires two real overlapping save_participants() calls via actual
+    threads: the first is held mid-write on an artificial delay (injected
+    via a patched `open`) so its write is still in flight when the second
+    call starts. This reliably forces the second call to actually block on
+    _file_write_lock (not just theoretically), unlike a sequential
+    call-wait-assert test. Then confirms a third party can still acquire
+    _tasks_lock promptly. This fails (times out acquiring _tasks_lock)
+    against the pre-fix nested-lock code and passes after the fix (which
+    fully releases _tasks_lock before ever touching _file_write_lock).
+    """
+    csv_file = tmp_path / 'study_participants.csv'
+    fake_app.participants_path = str(csv_file)
+    pm = make_manager(fake_app)
+    pm.file_path = str(csv_file)
+    pm.participants = [dict(PARTICIPANT)]
+
+    first_write_started = threading.Event()
+    release_first_write = threading.Event()
+    real_open = open
+
+    def slow_open(path, *args, **kwargs):
+        if str(path) == str(csv_file):
+            first_write_started.set()
+            release_first_write.wait(timeout=2)
+        return real_open(path, *args, **kwargs)
+
+    mocker.patch('task_managers._participant_manager.open', side_effect=slow_open)
+
+    first_caller = threading.Thread(target=pm.save_participants)
+    first_caller.start()
+    assert first_write_started.wait(timeout=2), "first save_participants() call never reached its file write"
+
+    second_caller_started = threading.Event()
+
+    def second_caller_run():
+        second_caller_started.set()
+        pm.save_participants()
+
+    second_caller = threading.Thread(target=second_caller_run)
+    second_caller.start()
+    assert second_caller_started.wait(timeout=2), "second save_participants() call never started"
+
+    # The first call's write is still blocked on release_first_write, so
+    # _file_write_lock is still held by it. If the second call is (buggily)
+    # holding _tasks_lock while it blocks trying to acquire that same lock,
+    # this acquire attempt will time out.
+    tasks_lock_acquired = pm._tasks_lock.acquire(timeout=1.0)
+    if tasks_lock_acquired:
+        pm._tasks_lock.release()
+
+    release_first_write.set()
+    first_caller.join(timeout=2)
+    second_caller.join(timeout=2)
+
+    assert tasks_lock_acquired, (
+        "_tasks_lock was still held by a second, overlapping save_participants() call while it was "
+        "blocked acquiring _file_write_lock -- this starves every other user of _tasks_lock (including "
+        "plain reads) for the duration of another thread's file write"
+    )
 
 
 def test_participant_manager_invariants_hold_after_random_operation_sequences(fake_app):
