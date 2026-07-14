@@ -25,7 +25,8 @@ def make_manager(fake_app):
     tm._now = datetime.now
     tm._last_reset_date = datetime.now().date()
     tm.task_queue = queue.Queue()
-    tm._processing = threading.Event()
+    tm._processing_count = 0
+    tm._pause_check_failure_notified = False
     tm._work_state_lock = threading.Lock()
     return tm
 
@@ -580,7 +581,7 @@ def test_run_uses_get_nowait_not_blocking_get(fake_app):
     tm.run()
 
     assert calls['n'] == 1
-    assert tm._processing.is_set() is False
+    assert tm._processing_count == 0
 
 
 def test_run_outer_catch_all_notifies_coordinators(fake_app, mocker):
@@ -791,16 +792,45 @@ def test_has_pending_work_true_when_processing_flag_set(fake_app):
     """Reflects a task actively being processed (queue already empty,
     finish_task() mid-call) -- not just a task sitting in task_queue."""
     tm = make_manager(fake_app)
-    tm._processing.set()
+    tm._processing_count += 1
 
     assert tm.has_pending_work() is True
 
 
 def test_has_pending_work_false_after_processing_flag_cleared(fake_app):
     tm = make_manager(fake_app)
-    tm._processing.set()
-    tm._processing.clear()
+    tm._processing_count += 1
+    tm._processing_count -= 1
 
+    assert tm.has_pending_work() is False
+
+
+def test_has_pending_work_true_while_two_busy_spans_overlap(fake_app):
+    """Regression test for the bug found by adversarial review: a plain
+    threading.Event can only represent 0 or 1 "busy" spans, so whichever of
+    two concurrently-open spans (run()'s own scheduled dispatch and
+    process_task_with_tracking()'s manual-trigger entry point) finished
+    first would clear it and wipe out the still-open other span --
+    has_pending_work() would then incorrectly report False while a manual
+    task (e.g. a long R script) was still genuinely in flight. Simulates two
+    independent entries incrementing _processing_count, then one of them
+    exiting -- has_pending_work() must still report True because the other
+    span is still open, regardless of which one closed first."""
+    tm = make_manager(fake_app)
+
+    # Two independent "busy" sources open concurrently (e.g. run()'s own
+    # dispatch of an unrelated scheduled task, plus a manually-triggered
+    # process_task_with_tracking() call for a different, still-running task).
+    tm._processing_count += 1  # span A opens
+    tm._processing_count += 1  # span B opens
+    assert tm.has_pending_work() is True
+
+    tm._processing_count -= 1  # span A closes first (e.g. the short scheduled task finishes)
+    assert tm._processing_count == 1
+    assert tm.has_pending_work() is True  # span B (the still-running manual task) must not be clobbered
+
+    tm._processing_count -= 1  # span B closes
+    assert tm._processing_count == 0
     assert tm.has_pending_work() is False
 
 
@@ -810,7 +840,7 @@ def test_base_pause_processing_always_false(fake_app):
     system tasks always get to run immediately."""
     tm = make_manager(fake_app)
     tm.task_queue.put({'task_type': 'CHECK_SYSTEM'})
-    tm._processing.set()
+    tm._processing_count += 1
 
     assert tm._pause_processing() is False
 
@@ -826,7 +856,7 @@ def test_run_sets_processing_flag_for_the_duration_of_finish_task(fake_app):
     observed = {}
 
     def observe_and_stop(task):
-        observed['was_set_during_processing'] = tm._processing.is_set()
+        observed['was_set_during_processing'] = tm._processing_count > 0
         tm.running = False
         return 0
 
@@ -836,13 +866,14 @@ def test_run_sets_processing_flag_for_the_duration_of_finish_task(fake_app):
     tm.run()
 
     assert observed['was_set_during_processing'] is True
-    assert tm._processing.is_set() is False  # cleared again after finish_task() returns
+    assert tm._processing_count == 0  # decremented again after finish_task() returns
 
 
 def test_run_clears_processing_flag_even_when_finish_task_raises(fake_app):
-    """The `finally` around finish_task() in run() must clear _processing
-    even on failure -- otherwise a single failed task would leave
-    has_pending_work() permanently reporting "busy" forever after."""
+    """The `finally` around finish_task() in run() must decrement
+    _processing_count even on failure -- otherwise a single failed task
+    would leave has_pending_work() permanently reporting "busy" forever
+    after."""
     tm = make_manager(fake_app)
     tm.running = True
 
@@ -855,7 +886,7 @@ def test_run_clears_processing_flag_even_when_finish_task_raises(fake_app):
 
     tm.run()  # must not raise (existing outer except handles this)
 
-    assert tm._processing.is_set() is False
+    assert tm._processing_count == 0
 
 
 def test_run_pauses_when_pause_processing_returns_true(fake_app, mocker):
@@ -944,7 +975,7 @@ def test_process_task_with_tracking_sets_processing_flag_for_the_duration(fake_a
     observed = {}
 
     def observe(task):
-        observed['was_set_during_processing'] = tm._processing.is_set()
+        observed['was_set_during_processing'] = tm._processing_count > 0
         return 0
 
     tm.process_task = observe
@@ -953,7 +984,7 @@ def test_process_task_with_tracking_sets_processing_flag_for_the_duration(fake_a
 
     assert result == 0
     assert observed['was_set_during_processing'] is True
-    assert tm._processing.is_set() is False  # cleared again after process_task() returns
+    assert tm._processing_count == 0  # decremented again after process_task() returns
 
 
 def test_process_task_with_tracking_clears_processing_flag_even_when_process_task_raises(fake_app):
@@ -967,7 +998,80 @@ def test_process_task_with_tracking_clears_processing_flag_even_when_process_tas
     with pytest.raises(RuntimeError):
         tm.process_task_with_tracking({'task_type': 'RUN_R_SCRIPT'})
 
-    assert tm._processing.is_set() is False
+    assert tm._processing_count == 0
+
+
+def test_process_task_with_tracking_and_run_can_be_concurrently_busy(fake_app):
+    """Regression test for the exact bug fixed this session: run()'s own
+    scheduled dispatch and process_task_with_tracking()'s manual-trigger
+    entry point are independent "busy" sources on the same manager
+    instance, and can be concurrently open -- e.g. a Flask thread runs a
+    manually-triggered long R script via process_task_with_tracking() while
+    run()'s own background thread separately dequeues and finishes an
+    unrelated short scheduled task. With the old threading.Event-based
+    _processing flag, whichever span finished first would clear the shared
+    Event and wipe out the still-open other span -- has_pending_work()
+    would then incorrectly report False while the manual task was still
+    genuinely in flight. Runs process_task_with_tracking() on a background
+    thread with a slow/blocking process_task, and while it's still open,
+    drives run() through one full scheduled-task cycle on this thread;
+    has_pending_work() must still report True the whole time, including
+    right after run()'s own span closes.
+    """
+    import threading
+
+    tm = make_manager(fake_app)
+    tm.running = True
+
+    manual_task_started = threading.Event()
+    release_manual_task = threading.Event()
+    manual_result = {}
+
+    def slow_manual_process_task(task):
+        manual_task_started.set()
+        release_manual_task.wait(timeout=5)
+        return 0
+
+    manual_thread = threading.Thread(
+        target=lambda: manual_result.update(
+            code=tm.process_task_with_tracking({'task_type': 'RUN_R_SCRIPT'})
+        )
+    )
+
+    # Swap in the slow process_task only for the manual span; run()'s own
+    # dispatch (below) uses a separate, fast process_task via finish_task().
+    tm.process_task = slow_manual_process_task
+    manual_thread.start()
+    assert manual_task_started.wait(timeout=5)
+    assert tm._processing_count == 1
+    assert tm.has_pending_work() is True
+
+    # Now drive run()'s own scheduled dispatch through one full cycle for an
+    # unrelated short task, concurrently with the still-open manual span.
+    observed_during_run = {}
+
+    def fast_scheduled_process_task(task):
+        observed_during_run['pending_with_both_spans_open'] = tm.has_pending_work()
+        observed_during_run['count_with_both_spans_open'] = tm._processing_count
+        tm.running = False
+        return 0
+
+    tm.process_task = fast_scheduled_process_task
+    tm.task_queue.put({'task_type': 'CHECK_SYSTEM'})
+    tm.run()
+
+    # run()'s own span has now closed (finished before the manual span) --
+    # the manual span must NOT have been clobbered by that.
+    assert observed_during_run['pending_with_both_spans_open'] is True
+    assert observed_during_run['count_with_both_spans_open'] == 2
+    assert tm._processing_count == 1
+    assert tm.has_pending_work() is True
+
+    release_manual_task.set()
+    manual_thread.join(timeout=5)
+    assert manual_result['code'] == 0
+    assert tm._processing_count == 0
+    assert tm.has_pending_work() is False
 
 
 def test_has_pending_work_true_while_process_task_with_tracking_runs(fake_app):
@@ -1047,6 +1151,90 @@ def test_run_does_not_pause_on_the_iteration_pause_processing_raised(fake_app):
 
 
 # ------------------------------------------------------------
+# run()'s pause-check failure escalates to notify_coordinators -- a
+# persistently failing _pause_processing() (e.g. self.app.system_task_manager
+# becomes permanently unset) used to only log a transcript line forever,
+# indistinguishable from routine log noise. Escalation is edge-triggered
+# (fires once per failure episode), not level-triggered (once per iteration)
+# or one-shot-for-the-process-lifetime -- see _pause_check_failure_notified.
+# ------------------------------------------------------------
+
+def test_pause_check_failure_notifies_coordinators_once(fake_app, mocker):
+    tm = make_manager(fake_app)
+    tm.running = True
+    notify = mocker.patch('task_managers._task_manager.notify_coordinators', return_value=0)
+
+    def flaky_pause_processing():
+        tm.running = False
+        raise RuntimeError('pause check boom')
+
+    tm._pause_processing = flaky_pause_processing
+
+    tm.run()
+
+    notify.assert_called_once()
+    message = notify.call_args[0][1]
+    assert message.startswith('[3001] ')
+    assert 'pause check boom' in message
+    assert tm._pause_check_failure_notified is True
+
+
+def test_pause_check_persistent_failure_does_not_spam_notify_coordinators(fake_app, mocker):
+    """A pause-check that keeps failing on every subsequent iteration must
+    only alert coordinators once for the whole unbroken failure run -- the
+    transcript ERROR line can (and does) repeat every iteration, but
+    notify_coordinators must not."""
+    tm = make_manager(fake_app)
+    tm.running = True
+    notify = mocker.patch('task_managers._task_manager.notify_coordinators', return_value=0)
+    calls = {'n': 0}
+
+    def always_flaky_pause_processing():
+        calls['n'] += 1
+        if calls['n'] >= 5:
+            tm.running = False
+        raise RuntimeError('pause check boom')
+
+    tm._pause_processing = always_flaky_pause_processing
+    mocker.patch('task_managers._task_manager.time.sleep')
+
+    tm.run()
+
+    assert calls['n'] == 5
+    notify.assert_called_once()
+    assert sum(1 for _, msg in fake_app.transcript if 'pause check boom' in msg) == 5
+
+
+def test_pause_check_failure_re_notifies_after_recovering_and_failing_again(fake_app, mocker):
+    """Edge-triggered, not "only ever once for the process lifetime": once
+    _pause_processing() recovers (a later call succeeds), the failure latch
+    resets, so a subsequent failure fires a second notify_coordinators
+    call."""
+    tm = make_manager(fake_app)
+    tm.running = True
+    notify = mocker.patch('task_managers._task_manager.notify_coordinators', return_value=0)
+    mocker.patch('task_managers._task_manager.time.sleep')
+    tm.check_tasks = lambda: None  # isolates this test to the pause-check step; task_queue stays empty
+
+    calls = {'n': 0}
+
+    def scripted_pause_processing():
+        calls['n'] += 1
+        if calls['n'] in (1, 3):
+            raise RuntimeError('pause check boom')
+        if calls['n'] == 4:
+            tm.running = False
+        return False  # iteration 2 (and 4, if reached): a successful recovery
+
+    tm._pause_processing = scripted_pause_processing
+
+    tm.run()
+
+    assert calls['n'] == 4
+    assert notify.call_count == 2
+
+
+# ------------------------------------------------------------
 # Midnight-rollover duplicate-SMS fix: run()'s dequeue block reaffirms
 # run_today=True for the task it's actually processing right now, since
 # check_tasks()'s date-rollover branch can flip run_today back to False on
@@ -1083,6 +1271,73 @@ def test_run_reaffirms_run_today_after_midnight_rollover_while_queued(fake_app):
     tm.run()
 
     assert task['run_today'] is True
+
+
+class _ExplodingRunTodayTask(dict):
+    """A task dict whose `run_today` reaffirmation write raises, simulating
+    a failure in the `with self._tasks_lock: task['run_today'] = True` block
+    inside run()'s dequeue-to-processing span. Only `run_today` explodes --
+    every other read/write (task_type, task_time, .get(), etc.) behaves like
+    a normal dict, including the dict(...) construction below, which uses
+    the C-level bulk-merge path and does not go through this __setitem__
+    override at all.
+    """
+    def __setitem__(self, key, value):
+        if key == 'run_today':
+            raise RuntimeError('run_today reaffirm boom')
+        super().__setitem__(key, value)
+
+
+def test_run_today_reaffirmation_failure_still_decrements_processing_count(fake_app, mocker):
+    """Fix 2 regression test: the run_today reaffirmation now happens
+    inside the same try/finally that decrements _processing_count, not in
+    its own block before the try. If reaffirming run_today (or acquiring
+    _tasks_lock) ever raises, _processing_count -- already incremented by
+    the dequeue block -- must still be decremented back down (not left
+    permanently stuck), and the failure must be reported through the
+    normal task-processing exception handler: the same transcript ERROR
+    message shape as any other task-processing failure, plus a
+    notify_coordinators alert, rather than crashing run()'s thread.
+    """
+    fake_app.mode = 'live'
+    tm = make_manager(fake_app)
+    tm.running = True
+    notify = mocker.patch('task_managers._task_manager.notify_coordinators', return_value=0)
+    tm.check_tasks = lambda: None
+    task = _ExplodingRunTodayTask({'task_type': 'CHECK_SYSTEM', 'task_time': time(3, 0, 0), 'run_today': True})
+    tm.tasks = [task]
+    tm.task_queue.put(task)
+
+    def stop_after_one(t):
+        tm.running = False
+        return 0
+
+    tm.process_task = stop_after_one  # never actually reached -- the raise happens before finish_task()
+
+    # The raise happens before finish_task()/process_task() ever runs, so
+    # stop_after_one above never gets a chance to flip tm.running = False --
+    # unlike every other run()-exception test in this file, whose
+    # process_task IS reached and does the stopping. task_queue is already
+    # empty after this one failed dequeue, so the loop's very next iteration
+    # takes the "task is None" branch and calls time.sleep(1); stop the loop
+    # there instead.
+    def fake_sleep(seconds):
+        tm.running = False
+
+    mocker.patch('task_managers._task_manager.time.sleep', side_effect=fake_sleep)
+
+    tm.run()  # must not raise -- the outer except in run() must catch this
+
+    assert tm._processing_count == 0  # not left permanently stuck
+    assert any(
+        'An error occurred while processing task CHECK_SYSTEM' in msg and 'run_today reaffirm boom' in msg
+        for _, msg in fake_app.transcript
+    )
+    notify.assert_called_once()
+    message = notify.call_args[0][1]
+    assert message.startswith('[3001] ')
+    assert 'CHECK_SYSTEM' in message
+    assert 'run_today reaffirm boom' in message
 
 
 def test_run_leaves_run_today_true_for_same_day_no_rollover(fake_app):

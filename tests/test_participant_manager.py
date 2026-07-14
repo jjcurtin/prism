@@ -32,7 +32,8 @@ def make_manager(fake_app):
     pm.feedback_sent_on_study_ids = set()
     pm.feedback_sent_all_ids = set()
     pm.task_queue = queue.Queue()
-    pm._processing = threading.Event()
+    pm._processing_count = 0
+    pm._pause_check_failure_notified = False
     pm._work_state_lock = threading.Lock()
     pm.participants = []
     pm.survey_types = {

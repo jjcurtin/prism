@@ -55,26 +55,45 @@ class TaskManager():
         # other thread trying to touch self.tasks for that entire duration
         # -- trading one hang for another.
         self._tasks_lock = threading.RLock()
-        # Set for the exact duration finish_task() is actively processing a
-        # task (from just before process_task() is called to just after it
-        # returns, including one_time cleanup -- see finish_task() below),
-        # cleared the rest of the time. Combined with `not
-        # self.task_queue.empty()` in has_pending_work() below, this is how
-        # a sibling manager (see _pause_processing()) can tell "this manager
-        # has work queued up OR is mid-task" without needing to inspect
-        # self.tasks/task_queue internals directly. An Event, not a plain
-        # bool -- no test/caller here actually blocks on it, but it's the
-        # conventional thread-safe primitive for a flag read/written across
-        # threads, and costs nothing over a bool for that guarantee.
-        self._processing = threading.Event()
+        # Reference-counted "how many callers are currently busy processing
+        # a task on this manager" -- incremented on entry to a processing
+        # span, decremented on exit, guarded entirely by _work_state_lock
+        # below (never read/written without it). NOT a plain
+        # threading.Event: run()'s own scheduled dispatch and
+        # process_task_with_tracking()'s manual-trigger entry point (see
+        # both below) are two independent sources of "busy" that can be
+        # concurrently open on the same manager instance -- e.g. a Flask
+        # thread runs a manually-triggered 3h R script via
+        # process_task_with_tracking() while run()'s own background thread
+        # separately dequeues and finishes an unrelated short scheduled
+        # task. An Event only has two states (set/clear) and can't
+        # represent "2 things are busy" -- whichever span finished first
+        # would clear it and wipe out the still-open other span, which is
+        # exactly the bug this counter fixes (found by adversarial review
+        # of the Event-based version). has_pending_work() below checks
+        # count > 0, which stays true as long as ANY span is open,
+        # regardless of ordering.
+        self._processing_count = 0
+        # Edge-trigger latch for the pause-check failure alert in run()
+        # below: True once notify_coordinators() has fired for the current
+        # unbroken run of _pause_processing() failures, reset to False the
+        # next time _pause_processing() succeeds. Without this, a
+        # persistently failing _pause_processing() (e.g.
+        # self.app.system_task_manager becomes permanently unset) would
+        # re-alert coordinators every ~1s iteration forever -- this makes
+        # the alert fire once per failure *episode* instead.
+        self._pause_check_failure_notified = False
         # Guards the dequeue-then-mark-busy transition in run() below so
         # has_pending_work() can never observe "queue empty AND not
         # processing" in the narrow window between task_queue.get() actually
-        # removing an item and _processing.set() reflecting that -- both
+        # removing an item and _processing_count reflecting that -- both
         # steps happen inside one critical section under this lock, and
         # has_pending_work() takes the same lock to read them consistently.
-        # A plain Lock (not the RLock used for _tasks_lock) -- nothing here
-        # re-enters while already holding it.
+        # Also the sole guard around every increment/decrement of
+        # _processing_count itself (run()'s dispatch and
+        # process_task_with_tracking() below), since a plain int's += 1/-= 1
+        # is not atomic across threads. A plain Lock (not the RLock used for
+        # _tasks_lock) -- nothing here re-enters while already holding it.
         self._work_state_lock = threading.Lock()
         # Injected rather than calling datetime.now()/date.today() inline in
         # check_tasks()/add_task() below -- an ambient wall-clock read is an
@@ -264,11 +283,11 @@ class TaskManager():
 
         Takes _work_state_lock so this can never observe the narrow window
         in run() between task_queue.get_nowait() removing an item and
-        self._processing.set() reflecting that -- both happen atomically
-        under the same lock (see run() below).
+        _processing_count reflecting that -- both happen atomically under
+        the same lock (see run() below).
         """
         with self._work_state_lock:
-            return not self.task_queue.empty() or self._processing.is_set()
+            return not self.task_queue.empty() or self._processing_count > 0
 
     def process_task_with_tracking(self, task: Task) -> int:
         """Entry point for callers outside the run() scheduling loop (e.g. a
@@ -278,14 +297,22 @@ class TaskManager():
         process_task() itself is left unwrapped -- run()'s own dequeue-to-
         processing span is the single source of truth for the scheduled
         path and must not be double-wrapped by this method too.
+
+        Increments/decrements the shared _processing_count rather than
+        setting/clearing a flag -- this method and run()'s own dispatch are
+        independent, possibly-concurrent "busy" sources on the same
+        manager instance (e.g. a manually-triggered R script here running
+        at the same time run() dispatches an unrelated scheduled task);
+        a reference count is the only representation where one span
+        finishing doesn't wipe out the other still being in progress.
         """
         with self._work_state_lock:
-            self._processing.set()
+            self._processing_count += 1
         try:
             return self.process_task(task)
         finally:
             with self._work_state_lock:
-                self._processing.clear()
+                self._processing_count -= 1
 
     def _pause_processing(self) -> bool:
         """Overridable hook, checked once per run() iteration before this
@@ -329,12 +356,13 @@ class TaskManager():
                 self.tasks[:] = [t for t in self.tasks if t is not task]
         return result
 
-    # note: self._processing is set/cleared around the finish_task() call
-    # site in run() below, not inside finish_task() itself -- finish_task()
-    # is also invoked directly by _routes.py's two synchronous, RA-triggered
-    # routes (send_survey and the manual feedback-send route), which
-    # deliberately bypass run() entirely and must stay unaffected by this
-    # coordination mechanism (see task_managers/CLAUDE.md).
+    # note: self._processing_count is incremented/decremented around the
+    # finish_task() call site in run() below, not inside finish_task()
+    # itself -- finish_task() is also invoked directly by _routes.py's two
+    # synchronous, RA-triggered routes (send_survey and the manual
+    # feedback-send route), which deliberately bypass run() entirely and
+    # must stay unaffected by this coordination mechanism (see
+    # task_managers/CLAUDE.md).
 
     def run(self) -> None:
         while self.running:
@@ -362,17 +390,33 @@ class TaskManager():
             # this unsupervised thread either.
             try:
                 should_pause = self._pause_processing()
+                self._pause_check_failure_notified = False
             except Exception as e:
                 self.app.add_to_transcript(f"An error occurred while checking whether to pause processing in {self.name}: {e}", "ERROR")
+                if not self._pause_check_failure_notified:
+                    self._pause_check_failure_notified = True
+                    # Defensively wrapped, same reasoning as the
+                    # notify_coordinators() call in the task-processing
+                    # except block below: a failure to notify must never
+                    # itself crash this loop. Edge-triggered (only the
+                    # transition into failure alerts) -- a persistently
+                    # broken _pause_processing() would otherwise re-alert
+                    # every ~1s iteration forever, indistinguishable from
+                    # spam; it only re-alerts if this later recovers
+                    # (clearing the flag above) and then fails again.
+                    try:
+                        notify_coordinators(self.app, code_prefix('3001') + f"PRISM system failure: an error occurred while checking whether to pause processing in {self.name}. Error: {e}")
+                    except Exception as notify_error:
+                        self.app.add_to_transcript(f"Also failed to notify coordinators about that error: {notify_error}", "ERROR")
                 should_pause = False
             if should_pause:
                 time.sleep(1)  # matches this loop's own ~1s poll cadence
                 continue
             # Dequeue and mark-busy happen atomically under _work_state_lock
             # so has_pending_work() (which takes the same lock) can never
-            # observe the queue as empty before _processing reflects that a
-            # task was actually pulled -- see _work_state_lock's own comment
-            # in __init__. get_nowait() (not the previous blocking
+            # observe the queue as empty before _processing_count reflects
+            # that a task was actually pulled -- see _work_state_lock's own
+            # comment in __init__. get_nowait() (not the previous blocking
             # get(timeout=1)) is safe here specifically because task_queue
             # is fed exclusively by this same thread's own check_tasks()
             # call immediately above, every iteration -- nothing else ever
@@ -385,23 +429,29 @@ class TaskManager():
                 except queue.Empty:
                     pass
                 else:
-                    self._processing.set()
+                    self._processing_count += 1
             if task is None:
                 time.sleep(1)  # matches this loop's own ~1s poll cadence
                 continue
-            with self._tasks_lock:
-                # Reaffirms run_today=True for the calendar day this task is
-                # actually being processed on -- not just the day it was
-                # originally queued. Needed because check_tasks()'s date-
-                # rollover branch (above) can flip this same task dict's
-                # run_today back to False while it's sitting un-drained in
-                # task_queue during a pause that spans midnight (see
-                # _pause_processing()); without this, the task would still
-                # get sent here (task_queue processing doesn't consult
-                # run_today at all), but would then incorrectly fire again
-                # later the same day when check_tasks() sees a stale False.
-                task['run_today'] = True
             try:
+                with self._tasks_lock:
+                    # Reaffirms run_today=True for the calendar day this task is
+                    # actually being processed on -- not just the day it was
+                    # originally queued. Needed because check_tasks()'s date-
+                    # rollover branch (above) can flip this same task dict's
+                    # run_today back to False while it's sitting un-drained in
+                    # task_queue during a pause that spans midnight (see
+                    # _pause_processing()); without this, the task would still
+                    # get sent here (task_queue processing doesn't consult
+                    # run_today at all), but would then incorrectly fire again
+                    # later the same day when check_tasks() sees a stale False.
+                    # Inside this try (not before it) so a failure here is
+                    # covered by the same finally that decrements
+                    # _processing_count below -- otherwise a raised exception
+                    # here would leave the count permanently incremented for
+                    # this manager, since the dequeue block above already
+                    # incremented it.
+                    task['run_today'] = True
                 result = self.finish_task(task)
                 if result != 0:
                     self.app.add_to_transcript(f"Task {task['task_type']} failed with error code {result}.", "ERROR")
@@ -422,7 +472,7 @@ class TaskManager():
                 # note: changed print to add_to_transcript and removed the thing that kills the manager
             finally:
                 with self._work_state_lock:
-                    self._processing.clear()
+                    self._processing_count -= 1
         self.app.add_to_transcript(f"{self.name} processor stopped.", "INFO")
 
     def stop(self) -> None:

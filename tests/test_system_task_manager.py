@@ -17,7 +17,8 @@ def make_manager(fake_app):
     stm._now = datetime.now
     stm._last_reset_date = datetime.now().date()
     stm.task_queue = queue.Queue()
-    stm._processing = threading.Event()
+    stm._processing_count = 0
+    stm._pause_check_failure_notified = False
     stm._work_state_lock = threading.Lock()
     stm.task_types = {}
     return stm
@@ -295,7 +296,7 @@ def test_process_task_dispatches_with_r_script_path(fake_app, mocker):
 def test_pause_processing_always_false_regardless_of_own_state(fake_app):
     stm = make_manager(fake_app)
     stm.task_queue.put({'task_type': 'RUN_R_SCRIPT'})
-    stm._processing.set()
+    stm._processing_count += 1
 
     assert stm._pause_processing() is False
 
