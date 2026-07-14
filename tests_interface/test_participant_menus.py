@@ -837,6 +837,55 @@ def test_add_participant_menu_unique_id_collision_regenerates(fake_interface, mo
     assert payload['unique_id'] == '222222222'
 
 
+def test_add_participant_menu_unique_id_double_collision_regenerates_again(fake_interface, monkeypatch, capsys):
+    """Regression test for a fixed bug: the old code only regenerated and
+    rechecked once -- a second (rare, but possible) collision against the
+    freshly-generated replacement went undetected here entirely, and would
+    only surface later as the server's own 409 rejection. Now it keeps
+    regenerating and rechecking until it finds an id that's actually free.
+    """
+    fake_interface.commands_queue = deque(['x'])
+    fake_interface.inputs_queue.put('Alice')
+    fake_interface.inputs_queue.put('3000')
+    fake_interface.inputs_queue.put('123456789')
+    fake_interface.inputs_queue.put('y')
+    fake_interface.inputs_queue.put('')
+    for _ in range(4):
+        fake_interface.inputs_queue.put('')
+    randint_values = iter([222222222, 333333333])
+    monkeypatch.setattr(apm.random, 'randint', lambda a, b: next(randint_values))
+    fake_interface.api = MagicMock(side_effect=[
+        (True, {'participants': [{'unique_id': '123456789'}, {'unique_id': '222222222'}]}),
+        (True, True),
+    ])
+
+    apm.add_participant_menu(fake_interface)
+
+    out = capsys.readouterr().out
+    assert "already exists. Generated a new one: 222222222" in out
+    assert "already exists. Generated a new one: 333333333" in out
+    payload = fake_interface.api.call_args_list[1].kwargs['json']
+    assert payload['unique_id'] == '333333333'
+
+
+def test_add_participant_menu_unique_id_collision_exceeds_max_attempts_errors(fake_interface, monkeypatch, capsys):
+    """Every regenerated id collides -- the loop must give up with a clear
+    error rather than spinning forever."""
+    fake_interface.commands_queue = deque(['x'])
+    fake_interface.inputs_queue.put('Alice')
+    fake_interface.inputs_queue.put('3000')
+    fake_interface.inputs_queue.put('123456789')
+    monkeypatch.setattr(apm.random, 'randint', lambda a, b: 123456789)
+    fake_interface.api = MagicMock(return_value=(True, {'participants': [{'unique_id': '123456789'}]}))
+
+    apm.add_participant_menu(fake_interface)
+
+    out = capsys.readouterr().out
+    assert 'Could not generate a unique ID' in out
+    # Never reached the add POST -- only the dedup GET.
+    fake_interface.api.assert_called_once()
+
+
 def test_add_participant_menu_rejects_malformed_phone_number(fake_interface, capsys):
     fake_interface.commands_queue = deque(['x'])
     fake_interface.inputs_queue.put('Alice')

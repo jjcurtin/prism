@@ -7,6 +7,8 @@ from user_interface_menus.utils._menu_display import *
 from user_interface_menus._menu_helper import *
 from user_interface_menus._types import Interface
 
+MAX_UNIQUE_ID_COLLISION_ATTEMPTS = 10
+
 def add_participant_menu(self: Interface) -> None:
     """Generates a random 9-digit unique_id when the user doesn't supply a
     valid one, and regenerates again if that ID collides with an existing
@@ -29,11 +31,26 @@ def add_participant_menu(self: Interface) -> None:
         print(f"Unique ID not valid. Generated: {unique_id}")
     existing_ok, existing_participants = self.api("GET", "participants/get_participants")
     if existing_ok and existing_participants:
-        for participant in existing_participants.get("participants", []):
-            if participant.get("unique_id") == unique_id:
-                new_unique_id = str(random.randint(100000000, 999999999))
-                print(f"Unique ID '{unique_id}' already exists. Generated a new one: {new_unique_id}")
-                unique_id = new_unique_id
+        existing_ids = {
+            participant.get("unique_id") for participant in existing_participants.get("participants", [])
+        }
+        # A single regenerate-and-check used to leave a second (rare, but
+        # possible) collision undetected until the server's own 409
+        # rejection -- this keeps regenerating and rechecking against the
+        # full existing list until it finds a genuinely free id, bounded
+        # so a pathological all-ids-taken state can't spin forever.
+        attempts = 0
+        while unique_id in existing_ids:
+            attempts += 1
+            if attempts > MAX_UNIQUE_ID_COLLISION_ATTEMPTS:
+                error(
+                    f"Could not generate a unique ID after {MAX_UNIQUE_ID_COLLISION_ATTEMPTS} attempts; "
+                    "please try again.", self
+                )
+                return
+            new_unique_id = str(random.randint(100000000, 999999999))
+            print(f"Unique ID '{unique_id}' already exists. Generated a new one: {new_unique_id}")
+            unique_id = new_unique_id
     on_study = prompt_confirmation(self, prompt = "On study?")
     phone_number = get_input(self, prompt = "Phone number (press enter to skip): ")
     if phone_number and not PHONE_NUMBER_RE.fullmatch(phone_number):
