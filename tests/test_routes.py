@@ -800,6 +800,26 @@ def test_study_announcement_live_mode_logs_elapsed_send_time(routes_client, rout
     assert any('Study announcement send finished in' in msg for _, msg in routes_app_instance.transcript)
 
 
+def test_study_announcement_live_mode_zero_attempted_is_502(routes_client, routes_app_instance, monkeypatch):
+    """Regression test for a fixed bug: when every participant in scope had
+    a blank phone number, `attempted` stayed 0, which made the
+    `attempted and failed == attempted` all-failed check vacuously False --
+    the route fell through and reported a 200 success despite never
+    attempting a single send.
+    """
+    routes_app_instance.mode = 'live'
+    routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.return_value = [
+        ('000000000', ''), ('000000001', '   '),
+    ]
+    send_sms_mock = MagicMock(return_value=0)
+    monkeypatch.setattr('_routes.send_sms', send_sms_mock)
+
+    resp = routes_client.post('/participants/study_announcement/yes', json={'message': 'hi'})
+
+    assert resp.status_code == 502
+    send_sms_mock.assert_not_called()
+
+
 # ------------------------------------------------------------
 # Study-wide EMA/feedback pause switch (ema_on/ema_off/feedback_on/feedback_off)
 # ------------------------------------------------------------
@@ -982,6 +1002,23 @@ def test_send_studywide_survey_logs_scope_and_elapsed_time(routes_client, routes
     messages = [msg for _, msg in routes_app_instance.transcript]
     assert any('Studywide ema send' in msg and 'all participants' in msg for msg in messages)
     assert any('Studywide ema send finished in' in msg for msg in messages)
+
+
+def test_send_studywide_survey_zero_attempted_is_502(routes_client, routes_app_instance):
+    """Regression test for a fixed bug: when every participant in scope had
+    a blank phone number, `attempted` stayed 0, which made the
+    `attempted and failed == attempted` all-failed check vacuously False --
+    the route fell through and reported a 200 success despite never
+    attempting a single send.
+    """
+    routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.return_value = [
+        ('000000000', ''), ('000000001', '   '),
+    ]
+
+    resp = routes_client.post('/participants/send_studywide_survey/ema/yes')
+
+    assert resp.status_code == 502
+    routes_app_instance.participant_manager.add_task.assert_not_called()
 
 
 # ------------------------------------------------------------

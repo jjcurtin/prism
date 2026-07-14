@@ -392,7 +392,12 @@ def create_flask_app(app_instance: App) -> Flask:
                 f"Study announcement send finished in {elapsed_seconds:.1f}s "
                 f"({attempted} attempted, {failed} failed).", "INFO"
             )
-            if attempted and failed == attempted:
+            if attempted == 0:
+                app_instance.add_to_transcript(
+                    "Study announcement failed: no participant in scope had a valid phone number on file", "ERROR"
+                )
+                return jsonify({"error": "No participant in scope had a valid phone number on file; nothing was sent."}), 502
+            if failed == attempted:
                 return jsonify({"error": "Failed to send study announcement to any participant"}), 502
             if failed:
                 return jsonify({"message": f"Study announcement sent, but failed for {failed} of {attempted} participants."}), 200
@@ -486,7 +491,12 @@ def create_flask_app(app_instance: App) -> Flask:
             f"Studywide {survey_type} send finished in {elapsed_seconds:.1f}s "
             f"({attempted} attempted, {failed} failed).", "INFO"
         )
-        if attempted and failed == attempted:
+        if attempted == 0:
+            app_instance.add_to_transcript(
+                f"Studywide {survey_type} send failed: no participant in scope had a valid phone number on file", "ERROR"
+            )
+            return jsonify({"error": "No participant in scope had a valid phone number on file; nothing was sent."}), 502
+        if failed == attempted:
             return jsonify({"error": f"Failed to send {survey_type} to any participant"}), 502
         if failed:
             return jsonify({
