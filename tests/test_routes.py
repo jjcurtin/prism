@@ -436,6 +436,25 @@ def test_add_participant_strips_phone_number_before_persisting(routes_client, ro
     assert persisted['phone_number'] == '5555550100'
 
 
+def test_add_participant_strips_unique_id_before_persisting(routes_client, routes_app_instance):
+    """Regression test: validation checked a .strip()-ed local copy of
+    unique_id, but the unstripped original in `data` was what actually got
+    passed to add_participant() -- a padded value like ' 123 ' validated
+    fine (passes after stripping) but would have been persisted with the
+    whitespace still attached, making the participant unreachable via
+    get_participant() (which is only ever called with an already-stripped
+    id) until a CSV reload normalized it back.
+    """
+    routes_app_instance.participant_manager.add_participant.return_value = 0
+    payload = dict(ADD_PARTICIPANT_PAYLOAD, unique_id=' 123 ')
+
+    resp = routes_client.post('/participants/add_participant', json=payload)
+
+    assert resp.status_code == 200
+    persisted = routes_app_instance.participant_manager.add_participant.call_args[0][0]
+    assert persisted['unique_id'] == '123'
+
+
 def test_remove_participant_success(routes_client, routes_app_instance):
     routes_app_instance.participant_manager.remove_participant.return_value = 0
     resp = routes_client.delete('/participants/remove_participant/1')

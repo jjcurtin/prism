@@ -225,8 +225,17 @@ def create_flask_app(app_instance: App) -> Flask:
         # caught it.
         if not all(field in PARTICIPANT_CSV_HEADERS for field in data):
             return jsonify({"error": "Unknown field(s) in request body"}), 400
-        if not str(data['unique_id']).strip():
+        # Written back into `data` (not just validated as a local copy) --
+        # same reason as phone_number below: a padded value like " 123 "
+        # validates fine after stripping, but without the write-back it's
+        # the unstripped value that gets persisted, and unique_id is the
+        # join key every route looks up by (always stripped/str-shaped),
+        # so a padded or non-string id would be unreachable via the API
+        # until a CSV reload normalized it back to a plain string.
+        unique_id = str(data['unique_id']).strip()
+        if not unique_id:
             return jsonify({"error": "unique_id cannot be empty"}), 400
+        data['unique_id'] = unique_id
         # A blank phone_number is still allowed here -- matches the
         # interface's existing "press enter to skip" behavior
         # (_add_participant_menu.py) -- only a non-empty, malformed value
