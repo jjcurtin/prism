@@ -47,7 +47,27 @@ class RunRScript(SystemTask):
             return 1
         resolved_script = os.path.realpath(script_full_path)
         resolved_scripts_dir = os.path.realpath(scripts_dir)
-        if os.path.commonpath([resolved_script, resolved_scripts_dir]) != resolved_scripts_dir:
+        try:
+            # normcase on both sides *before* commonpath, not after --
+            # commonpath compares path components as raw strings to find
+            # the common prefix, so case-folding only the result would
+            # already be too late: on a case-insensitive filesystem
+            # (Windows, older macOS), a script path differing only in case
+            # from scripts_dir would make commonpath conclude they share no
+            # common directory at all, falsely rejecting it as an escape.
+            normcased_scripts_dir = os.path.normcase(resolved_scripts_dir)
+            escapes = os.path.commonpath([
+                os.path.normcase(resolved_script), normcased_scripts_dir
+            ]) != normcased_scripts_dir
+        except ValueError:
+            # commonpath raises ValueError when the paths can't be compared
+            # at all (e.g. mixed absolute/relative forms, or different
+            # drives on Windows) -- containment can't be verified, so
+            # refuse the same way an actual escape would, rather than
+            # letting this propagate as a generic unhandled-exception
+            # failure.
+            escapes = True
+        if escapes:
             self.app.add_to_transcript(f"R script path {self.r_script_path} escapes the scripts directory {scripts_dir}. Refusing to run.", "ERROR")
             return 1
         try:

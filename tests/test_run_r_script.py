@@ -47,6 +47,60 @@ def test_run_rejects_script_path_that_escapes_scripts_dir(tmp_path, fake_app, mo
     assert any('escapes' in msg for _, msg in fake_app.transcript)
 
 
+def test_run_commonpath_value_error_is_treated_as_escape(tmp_path, fake_app, mocker):
+    """Regression test: os.path.commonpath() raises ValueError when the two
+    paths can't be compared at all (e.g. different drives on Windows). That
+    call used to sit outside any try/except, so the ValueError propagated
+    as a generic unhandled exception instead of the same clear refusal
+    message an actual escape gets.
+    """
+    (tmp_path / 'cleanup.R').write_text('# fake R script')
+    fake_app.r_scripts_dir = str(tmp_path)
+    original_cwd = os.getcwd()
+    mock_run = mocker.patch('system_tasks._run_r_script.subprocess.run')
+    mocker.patch(
+        'system_tasks._run_r_script.os.path.commonpath',
+        side_effect=ValueError("Paths don't have the same drive"),
+    )
+
+    result = RunRScript(fake_app, 'cleanup.R').run()
+
+    assert result == 1
+    assert os.getcwd() == original_cwd
+    mock_run.assert_not_called()
+    assert any('escapes' in msg for _, msg in fake_app.transcript)
+
+
+def test_run_allows_scripts_dir_that_differs_only_in_case(tmp_path, fake_app, mocker):
+    """Regression test: commonpath() is case-sensitive, but Windows/older
+    macOS filesystems are case-insensitive -- a script path resolving to
+    the same real directory as scripts_dir, differing only in letter case,
+    used to be falsely rejected as escaping. This repo runs on Linux, where
+    os.path.normcase() is a no-op (POSIX paths are genuinely
+    case-sensitive), so os.path.normcase is patched here to fold case the
+    way it actually does on Windows/ntpath -- exercising the code's use of
+    normcase rather than relying on this host's own case-sensitivity.
+    """
+    (tmp_path / 'cleanup.R').write_text('# fake R script')
+    fake_app.r_scripts_dir = str(tmp_path)
+    original_cwd = os.getcwd()
+    mock_result = mocker.Mock(returncode=0, stdout='done', stderr='')
+    mock_run = mocker.patch('system_tasks._run_r_script.subprocess.run', return_value=mock_result)
+    real_script_path = str(tmp_path / 'cleanup.R')
+    mocker.patch(
+        'system_tasks._run_r_script.os.path.realpath',
+        side_effect=lambda p: real_script_path.upper() if p.endswith('cleanup.R') else str(tmp_path),
+    )
+    mocker.patch('system_tasks._run_r_script.os.path.normcase', side_effect=lambda p: p.lower())
+
+    result = RunRScript(fake_app, 'cleanup.R').run()
+
+    assert result == 0
+    assert os.getcwd() == original_cwd
+    mock_run.assert_called_once()
+    assert not any('escapes' in msg for _, msg in fake_app.transcript)
+
+
 def test_run_success_restores_cwd_and_logs_output(tmp_path, fake_app, mocker):
     (tmp_path / 'cleanup.R').write_text('# fake R script')
     fake_app.r_scripts_dir = str(tmp_path)
