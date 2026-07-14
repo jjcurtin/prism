@@ -33,6 +33,7 @@ def make_manager(fake_app):
     pm.feedback_sent_all_ids = set()
     pm.task_queue = queue.Queue()
     pm._processing = threading.Event()
+    pm._work_state_lock = threading.Lock()
     pm.participants = []
     pm.survey_types = {
         'ema': 'ema_time',

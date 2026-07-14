@@ -18,6 +18,7 @@ def make_manager(fake_app):
     stm._last_reset_date = datetime.now().date()
     stm.task_queue = queue.Queue()
     stm._processing = threading.Event()
+    stm._work_state_lock = threading.Lock()
     stm.task_types = {}
     return stm
 

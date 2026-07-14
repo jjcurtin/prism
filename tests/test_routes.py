@@ -178,13 +178,13 @@ def test_clear_task_schedule(routes_client, routes_app_instance):
 
 
 def test_execute_task_success(routes_client, routes_app_instance):
-    routes_app_instance.system_task_manager.process_task.return_value = 0
+    routes_app_instance.system_task_manager.process_task_with_tracking.return_value = 0
     resp = routes_client.post('/system/execute_task/CHECK_SYSTEM')
     assert resp.status_code == 200
 
 
 def test_execute_task_failure(routes_client, routes_app_instance):
-    routes_app_instance.system_task_manager.process_task.return_value = 1
+    routes_app_instance.system_task_manager.process_task_with_tracking.return_value = 1
     resp = routes_client.post('/system/execute_task/CHECK_SYSTEM')
     assert resp.status_code == 500
 
@@ -197,12 +197,12 @@ def test_execute_task_invalid_type(routes_client):
 def test_execute_task_rejects_run_r_script(routes_client, routes_app_instance):
     """Regression test for a fixed bug: this route calls process_task with
     no r_script_path key at all -- RunRScript.__init__ requires it, so this
-    used to raise TypeError. Now rejected outright, before process_task is
-    reached.
+    used to raise TypeError. Now rejected outright, before
+    process_task_with_tracking is reached.
     """
     resp = routes_client.post('/system/execute_task/RUN_R_SCRIPT')
     assert resp.status_code == 400
-    routes_app_instance.system_task_manager.process_task.assert_not_called()
+    routes_app_instance.system_task_manager.process_task_with_tracking.assert_not_called()
 
 
 def test_add_r_script_task_success(routes_client, routes_app_instance):
@@ -239,15 +239,15 @@ def test_remove_r_script_task_invalid_time_is_clean_400(routes_client):
 
 
 def test_execute_r_script_task_success(routes_client, routes_app_instance):
-    routes_app_instance.system_task_manager.process_task.return_value = 0
+    routes_app_instance.system_task_manager.process_task_with_tracking.return_value = 0
     resp = routes_client.post('/system/execute_r_script_task/myscript.R')
     assert resp.status_code == 200
-    args, kwargs = routes_app_instance.system_task_manager.process_task.call_args
+    args, kwargs = routes_app_instance.system_task_manager.process_task_with_tracking.call_args
     assert args[0] == {'task_type': 'RUN_R_SCRIPT', 'r_script_path': 'myscript.R'}
 
 
 def test_execute_r_script_task_failure(routes_client, routes_app_instance):
-    routes_app_instance.system_task_manager.process_task.return_value = 1
+    routes_app_instance.system_task_manager.process_task_with_tracking.return_value = 1
     resp = routes_client.post('/system/execute_r_script_task/myscript.R')
     assert resp.status_code == 500
 

@@ -67,6 +67,15 @@ class TaskManager():
         # conventional thread-safe primitive for a flag read/written across
         # threads, and costs nothing over a bool for that guarantee.
         self._processing = threading.Event()
+        # Guards the dequeue-then-mark-busy transition in run() below so
+        # has_pending_work() can never observe "queue empty AND not
+        # processing" in the narrow window between task_queue.get() actually
+        # removing an item and _processing.set() reflecting that -- both
+        # steps happen inside one critical section under this lock, and
+        # has_pending_work() takes the same lock to read them consistently.
+        # A plain Lock (not the RLock used for _tasks_lock) -- nothing here
+        # re-enters while already holding it.
+        self._work_state_lock = threading.Lock()
         # Injected rather than calling datetime.now()/date.today() inline in
         # check_tasks()/add_task() below -- an ambient wall-clock read is an
         # input a test can't control, so tests end up either not exercising
@@ -245,14 +254,38 @@ class TaskManager():
 
     def has_pending_work(self) -> bool:
         """True if this manager has a task sitting in task_queue waiting to
-        be pulled, or is currently inside finish_task() actively processing
-        one -- i.e. there's work either queued or in flight right now. Used
-        by ParticipantManager's _pause_processing() override (see
-        _participant_manager.py) to give SystemTaskManager unconditional
-        priority: SystemTaskManager itself never calls this on anyone (its
-        own _pause_processing() stays the base-class False, see below).
+        be pulled, or is currently inside finish_task()/process_task_with_
+        tracking() actively processing one -- i.e. there's work either
+        queued or in flight right now. Used by ParticipantManager's
+        _pause_processing() override (see _participant_manager.py) to give
+        SystemTaskManager unconditional priority: SystemTaskManager itself
+        never calls this on anyone (its own _pause_processing() stays the
+        base-class False, see below).
+
+        Takes _work_state_lock so this can never observe the narrow window
+        in run() between task_queue.get_nowait() removing an item and
+        self._processing.set() reflecting that -- both happen atomically
+        under the same lock (see run() below).
         """
-        return not self.task_queue.empty() or self._processing.is_set()
+        with self._work_state_lock:
+            return not self.task_queue.empty() or self._processing.is_set()
+
+    def process_task_with_tracking(self, task: Task) -> int:
+        """Entry point for callers outside the run() scheduling loop (e.g. a
+        manual _routes.py trigger) that need has_pending_work() to reflect
+        this task for its entire processing span, the same way run()'s own
+        scheduled dispatch already does for itself (see run() below).
+        process_task() itself is left unwrapped -- run()'s own dequeue-to-
+        processing span is the single source of truth for the scheduled
+        path and must not be double-wrapped by this method too.
+        """
+        with self._work_state_lock:
+            self._processing.set()
+        try:
+            return self.process_task(task)
+        finally:
+            with self._work_state_lock:
+                self._processing.clear()
 
     def _pause_processing(self) -> bool:
         """Overridable hook, checked once per run() iteration before this
@@ -319,41 +352,61 @@ class TaskManager():
                 self.app.add_to_transcript(f"An error occurred while checking scheduled tasks in {self.name}: {e}", "ERROR")
             # Checked after check_tasks() (so scheduling/due-marking is
             # never skipped -- a task can still become due and get queued
-            # while paused) but before task_queue.get()/finish_task() below
-            # (so a due task isn't actually pulled and processed while
-            # paused). Base class/SystemTaskManager: always False, never
-            # pauses. ParticipantManager overrides this to defer to
-            # SystemTaskManager's pending/in-progress work -- see
-            # _pause_processing()'s own docstring above.
-            if self._pause_processing():
+            # while paused) but before the dequeue below (so a due task
+            # isn't actually pulled and processed while paused). Base
+            # class/SystemTaskManager: always False, never pauses.
+            # ParticipantManager overrides this to defer to SystemTaskManager's
+            # pending/in-progress work -- see _pause_processing()'s own
+            # docstring above. Guarded the same way check_tasks() is just
+            # above -- an unhandled exception here must not silently kill
+            # this unsupervised thread either.
+            try:
+                should_pause = self._pause_processing()
+            except Exception as e:
+                self.app.add_to_transcript(f"An error occurred while checking whether to pause processing in {self.name}: {e}", "ERROR")
+                should_pause = False
+            if should_pause:
                 time.sleep(1)  # matches this loop's own ~1s poll cadence
                 continue
-            # Reassigned every iteration (rather than relying on 'task' in
-            # locals()) -- a plain local variable stays bound for the rest
-            # of this function's life once first assigned on any earlier
-            # iteration, so a later exception raised before task_queue.get()
-            # returns would otherwise report a PREVIOUS iteration's task
-            # instead of "unknown".
+            # Dequeue and mark-busy happen atomically under _work_state_lock
+            # so has_pending_work() (which takes the same lock) can never
+            # observe the queue as empty before _processing reflects that a
+            # task was actually pulled -- see _work_state_lock's own comment
+            # in __init__. get_nowait() (not the previous blocking
+            # get(timeout=1)) is safe here specifically because task_queue
+            # is fed exclusively by this same thread's own check_tasks()
+            # call immediately above, every iteration -- nothing else ever
+            # inserts an item mid-wait, so there's no responsiveness lost by
+            # not blocking.
             task: Task | None = None
-            try:
-                task = self.task_queue.get(timeout = 1)
-                # self._processing is set for the exact span finish_task()
-                # is actively running (cleared in a `finally` so it's never
-                # left stuck set by a finish_task()/process_task() failure)
-                # -- has_pending_work() above reports "busy" for this whole
-                # duration, not just the time a task previously sat in
-                # task_queue waiting to be pulled.
-                self._processing.set()
+            with self._work_state_lock:
                 try:
-                    result = self.finish_task(task)
-                finally:
-                    self._processing.clear()
+                    task = self.task_queue.get_nowait()
+                except queue.Empty:
+                    pass
+                else:
+                    self._processing.set()
+            if task is None:
+                time.sleep(1)  # matches this loop's own ~1s poll cadence
+                continue
+            with self._tasks_lock:
+                # Reaffirms run_today=True for the calendar day this task is
+                # actually being processed on -- not just the day it was
+                # originally queued. Needed because check_tasks()'s date-
+                # rollover branch (above) can flip this same task dict's
+                # run_today back to False while it's sitting un-drained in
+                # task_queue during a pause that spans midnight (see
+                # _pause_processing()); without this, the task would still
+                # get sent here (task_queue processing doesn't consult
+                # run_today at all), but would then incorrectly fire again
+                # later the same day when check_tasks() sees a stale False.
+                task['run_today'] = True
+            try:
+                result = self.finish_task(task)
                 if result != 0:
                     self.app.add_to_transcript(f"Task {task['task_type']} failed with error code {result}.", "ERROR")
-            except queue.Empty:
-                pass
             except Exception as e:
-                task_type = task.get('task_type', '?') if task is not None else '?'
+                task_type = task.get('task_type', '?')
                 self.app.add_to_transcript(f"An error occurred while processing task {task_type}: {e}", "ERROR")
                 # Defensively wrapped: notify_coordinators() itself failing
                 # (e.g. the same broken-Twilio-credentials root cause that
@@ -367,6 +420,9 @@ class TaskManager():
                 except Exception as notify_error:
                     self.app.add_to_transcript(f"Also failed to notify coordinators about that error: {notify_error}", "ERROR")
                 # note: changed print to add_to_transcript and removed the thing that kills the manager
+            finally:
+                with self._work_state_lock:
+                    self._processing.clear()
         self.app.add_to_transcript(f"{self.name} processor stopped.", "INFO")
 
     def stop(self) -> None:

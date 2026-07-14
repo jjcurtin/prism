@@ -26,6 +26,7 @@ def make_manager(fake_app):
     tm._last_reset_date = datetime.now().date()
     tm.task_queue = queue.Queue()
     tm._processing = threading.Event()
+    tm._work_state_lock = threading.Lock()
     return tm
 
 
@@ -509,35 +510,77 @@ def test_run_notify_coordinators_failure_does_not_crash_loop(fake_app, mocker):
     )
 
 
-def test_run_reports_new_iterations_task_type_not_a_stale_locals_value(fake_app, mocker):
+def test_run_reports_current_iterations_task_type_not_a_stale_value(fake_app):
     """Regression test for a fixed bug: run()'s except handler used to
     check 'task' in locals() to decide what to report -- but a plain local
     variable stays bound for the rest of the function's life once set on
-    any earlier iteration, so a later iteration's exception raised BEFORE
-    task_queue.get() returns incorrectly reported the PREVIOUS iteration's
-    task_type instead of '?'. task is now reassigned to None at the top of
-    every iteration.
+    any earlier iteration, so a later iteration's exception could
+    incorrectly report a PREVIOUS iteration's task_type instead of the
+    current one. task is now reassigned to None at the top of every
+    iteration, and the dequeue block only ever hands finish_task()'s
+    exception handler the task that was actually just pulled (get_nowait()
+    replaced the old get(timeout=1); an exception there is only ever
+    queue.Empty, handled separately, so this test now exercises the
+    equivalent guarantee via two real, distinct queued tasks instead of a
+    patched task_queue.get()).
     """
     tm = make_manager(fake_app)
     tm.running = True
-    tm.process_task = lambda task: 0
     calls = {'n': 0}
-    real_get = tm.task_queue.get
 
-    def flaky_get(*args, **kwargs):
+    def flaky_process_task(task):
         calls['n'] += 1
         if calls['n'] == 1:
-            return {'task_type': 'REAL_TASK'}
+            return 0  # first task (TASK_A) succeeds, no exception
         tm.running = False
-        raise RuntimeError('boom before get() returns')
+        raise RuntimeError('boom on second task')
 
-    tm.task_queue.get = flaky_get
+    tm.process_task = flaky_process_task
+    tm.task_queue.put({'task_type': 'TASK_A', 'one_time': False})
+    tm.task_queue.put({'task_type': 'TASK_B', 'one_time': False})
 
     tm.run()
 
     error_messages = [msg for level, msg in fake_app.transcript if level == 'ERROR']
-    assert any('processing task ?:' in msg for msg in error_messages)
-    assert not any('processing task REAL_TASK:' in msg for msg in error_messages)
+    assert any('processing task TASK_B:' in msg for msg in error_messages)
+    assert not any('processing task TASK_A:' in msg for msg in error_messages)
+
+
+def test_run_uses_get_nowait_not_blocking_get(fake_app):
+    """Locks in the dequeue mechanism itself: run() must call
+    task_queue.get_nowait() directly (not the previous blocking
+    task_queue.get(timeout=1)) -- get_nowait() is safe here since
+    check_tasks() (called immediately before, every iteration, in this same
+    thread) is the only other place that ever puts to task_queue. Spies on
+    get_nowait() itself (rather than patching .get, which get_nowait() calls
+    internally with block=False and would therefore also intercept) to
+    confirm it's really the method run() invokes.
+    """
+    tm = make_manager(fake_app)
+    tm.running = True
+    task = {'task_type': 'CHECK_SYSTEM', 'task_time': time(3, 0, 0), 'run_today': True}
+    tm.tasks = [task]
+    tm.task_queue.put(task)
+    tm.check_tasks = lambda: None
+
+    real_get_nowait = tm.task_queue.get_nowait
+    calls = {'n': 0}
+
+    def spying_get_nowait(*args, **kwargs):
+        calls['n'] += 1
+        return real_get_nowait(*args, **kwargs)
+
+    tm.task_queue.get_nowait = spying_get_nowait
+
+    def stop_after_one(t):
+        tm.running = False
+        return 0
+    tm.process_task = stop_after_one
+
+    tm.run()
+
+    assert calls['n'] == 1
+    assert tm._processing.is_set() is False
 
 
 def test_run_outer_catch_all_notifies_coordinators(fake_app, mocker):
@@ -886,3 +929,183 @@ def test_run_resumes_processing_once_pause_clears(fake_app, mocker):
     tm.run()
 
     assert processed == [task]
+
+
+# ------------------------------------------------------------
+# process_task_with_tracking() -- entry point for callers outside run()'s
+# scheduling loop (e.g. _routes.py's manual execute_task/
+# execute_r_script_task routes) that need has_pending_work() to reflect a
+# manually-triggered task for its whole processing span, the same way
+# run()'s own scheduled dispatch already does.
+# ------------------------------------------------------------
+
+def test_process_task_with_tracking_sets_processing_flag_for_the_duration(fake_app):
+    tm = make_manager(fake_app)
+    observed = {}
+
+    def observe(task):
+        observed['was_set_during_processing'] = tm._processing.is_set()
+        return 0
+
+    tm.process_task = observe
+
+    result = tm.process_task_with_tracking({'task_type': 'RUN_R_SCRIPT'})
+
+    assert result == 0
+    assert observed['was_set_during_processing'] is True
+    assert tm._processing.is_set() is False  # cleared again after process_task() returns
+
+
+def test_process_task_with_tracking_clears_processing_flag_even_when_process_task_raises(fake_app):
+    tm = make_manager(fake_app)
+
+    def failing_process_task(task):
+        raise RuntimeError('boom')
+
+    tm.process_task = failing_process_task
+
+    with pytest.raises(RuntimeError):
+        tm.process_task_with_tracking({'task_type': 'RUN_R_SCRIPT'})
+
+    assert tm._processing.is_set() is False
+
+
+def test_has_pending_work_true_while_process_task_with_tracking_runs(fake_app):
+    """The whole point of process_task_with_tracking(): a manually-triggered
+    system task (e.g. a manually-triggered R script, up to 3h) must make
+    has_pending_work() report True for its entire span, not just for a
+    scheduled task dispatched through run()."""
+    tm = make_manager(fake_app)
+    observed = {}
+
+    def observe(task):
+        observed['pending'] = tm.has_pending_work()
+        return 0
+
+    tm.process_task = observe
+
+    tm.process_task_with_tracking({'task_type': 'RUN_R_SCRIPT'})
+
+    assert observed['pending'] is True
+    assert tm.has_pending_work() is False
+
+
+# ------------------------------------------------------------
+# run()'s _pause_processing() call is now guarded -- an exception there
+# must not silently kill this unsupervised background thread, mirroring
+# the existing check_tasks()-raises-doesn't-crash protection.
+# ------------------------------------------------------------
+
+def test_run_pause_processing_exception_does_not_crash_loop(fake_app):
+    tm = make_manager(fake_app)
+    tm.running = True
+    calls = {'n': 0}
+
+    def flaky_pause_processing():
+        calls['n'] += 1
+        if calls['n'] == 1:
+            raise RuntimeError('pause check boom')
+        tm.running = False
+        return False
+
+    tm._pause_processing = flaky_pause_processing
+
+    tm.run()  # must not raise
+
+    assert calls['n'] == 2
+    assert any('pause check boom' in msg for _, msg in fake_app.transcript)
+
+
+def test_run_does_not_pause_on_the_iteration_pause_processing_raised(fake_app):
+    """A raising _pause_processing() must be treated as should_pause=False
+    for that iteration (fail open, not fail paused) -- a due task in
+    task_queue still gets processed on that very same iteration rather than
+    being stuck behind a broken pause check forever."""
+    tm = make_manager(fake_app)
+    tm.running = True
+    tm.check_tasks = lambda: None  # isolates this test to the pause/dequeue steps
+    task = {'task_type': 'CHECK_SYSTEM', 'task_time': time(3, 0, 0), 'run_today': True}
+    tm.tasks = [task]
+    tm.task_queue.put(task)
+    processed = []
+
+    def flaky_pause_processing():
+        raise RuntimeError('pause check boom')
+
+    tm._pause_processing = flaky_pause_processing
+
+    def process_and_stop(t):
+        processed.append(t)
+        tm.running = False
+        return 0
+
+    tm.process_task = process_and_stop
+
+    tm.run()
+
+    assert processed == [task]
+
+
+# ------------------------------------------------------------
+# Midnight-rollover duplicate-SMS fix: run()'s dequeue block reaffirms
+# run_today=True for the task it's actually processing right now, since
+# check_tasks()'s date-rollover branch can flip run_today back to False on
+# a task still sitting un-drained in task_queue during a pause spanning
+# midnight (see ParticipantManager._pause_processing()).
+# ------------------------------------------------------------
+
+def test_run_reaffirms_run_today_after_midnight_rollover_while_queued(fake_app):
+    """A task queued before midnight (run_today=True), still un-drained in
+    task_queue when check_tasks()'s rollover branch resets its run_today
+    back to False (simulated directly here -- the same object a paused
+    background thread would have flipped), must end up with
+    run_today=True again once run() actually dequeues and processes it --
+    otherwise it would incorrectly fire a second time later the same day.
+    """
+    tm = make_manager(fake_app)
+    tm.running = True
+    task = {'task_type': 'ema', 'task_time': time(23, 0, 0), 'run_today': True}
+    tm.tasks = [task]
+    tm.task_queue.put(task)
+    # Simulates check_tasks()'s own date-rollover branch flipping this same
+    # still-queued task dict's run_today back to False.
+    task['run_today'] = False
+    # Isolates this test to run()'s own dequeue step -- not check_tasks(),
+    # which is exercised separately above.
+    tm.check_tasks = lambda: None
+
+    def stop_after_one(t):
+        tm.running = False
+        return 0
+
+    tm.process_task = stop_after_one
+
+    tm.run()
+
+    assert task['run_today'] is True
+
+
+def test_run_leaves_run_today_true_for_same_day_no_rollover(fake_app):
+    """Confirms no regression to the ordinary (no midnight rollover) case:
+    a task processed same-day, with no rollover in between, still ends up
+    with run_today=True -- this should already hold trivially, since
+    check_tasks() itself sets it True at queue time, but this locks it in
+    against the new reaffirm-at-dequeue-time logic ever accidentally
+    clearing it instead.
+    """
+    tm = make_manager(fake_app)
+    tm.running = True
+    task = {'task_type': 'CHECK_SYSTEM', 'task_time': time(3, 0, 0), 'run_today': True}
+    tm.tasks = [task]
+    tm.task_queue.put(task)
+    tm.check_tasks = lambda: None
+
+    def stop_after_one(t):
+        tm.running = False
+        return 0
+
+    tm.process_task = stop_after_one
+
+    tm.run()
+
+    assert task['run_today'] is True

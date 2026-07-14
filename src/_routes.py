@@ -137,7 +137,7 @@ def create_flask_app(app_instance: App) -> Flask:
             # /system/execute_r_script_task/<r_script_path> instead, which
             # already validates a non-empty path.
             return jsonify({"error": "Use /system/execute_r_script_task/<r_script_path> for RUN_R_SCRIPT."}), 400
-        elif app_instance.system_task_manager.process_task({'task_type': task_type}) != 0:
+        elif app_instance.system_task_manager.process_task_with_tracking({'task_type': task_type}) != 0:
             return jsonify({"error": f"Failed to execute {task_type}."}), 500
         return jsonify({"message": f"{task_type} executed successfully."}), 200
     
@@ -171,7 +171,7 @@ def create_flask_app(app_instance: App) -> Flask:
         if not r_script_path:
             return jsonify({"error": "R script path cannot be empty."}), 400
         task = {'task_type': 'RUN_R_SCRIPT', 'r_script_path': r_script_path}
-        if app_instance.system_task_manager.process_task(task) != 0:
+        if app_instance.system_task_manager.process_task_with_tracking(task) != 0:
             return jsonify({"error": f"Failed to execute R script task: {r_script_path}."}), 500
         return jsonify({"message": f"R script task {r_script_path} executed successfully."}), 200
         
