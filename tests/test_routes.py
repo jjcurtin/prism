@@ -6,6 +6,7 @@ a real `create_flask_app(app_instance)`, with `app_instance.system_task_manager`
 no real network, no real config/API files.
 """
 import threading
+import time
 from unittest.mock import MagicMock
 
 import pytest
@@ -1117,6 +1118,76 @@ def test_send_studywide_survey_already_in_progress_is_409(routes_client, routes_
 
     release.set()
     _wait_for_studywide_survey_done(routes_client)
+
+
+def test_send_studywide_survey_concurrent_requests_only_one_starts(routes_client, routes_app_instance):
+    """Real-thread regression test for a fixed bug: the "already in
+    progress" check and the in_progress=True flag-set used to happen in two
+    SEPARATE locked blocks, with the participant lookup/404 check/
+    transcript logging running unlocked in between. Two truly concurrent
+    POSTs could both observe in_progress=False and both pass the check
+    before either set the flag, so both would start their own background
+    send loop -- every participant in scope getting sent to twice.
+
+    Fires two real overlapping POSTs via actual threads (not a
+    call-wait-assert sequence), with an artificial delay injected into
+    get_participant_ids_and_phone_numbers (the first unlocked call after the
+    old check) so both requests reliably reach and pass the check before
+    either can finish the slower work and set the flag -- widening the race
+    window enough to hit it deterministically instead of relying on
+    scheduling luck. Against the pre-fix code both requests get 202 and the
+    background loop runs twice (finish_task called 2x the participant
+    count); against the fix, exactly one gets 202 and the other 409, and
+    finish_task is called exactly once per participant.
+    """
+
+    def slow_get_participants(*args, **kwargs):
+        # Against the pre-fix code, both threads clear the unlocked check
+        # almost immediately (started together, well before either reaches
+        # this call) and then both sit here concurrently -- giving both a
+        # window to fall through to the (separately locked) flag-set
+        # afterward. Against the fix, only the single winning request ever
+        # reaches this call at all (the other already got its 409 from the
+        # atomic guard before this function exists to be invoked), so the
+        # delay costs it nothing but a bit of wall-clock time.
+        time.sleep(0.3)
+        return [('000000000', '5555550100')]
+
+    routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.side_effect = (
+        slow_get_participants
+    )
+    routes_app_instance.participant_manager.add_task.return_value = {'task_type': 'ema', 'one_time': True}
+    routes_app_instance.participant_manager.finish_task.return_value = 0
+
+    responses: list[int] = []
+    errors: list[Exception] = []
+
+    def call():
+        try:
+            resp = routes_client.post('/participants/send_studywide_survey/ema/yes')
+            responses.append(resp.status_code)
+        except Exception as e:
+            errors.append(e)
+
+    t1 = threading.Thread(target=call)
+    t2 = threading.Thread(target=call)
+    t1.start()
+    t2.start()
+    t1.join(timeout=5)
+    t2.join(timeout=5)
+
+    assert errors == [], f"unexpected exception(s) in concurrent requests: {errors}"
+    assert sorted(responses) == [202, 409], (
+        f"expected exactly one 202 (started) and one 409 (rejected as already in progress), got {responses} -- "
+        "both succeeding means the atomic guard let two concurrent sends start at once"
+    )
+
+    _wait_for_studywide_survey_done(routes_client)
+    assert routes_app_instance.participant_manager.finish_task.call_count == 1, (
+        "finish_task should have been called exactly once (one participant, one background send loop); "
+        f"got {routes_app_instance.participant_manager.finish_task.call_count} calls -- "
+        "a duplicate send means the guard let a second concurrent request start its own loop"
+    )
 
 
 def test_studywide_survey_status_before_any_send_is_idle(routes_client):

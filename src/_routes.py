@@ -506,12 +506,25 @@ def create_flask_app(app_instance: App) -> Flask:
         if survey_type not in ['ema', 'feedback']:
             return jsonify({"error": "Invalid survey type"}), 400
 
+        # The "is a send already in progress?" check and the in_progress=True
+        # flag-set must happen as ONE atomic step under a single lock
+        # acquisition -- checking and setting in two separate `with
+        # studywide_survey_lock:` blocks (this used to) left a window between
+        # them where the slower unlocked work below (participant lookup, the
+        # 404 check, transcript logging) ran; two concurrent POSTs could both
+        # observe in_progress=False and both pass the check before either
+        # set the flag, so both would go on to start their own background
+        # send thread -- every participant in scope getting sent to twice.
+        # Setting the flag here, before any of that slower work runs, closes
+        # the window entirely: at most one caller can ever see in_progress
+        # False and flip it True.
         with studywide_survey_lock:
             if studywide_survey_status['in_progress']:
                 return jsonify({
                     "error": "A studywide survey send is already in progress; "
                              "check /participants/studywide_survey_status."
                 }), 409
+            studywide_survey_status['in_progress'] = True
 
         on_study_only = require_on_study.lower() == 'yes'
         participants = app_instance.participant_manager.get_participant_ids_and_phone_numbers(
@@ -519,6 +532,13 @@ def create_flask_app(app_instance: App) -> Flask:
         )
         if not participants:
             app_instance.add_to_transcript(f"Studywide {survey_type} send failed: no participants found", "ERROR")
+            # The atomic guard above already claimed in_progress -- since
+            # this request is failing outright (no background thread will
+            # ever flip it back off), release the claim here so a legitimate
+            # 404 doesn't permanently wedge the endpoint into "always in
+            # progress."
+            with studywide_survey_lock:
+                studywide_survey_status['in_progress'] = False
             return jsonify({"error": "No participants found"}), 404
 
         scope = "on-study participants only" if on_study_only else "all participants"
