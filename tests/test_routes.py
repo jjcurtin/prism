@@ -171,6 +171,20 @@ def test_remove_system_task_invalid_time_is_clean_400(routes_client):
     assert resp.status_code == 400
 
 
+def test_remove_system_task_rejects_run_r_script(routes_client, routes_app_instance):
+    """Regression test for a fixed bug: unlike add_system_task/execute_task
+    right above, this route had no RUN_R_SCRIPT guard at all -- it would
+    call remove_task with no r_script_path, which only filters by path when
+    one is passed in (SystemTaskManager.remove_task), so it removed
+    whichever RUN_R_SCRIPT row matched task_type + task_time first,
+    regardless of path. Now rejected outright, before remove_task is
+    reached.
+    """
+    resp = routes_client.delete('/system/remove_system_task/RUN_R_SCRIPT/03:00:00')
+    assert resp.status_code == 400
+    routes_app_instance.system_task_manager.remove_task.assert_not_called()
+
+
 def test_clear_task_schedule(routes_client, routes_app_instance):
     resp = routes_client.delete('/system/clear_task_schedule')
     assert resp.status_code == 200

@@ -121,6 +121,17 @@ def create_flask_app(app_instance: App) -> Flask:
     def remove_system_task(task_type: str, task_time: str) -> RouteResponse:
         if task_type not in app_instance.system_task_manager.task_types:
             return jsonify({"error": "Invalid task type."}), 400
+        if task_type == "RUN_R_SCRIPT":
+            # Same rejection as add_system_task/execute_task above --
+            # remove_task() only filters by r_script_path when one is
+            # passed in (SystemTaskManager.remove_task); this route never
+            # supplies one, so a RUN_R_SCRIPT removal through here would
+            # silently remove whichever RUN_R_SCRIPT row happens to match
+            # task_type + task_time first, regardless of path -- the wrong
+            # script if two different R scripts share that time. Use
+            # /system/remove_r_script_task/<r_script_path>/<task_time>
+            # instead, which already requires a non-empty path.
+            return jsonify({"error": "Use /system/remove_r_script_task/<r_script_path>/<task_time> for RUN_R_SCRIPT."}), 400
         try:
             datetime.strptime(task_time, '%H:%M:%S')
         except ValueError:
