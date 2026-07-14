@@ -1061,6 +1061,16 @@ don't interact with this folder directly; it's what powers the `tasks` and
   what's due), and each adds its own specific behavior on top (e.g. the
   participant manager also knows how to send SMS; the system task manager
   knows how to dynamically load a task class by name).
+- **`SystemTaskManager` always takes priority.** Whenever it has a task
+  queued or in progress — including a `RUN_R_SCRIPT` task, which can run
+  for up to 3 hours — `ParticipantManager`'s background loop pauses and
+  won't send another participant text (EMA, EMA reminder, feedback,
+  feedback reminder) until the system task manager is idle again. There's
+  no timeout on this: a long-running R script really can delay SMS sends
+  for its full duration. This only affects `ParticipantManager`'s own
+  once-a-second polling loop — an RA manually resending a survey or
+  message from the interface still goes out immediately, since those are
+  handled synchronously rather than through this queue.
 - An off-study participant's recurring tasks are *not* removed from the
   manager's internal task list when they go off-study — they're skipped at
   send time instead. This is why the `participants schedule` command
