@@ -535,7 +535,15 @@ def create_flask_app(app_instance: App) -> Flask:
         if isinstance(e, HTTPException):
             return e
         app_instance.add_to_transcript(f"Unhandled exception in Flask route: {e}", "ERROR")
-        notify_coordinators(app_instance, code_prefix('4001') + f"PRISM system failure: unhandled exception in Flask route: {e}")
+        # Defensively wrapped like every other notify_coordinators() call
+        # site (_task_manager.py, _system_task.py) -- this is Flask's own
+        # last-resort handler, so a failure inside notify_coordinators()
+        # itself must not be allowed to escape it and turn a clean 500
+        # response into an unhandled exception at the WSGI level.
+        try:
+            notify_coordinators(app_instance, code_prefix('4001') + f"PRISM system failure: unhandled exception in Flask route: {e}")
+        except Exception as notify_error:
+            app_instance.add_to_transcript(f"Also failed to notify coordinators about that error: {notify_error}", "ERROR")
         return jsonify({"error": "Internal server error"}), 500
 
     return flask_app

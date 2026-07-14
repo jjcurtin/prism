@@ -1047,6 +1047,29 @@ def test_unhandled_exception_returns_500_and_notifies_coordinators(routes_client
     assert any('ERROR' == msg_type for msg_type, _ in routes_app_instance.transcript)
 
 
+def test_unhandled_exception_survives_notify_coordinators_itself_failing(routes_client, routes_app_instance, mocker):
+    """Regression test: notify_coordinators() was called here with no
+    try/except, unlike its other two call sites (_task_manager.py,
+    _system_task.py), both of which already guard against it. Since this
+    is Flask's own last-resort error handler, a failure inside
+    notify_coordinators() itself (e.g. the same broken-credentials/
+    unreadable-CSV root cause that may have caused the original failure)
+    used to propagate out of the handler entirely, turning a clean 500
+    response into a second, unhandled exception at the WSGI level.
+    """
+    mocker.patch('_routes.notify_coordinators', side_effect=RuntimeError('also broken'))
+    routes_app_instance.system_task_manager.get_task_schedule.side_effect = RuntimeError('boom')
+
+    resp = routes_client.get('/system/get_task_schedule')
+
+    assert resp.status_code == 500
+    assert resp.get_json() == {"error": "Internal server error"}
+    assert any(
+        'Also failed to notify coordinators' in msg and 'also broken' in msg
+        for _, msg in routes_app_instance.transcript
+    )
+
+
 def test_unmatched_route_returns_default_404_no_coordinator_notify(routes_client, mocker):
     """A request to a URL that doesn't match any route raises Werkzeug's own
     NotFound (an HTTPException) during routing/dispatch, before any view
