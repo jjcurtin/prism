@@ -509,6 +509,26 @@ def test_handle_shutdown_exits_zero_for_a_real_signal(monkeypatch, tmp_path):
     assert exit_codes == [0]
 
 
+def test_handle_shutdown_tolerates_signal_before_managers_constructed(monkeypatch, tmp_path):
+    """Regression test: signal handlers are now registered in __init__
+    before system_task_manager/participant_manager are constructed (to
+    close the zombie-thread window where a signal in that gap had no
+    handler at all). handle_shutdown must not crash with an AttributeError
+    if a signal lands in the brief remaining window before those two
+    attributes exist.
+    """
+    import signal
+    import os
+
+    p = _make_bare_prism(tmp_path)
+    exit_codes = []
+    monkeypatch.setattr(os, '_exit', lambda code=0: exit_codes.append(code))
+
+    p.handle_shutdown(signal.SIGTERM, None)
+
+    assert exit_codes == [0]
+
+
 def test_launch_web_app_or_shutdown_does_not_intervene_on_success(tmp_path):
     p = _make_bare_prism(tmp_path)
     calls = []

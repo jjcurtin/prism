@@ -191,11 +191,22 @@ class PRISM():
 
         self.load_api_keys()
 
+        # Registered before either manager is constructed -- both start a
+        # non-daemon background thread immediately, so a SIGINT/SIGTERM
+        # landing between construction and registration used to have no
+        # handler installed yet: it killed the main thread while those
+        # threads kept running the schedule headless, the exact
+        # zombie-process shape _acquire_pid_file()'s docstring describes
+        # for the double-launch case, just reached a different way.
+        # handle_shutdown() guards each manager with hasattr() to tolerate
+        # the (now much narrower) case where a signal arrives before the
+        # managers below have been constructed yet.
+        signal.signal(signal.SIGINT, self.handle_shutdown)
+        signal.signal(signal.SIGTERM, self.handle_shutdown)
+
         self.system_task_manager = SystemTaskManager(self)
         self.participant_manager = ParticipantManager(self)
 
-        signal.signal(signal.SIGINT, self.handle_shutdown)
-        signal.signal(signal.SIGTERM, self.handle_shutdown)
         self.add_to_transcript(f"PRISM started in {self.mode} mode.", "INFO")
         self._launch_web_app_or_shutdown()
 
@@ -605,8 +616,14 @@ class PRISM():
         from a successful one asked to stop.
         """
         self.add_to_transcript("Received shutdown signal. Stopping PRISM application...", "INFO")
-        self.system_task_manager.stop()
-        self.participant_manager.stop()
+        # hasattr-guarded: signal handlers are now registered before either
+        # manager is constructed (see __init__), so a signal in that brief
+        # window would otherwise hit an AttributeError here instead of
+        # shutting down cleanly.
+        if hasattr(self, 'system_task_manager'):
+            self.system_task_manager.stop()
+        if hasattr(self, 'participant_manager'):
+            self.participant_manager.stop()
         self._unlink_pid_file_if_owned()
         os._exit(exit_code)
 
