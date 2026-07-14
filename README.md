@@ -1090,21 +1090,18 @@ Mirrors the menu tree an RA sees: `check/`, `tasks/`, `participants/`,
 `logs/`, `settings/`, plus a shared `utils/` package for navigation,
 display, and command-chaining machinery (the mechanics behind [2.1](#21-the-interface-at-a-glance)).
 
-Known rough edges, for anyone picking up maintenance work here:
-
-- Field-level edit validation on an existing participant's record is
-  inconsistent — `on_study` and the four survey-time fields are validated
-  on edit, but `first_name`, `last_name`, `unique_id`, and `phone_number`
-  are not, even though `unique_id` and `phone_number` *are* validated at
-  add-time. Editing a participant's `unique_id` to something invalid after
-  creation currently isn't caught.
-- The unique-ID collision-avoidance loop in `add_participant_menu`
-  generates a replacement ID on a collision but doesn't re-check that
-  replacement against the existing list, so a second (rare) collision
-  would go undetected.
-- A failed field update (`PUT .../update_participant/...`) only shows a
-  generic "Failed to update participant." — the server-side reason, if
-  any, isn't surfaced distinctly from that generic message.
+No known rough edges are currently tracked for this layer. (This section
+previously listed three: inconsistent field-level edit validation, a
+unique-ID collision-avoidance loop that didn't recheck its own replacement
+ID, and a generic failed-field-update message. The first and third were
+stale by the time they were reviewed here — `phone_number` and `unique_id`
+edits are both already validated/rejected by `update_participant`, and a
+failed update already returns a distinct, honest status per rejection
+reason (see the `UPDATE_*` codes in `_participant_manager.py`) rather than
+one generic message — and the second, the collision-loop gap, has since
+been fixed: `add_participant_menu` now keeps regenerating and rechecking
+until it finds a genuinely free ID, bounded by
+`MAX_UNIQUE_ID_COLLISION_ATTEMPTS`.)
 
 ## `tests_integration/` — real end-to-end tests
 
