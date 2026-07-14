@@ -47,7 +47,15 @@ def create_flask_app(app_instance: App) -> Flask:
     
     @flask_app.route('/system/uptime', methods = ['GET'])
     def get_uptime() -> RouteResponse:
-        return jsonify({"uptime": time.strftime('%H:%M:%S', time.gmtime((datetime.now() - app_instance.start_time).total_seconds()))})
+        # time.strftime('%H:%M:%S', time.gmtime(...)) alone silently drops
+        # whole days for an uptime >= 24h (gmtime wraps the hour field back
+        # to 0 every 86400s) -- days are split out explicitly and prefixed
+        # so a genuinely long-running instance's uptime reads as "3d
+        # 04:22:10", not a lying "04:22:10" that looks like it just started.
+        total_seconds = (datetime.now() - app_instance.start_time).total_seconds()
+        days, remainder_seconds = divmod(total_seconds, 86400)
+        hms = time.strftime('%H:%M:%S', time.gmtime(remainder_seconds))
+        return jsonify({"uptime": f"{int(days)}d {hms}"})
 
     @flask_app.route('/system/start_time', methods = ['GET'])
     def get_start_time() -> RouteResponse:
