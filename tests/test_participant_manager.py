@@ -21,6 +21,7 @@ def make_manager(fake_app):
     pm.name = 'ParticipantManager'
     pm.tasks = []
     pm._tasks_lock = threading.RLock()
+    pm._file_write_lock = threading.Lock()
     pm._now = datetime.now
     pm._last_reset_date = datetime.now().date()
     pm._last_reminders_failure_page_date = None

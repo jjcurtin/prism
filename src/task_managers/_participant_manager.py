@@ -8,6 +8,7 @@ from _error_codes import code_prefix
 from _types import App
 from task_managers._task_manager import TaskManager, Task
 import csv
+import threading
 
 # A participant is a small, loosely-structured dict parsed straight from
 # participants.csv (see load_participants() below) -- kept as
@@ -131,6 +132,20 @@ class ParticipantManager(TaskManager):
             # across process_task()/send_sms() (the network call), same
             # rule as the base class.
             self.file_path = self.app.participants_path
+            # Serializes only the disk-write portion of save_participants()
+            # (see that method's own comment) -- distinct from _tasks_lock,
+            # which still must never be held across I/O. Without this,
+            # two overlapping save_participants() calls each snapshot
+            # self.participants under _tasks_lock, release it, and then
+            # race each other to the actual file write; if the call that
+            # took the OLDER snapshot happens to finish writing last, its
+            # stale snapshot silently overwrites the newer one already on
+            # disk, violating I3. save_participants() acquires this lock
+            # while STILL holding _tasks_lock (nested, then releases
+            # _tasks_lock) so snapshots are queued for the write lock in
+            # the same order they were taken, guaranteeing writes land in
+            # that same order.
+            self._file_write_lock = threading.Lock()
             self.load_participants()
         except Exception as e:
             self.app.add_to_transcript(f"Failed to initialize ParticipantManager: {e}", "ERROR")
@@ -451,11 +466,21 @@ class ParticipantManager(TaskManager):
         this and discarded the result entirely rather than getting it
         wrong -- see their own docstrings.)
         """
-        # Snapshot taken under the lock, file write happens outside it --
+        # Snapshot taken under _tasks_lock, file write happens outside it --
         # same "never hold this lock across I/O" rule as
         # SystemTaskManager.save_tasks(), even though this write is small.
+        # _file_write_lock is acquired here while _tasks_lock is STILL held
+        # (nested), then _tasks_lock is released by exiting the `with`
+        # block -- this queues concurrent callers for the write lock in the
+        # exact order their snapshots were taken, so whichever snapshot is
+        # older always writes first, and a lost update (an older snapshot's
+        # write landing after a newer one's, silently reverting it on disk)
+        # can't happen. The write itself still happens with _tasks_lock
+        # released -- only _file_write_lock, not _tasks_lock, is held
+        # across the actual I/O.
         with self._tasks_lock:
             snapshot = list(self.participants)
+            self._file_write_lock.acquire()
         try:
             with open(self.file_path, 'w', newline = '') as file:
                 writer = csv.DictWriter(file, fieldnames = PARTICIPANT_CSV_HEADERS, quoting = csv.QUOTE_ALL)
@@ -478,6 +503,8 @@ class ParticipantManager(TaskManager):
         except Exception as e:
             self.app.add_to_transcript(f"Failed to save participants to CSV: {e}", "ERROR")
             return 1
+        finally:
+            self._file_write_lock.release()
 
     def update_participant(self, unique_id: str, field: str, value: Any) -> int:
         """Enforces I4 (unique_id is immutable) and I3 (memory/disk agree
@@ -578,7 +605,16 @@ class ParticipantManager(TaskManager):
 
             if self.save_participants():
                 with self._tasks_lock:
-                    participant[field] = old_value  # roll back: mirror on-disk truth (I3)
+                    # Only roll back if this field still holds the value
+                    # WE just wrote -- if a concurrent update_participant
+                    # call for the same field already landed in between
+                    # (read the old value, changed it again, possibly
+                    # already persisted successfully), blindly restoring
+                    # old_value here would silently clobber that
+                    # concurrent edit with a stale value instead of
+                    # merely undoing this call's own failed one.
+                    if participant[field] == value:
+                        participant[field] = old_value  # roll back: mirror on-disk truth (I3)
                 self.app.add_to_transcript(
                     f"Failed to update participant {unique_id}: could not persist to CSV.", "ERROR"
                 )
