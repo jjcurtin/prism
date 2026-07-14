@@ -5,6 +5,7 @@ from typing import Any, Callable
 import csv
 import queue
 import threading
+import time
 
 from _helper import notify_coordinators
 from _error_codes import code_prefix
@@ -54,6 +55,18 @@ class TaskManager():
         # other thread trying to touch self.tasks for that entire duration
         # -- trading one hang for another.
         self._tasks_lock = threading.RLock()
+        # Set for the exact duration finish_task() is actively processing a
+        # task (from just before process_task() is called to just after it
+        # returns, including one_time cleanup -- see finish_task() below),
+        # cleared the rest of the time. Combined with `not
+        # self.task_queue.empty()` in has_pending_work() below, this is how
+        # a sibling manager (see _pause_processing()) can tell "this manager
+        # has work queued up OR is mid-task" without needing to inspect
+        # self.tasks/task_queue internals directly. An Event, not a plain
+        # bool -- no test/caller here actually blocks on it, but it's the
+        # conventional thread-safe primitive for a flag read/written across
+        # threads, and costs nothing over a bool for that guarantee.
+        self._processing = threading.Event()
         # Injected rather than calling datetime.now()/date.today() inline in
         # check_tasks()/add_task() below -- an ambient wall-clock read is an
         # input a test can't control, so tests end up either not exercising
@@ -230,6 +243,31 @@ class TaskManager():
     def process_task(self, task: Task) -> int:
         raise NotImplementedError("Subclasses must implement this method.")
 
+    def has_pending_work(self) -> bool:
+        """True if this manager has a task sitting in task_queue waiting to
+        be pulled, or is currently inside finish_task() actively processing
+        one -- i.e. there's work either queued or in flight right now. Used
+        by ParticipantManager's _pause_processing() override (see
+        _participant_manager.py) to give SystemTaskManager unconditional
+        priority: SystemTaskManager itself never calls this on anyone (its
+        own _pause_processing() stays the base-class False, see below).
+        """
+        return not self.task_queue.empty() or self._processing.is_set()
+
+    def _pause_processing(self) -> bool:
+        """Overridable hook, checked once per run() iteration before this
+        manager pulls its next task off task_queue. Returns False here
+        (never pause) -- the base-class/SystemTaskManager behavior: system
+        tasks (including RUN_R_SCRIPT, up to 3h) always get to run
+        immediately and are never deferred for anything else.
+        ParticipantManager overrides this to pause its own SMS-sending loop
+        whenever SystemTaskManager reports pending/in-progress work (see
+        _participant_manager.py's override), giving system tasks
+        unconditional priority over resuming SMS sends -- deliberately with
+        no starvation safeguard, confirmed by explicit user decision.
+        """
+        return False
+
     def finish_task(self, task: Task) -> int:
         """Process `task` and, if it's flagged `one_time`, remove it from
         self.tasks immediately afterward -- regardless of whether
@@ -258,6 +296,13 @@ class TaskManager():
                 self.tasks[:] = [t for t in self.tasks if t is not task]
         return result
 
+    # note: self._processing is set/cleared around the finish_task() call
+    # site in run() below, not inside finish_task() itself -- finish_task()
+    # is also invoked directly by _routes.py's two synchronous, RA-triggered
+    # routes (send_survey and the manual feedback-send route), which
+    # deliberately bypass run() entirely and must stay unaffected by this
+    # coordination mechanism (see task_managers/CLAUDE.md).
+
     def run(self) -> None:
         while self.running:
             # check_tasks() must never be allowed to raise unguarded here --
@@ -272,6 +317,17 @@ class TaskManager():
                 self.check_tasks()
             except Exception as e:
                 self.app.add_to_transcript(f"An error occurred while checking scheduled tasks in {self.name}: {e}", "ERROR")
+            # Checked after check_tasks() (so scheduling/due-marking is
+            # never skipped -- a task can still become due and get queued
+            # while paused) but before task_queue.get()/finish_task() below
+            # (so a due task isn't actually pulled and processed while
+            # paused). Base class/SystemTaskManager: always False, never
+            # pauses. ParticipantManager overrides this to defer to
+            # SystemTaskManager's pending/in-progress work -- see
+            # _pause_processing()'s own docstring above.
+            if self._pause_processing():
+                time.sleep(1)  # matches this loop's own ~1s poll cadence
+                continue
             # Reassigned every iteration (rather than relying on 'task' in
             # locals()) -- a plain local variable stays bound for the rest
             # of this function's life once first assigned on any earlier
@@ -281,7 +337,17 @@ class TaskManager():
             task: Task | None = None
             try:
                 task = self.task_queue.get(timeout = 1)
-                result = self.finish_task(task)
+                # self._processing is set for the exact span finish_task()
+                # is actively running (cleared in a `finally` so it's never
+                # left stuck set by a finish_task()/process_task() failure)
+                # -- has_pending_work() above reports "busy" for this whole
+                # duration, not just the time a task previously sat in
+                # task_queue waiting to be pulled.
+                self._processing.set()
+                try:
+                    result = self.finish_task(task)
+                finally:
+                    self._processing.clear()
                 if result != 0:
                     self.app.add_to_transcript(f"Task {task['task_type']} failed with error code {result}.", "ERROR")
             except queue.Empty:

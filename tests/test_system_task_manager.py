@@ -17,6 +17,7 @@ def make_manager(fake_app):
     stm._now = datetime.now
     stm._last_reset_date = datetime.now().date()
     stm.task_queue = queue.Queue()
+    stm._processing = threading.Event()
     stm.task_types = {}
     return stm
 
@@ -278,3 +279,43 @@ def test_process_task_dispatches_with_r_script_path(fake_app, mocker):
 
     assert result == 1
     fake_task_class.assert_called_once_with(fake_app, 'cleanup.R')
+
+
+# ------------------------------------------------------------
+# _pause_processing() -- SystemTaskManager/ParticipantManager coordination
+# (see task_managers/CLAUDE.md). SystemTaskManager does not override the
+# base class's _pause_processing() hook -- system tasks (including
+# RUN_R_SCRIPT, up to 3h) always get priority and must never be paused for
+# anything, regardless of its own or any other manager's queue/processing
+# state. See tests/test_participant_manager.py for ParticipantManager's
+# overridden behavior, which does defer.
+# ------------------------------------------------------------
+
+def test_pause_processing_always_false_regardless_of_own_state(fake_app):
+    stm = make_manager(fake_app)
+    stm.task_queue.put({'task_type': 'RUN_R_SCRIPT'})
+    stm._processing.set()
+
+    assert stm._pause_processing() is False
+
+
+def test_run_never_pauses_even_with_a_due_system_task(fake_app):
+    """End-to-end confirmation: SystemTaskManager's own run() loop never
+    skips a due task via the pause mechanism -- it processes it
+    immediately, exactly as before this coordination feature existed."""
+    stm = make_manager(fake_app)
+    stm.running = True
+    task = stm.add_task('CHECK_SYSTEM', '03:00:00')
+    stm.task_queue.put(task)
+    processed = []
+
+    def process_and_stop(t):
+        processed.append(t)
+        stm.running = False
+        return 0
+
+    stm.process_task = process_and_stop
+
+    stm.run()
+
+    assert processed == [task]

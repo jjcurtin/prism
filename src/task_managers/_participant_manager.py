@@ -819,6 +819,24 @@ class ParticipantManager(TaskManager):
         except Exception as notify_error:
             self.app.add_to_transcript(f"Also failed to notify coordinators about that error: {notify_error}", "ERROR")
 
+    def _pause_processing(self) -> bool:
+        """Gives SystemTaskManager unconditional priority: this manager's
+        run() loop (base class) skips pulling/processing its next SMS task
+        for as long as SystemTaskManager reports pending or in-progress
+        work (has_pending_work(), _task_manager.py), including a
+        RUN_R_SCRIPT task that can run up to 3h. Deliberately no starvation
+        safeguard -- an SMS send simply waits, however long that takes; per
+        explicit user decision, system tasks always come first.
+
+        Does NOT affect the two synchronous routes in _routes.py
+        (send_survey, the manual feedback-send route) that call
+        finish_task() directly on the Flask request thread -- those bypass
+        run() (and therefore this check) entirely, by design, so an RA's
+        HTTP request never hangs waiting on a system task (see
+        task_managers/CLAUDE.md).
+        """
+        return self.app.system_task_manager.has_pending_work()
+
     def process_task(self, task: Task) -> int:
         try:
             participant_id = task.get('participant_id')

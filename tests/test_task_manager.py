@@ -25,6 +25,7 @@ def make_manager(fake_app):
     tm._now = datetime.now
     tm._last_reset_date = datetime.now().date()
     tm.task_queue = queue.Queue()
+    tm._processing = threading.Event()
     return tm
 
 
@@ -719,3 +720,169 @@ def test_concurrent_finish_task_removal_does_not_drop_concurrent_add(fake_app):
         tm.tasks.clear()  # reset for the next iteration
 
     assert lost_updates == 0
+
+
+# ------------------------------------------------------------
+# has_pending_work() / _pause_processing() -- SystemTaskManager/
+# ParticipantManager coordination (base-class side). See
+# tests/test_participant_manager.py for ParticipantManager's
+# _pause_processing() override, and tests/test_system_task_manager.py for
+# confirmation that SystemTaskManager's own _pause_processing() is
+# unaffected (always False).
+# ------------------------------------------------------------
+
+def test_has_pending_work_false_when_idle(fake_app):
+    tm = make_manager(fake_app)
+
+    assert tm.has_pending_work() is False
+
+
+def test_has_pending_work_true_when_queue_non_empty(fake_app):
+    tm = make_manager(fake_app)
+    tm.task_queue.put({'task_type': 'CHECK_SYSTEM'})
+
+    assert tm.has_pending_work() is True
+
+
+def test_has_pending_work_true_when_processing_flag_set(fake_app):
+    """Reflects a task actively being processed (queue already empty,
+    finish_task() mid-call) -- not just a task sitting in task_queue."""
+    tm = make_manager(fake_app)
+    tm._processing.set()
+
+    assert tm.has_pending_work() is True
+
+
+def test_has_pending_work_false_after_processing_flag_cleared(fake_app):
+    tm = make_manager(fake_app)
+    tm._processing.set()
+    tm._processing.clear()
+
+    assert tm.has_pending_work() is False
+
+
+def test_base_pause_processing_always_false(fake_app):
+    """Base-class (and SystemTaskManager, which doesn't override it)
+    behavior: never pauses, regardless of task_queue/_processing state --
+    system tasks always get to run immediately."""
+    tm = make_manager(fake_app)
+    tm.task_queue.put({'task_type': 'CHECK_SYSTEM'})
+    tm._processing.set()
+
+    assert tm._pause_processing() is False
+
+
+def test_run_sets_processing_flag_for_the_duration_of_finish_task(fake_app):
+    """Regression-shaped test for the exact span has_pending_work() must
+    report "busy": _processing must be set before finish_task() (and
+    therefore process_task()) runs, and cleared again once it returns --
+    covering the whole processing duration, not just time spent sitting in
+    task_queue."""
+    tm = make_manager(fake_app)
+    tm.running = True
+    observed = {}
+
+    def observe_and_stop(task):
+        observed['was_set_during_processing'] = tm._processing.is_set()
+        tm.running = False
+        return 0
+
+    tm.process_task = observe_and_stop
+    tm.task_queue.put({'task_type': 'CHECK_SYSTEM'})
+
+    tm.run()
+
+    assert observed['was_set_during_processing'] is True
+    assert tm._processing.is_set() is False  # cleared again after finish_task() returns
+
+
+def test_run_clears_processing_flag_even_when_finish_task_raises(fake_app):
+    """The `finally` around finish_task() in run() must clear _processing
+    even on failure -- otherwise a single failed task would leave
+    has_pending_work() permanently reporting "busy" forever after."""
+    tm = make_manager(fake_app)
+    tm.running = True
+
+    def failing_process_task(task):
+        tm.running = False
+        raise RuntimeError('boom')
+
+    tm.process_task = failing_process_task
+    tm.task_queue.put({'task_type': 'CHECK_SYSTEM'})
+
+    tm.run()  # must not raise (existing outer except handles this)
+
+    assert tm._processing.is_set() is False
+
+
+def test_run_pauses_when_pause_processing_returns_true(fake_app, mocker):
+    """When _pause_processing() reports True, run() must skip pulling/
+    processing the next task entirely for that iteration -- a due task
+    stays in task_queue untouched."""
+    tm = make_manager(fake_app)
+    tm.running = True
+    tm._pause_processing = lambda: True
+    tm.process_task = lambda task: 0
+    tm.task_queue.put({'task_type': 'CHECK_SYSTEM'})
+
+    def fake_sleep(seconds):
+        tm.running = False  # stop after the first paused iteration
+
+    sleep_mock = mocker.patch('task_managers._task_manager.time.sleep', side_effect=fake_sleep)
+
+    tm.run()
+
+    sleep_mock.assert_called_once_with(1)
+    assert tm.task_queue.qsize() == 1  # task was never pulled off the queue
+
+
+def test_run_still_calls_check_tasks_while_paused(fake_app, mocker):
+    """check_tasks() (scheduling/due-marking) must still run every
+    iteration even while paused -- only the get()/finish_task() step is
+    skipped, so a task can still become due and get queued while paused,
+    ready to be picked up the moment pausing stops."""
+    tm = make_manager(fake_app)
+    tm.running = True
+    tm._pause_processing = lambda: True
+    calls = {'n': 0}
+
+    def counting_check_tasks():
+        calls['n'] += 1
+        if calls['n'] >= 2:
+            tm.running = False
+
+    tm.check_tasks = counting_check_tasks
+    mocker.patch('task_managers._task_manager.time.sleep')
+
+    tm.run()
+
+    assert calls['n'] == 2
+
+
+def test_run_resumes_processing_once_pause_clears(fake_app, mocker):
+    """Once _pause_processing() stops reporting True, run() must resume
+    pulling/processing the previously-skipped due task on a later
+    iteration."""
+    tm = make_manager(fake_app)
+    tm.running = True
+    paused = {'value': True}
+    tm._pause_processing = lambda: paused['value']
+    task = tm.add_task('CHECK_SYSTEM', '03:00:00')
+    tm.task_queue.put(task)
+    processed = []
+
+    def process_and_stop(t):
+        processed.append(t)
+        tm.running = False
+        return 0
+
+    tm.process_task = process_and_stop
+
+    def fake_sleep(seconds):
+        paused['value'] = False  # unpause after the first paused iteration
+
+    mocker.patch('task_managers._task_manager.time.sleep', side_effect=fake_sleep)
+
+    tm.run()
+
+    assert processed == [task]

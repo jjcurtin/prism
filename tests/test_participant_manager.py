@@ -32,6 +32,7 @@ def make_manager(fake_app):
     pm.feedback_sent_on_study_ids = set()
     pm.feedback_sent_all_ids = set()
     pm.task_queue = queue.Queue()
+    pm._processing = threading.Event()
     pm.participants = []
     pm.survey_types = {
         'ema': 'ema_time',
@@ -1925,3 +1926,115 @@ def test_process_task_does_not_record_send_count_on_failure(fake_app, mocker):
     pm.process_task({'task_type': 'ema', 'participant_id': '000000000'})
 
     assert pm.get_send_counts()['ema_on_study_sent'] == 0
+
+
+# ------------------------------------------------------------
+# _pause_processing() -- SystemTaskManager/ParticipantManager coordination.
+# ParticipantManager's background SMS-sending loop (run(), inherited from
+# TaskManager) must unconditionally defer to SystemTaskManager's
+# pending/in-progress work -- see task_managers/CLAUDE.md. The two
+# synchronous _routes.py routes (send_survey, the manual feedback-send
+# route) call finish_task() directly and bypass run()/_pause_processing()
+# entirely; that exemption isn't exercised here since it requires no code
+# path through this hook at all.
+# ------------------------------------------------------------
+
+class _FakeSystemTaskManager:
+    """Minimal stand-in for the real SystemTaskManager -- only
+    has_pending_work() is ever read by ParticipantManager._pause_processing().
+    """
+    def __init__(self, pending):
+        self._pending = pending
+
+    def has_pending_work(self):
+        return self._pending
+
+
+def test_pause_processing_true_when_system_task_manager_has_pending_work(fake_app):
+    pm = make_manager(fake_app)
+    fake_app.system_task_manager = _FakeSystemTaskManager(pending=True)
+
+    assert pm._pause_processing() is True
+
+
+def test_pause_processing_false_when_system_task_manager_idle(fake_app):
+    pm = make_manager(fake_app)
+    fake_app.system_task_manager = _FakeSystemTaskManager(pending=False)
+
+    assert pm._pause_processing() is False
+
+
+def test_run_skips_due_sms_task_while_system_task_manager_has_pending_work(fake_app, mocker):
+    """The core coordination behavior: a due SMS task sitting in
+    task_queue is left untouched (not processed) for as long as
+    SystemTaskManager reports pending/in-progress work -- unconditional
+    priority, no starvation safeguard, per explicit user decision."""
+    pm = make_manager(fake_app)
+    pm.running = True
+    system_task_manager = _FakeSystemTaskManager(pending=True)
+    fake_app.system_task_manager = system_task_manager
+    task = pm.add_task('ema', '09:00:00', participant_id='000000000')
+    pm.task_queue.put(task)
+    processed = []
+    pm.process_task = lambda t: processed.append(t) or 0
+
+    def fake_sleep(seconds):
+        pm.running = False  # stop after one paused iteration
+
+    mocker.patch('task_managers._task_manager.time.sleep', side_effect=fake_sleep)
+
+    pm.run()
+
+    assert processed == []
+    assert pm.task_queue.qsize() == 1
+
+
+def test_run_processes_previously_due_sms_task_once_system_task_manager_clears(fake_app, mocker):
+    """Once SystemTaskManager's pending work clears, run() must resume
+    pulling/processing the SMS task it was deferring."""
+    pm = make_manager(fake_app)
+    pm.running = True
+    system_task_manager = _FakeSystemTaskManager(pending=True)
+    fake_app.system_task_manager = system_task_manager
+    task = pm.add_task('ema', '09:00:00', participant_id='000000000')
+    pm.task_queue.put(task)
+    processed = []
+
+    def process_and_stop(t):
+        processed.append(t)
+        pm.running = False
+        return 0
+
+    pm.process_task = process_and_stop
+
+    def fake_sleep(seconds):
+        system_task_manager._pending = False  # SystemTaskManager finishes its work
+
+    mocker.patch('task_managers._task_manager.time.sleep', side_effect=fake_sleep)
+
+    pm.run()
+
+    assert processed == [task]
+
+
+def test_run_does_not_pause_when_system_task_manager_is_idle(fake_app):
+    """The common case: SystemTaskManager has no pending work at all, so
+    ParticipantManager's loop must process a due SMS task immediately, with
+    no pause/sleep detour."""
+    pm = make_manager(fake_app)
+    pm.running = True
+    fake_app.system_task_manager = _FakeSystemTaskManager(pending=False)
+    task = pm.add_task('ema', '09:00:00', participant_id='000000000')
+    pm.task_queue.put(task)
+    processed = []
+
+    def process_and_stop(t):
+        processed.append(t)
+        pm.running = False
+        return 0
+
+    pm.process_task = process_and_stop
+
+    pm.run()
+
+    assert processed == [task]
