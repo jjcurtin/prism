@@ -4,6 +4,7 @@ import os
 import platform
 import subprocess
 import sys
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -185,6 +186,14 @@ class PRISM():
         clear()
         self.mode = mode
         self.start_time = datetime.now()
+        # Set before the first add_to_transcript() call below -- multiple
+        # threads (the Flask request threads, SystemTaskManager's and
+        # ParticipantManager's own background threads) all call
+        # add_to_transcript() concurrently, and without a lock around its
+        # file open/write, two overlapping appends could interleave their
+        # writes (or, on some platforms/filesystems, clobber each other)
+        # instead of each landing as a clean, whole line.
+        self._transcript_lock = threading.Lock()
         self.load_paths()
         self._acquire_pid_file()
         self.add_to_transcript("Initializing PRISM application...", "INFO")
@@ -421,12 +430,18 @@ class PRISM():
         else:
             file_path = os.path.join(self.logs_dir, 'transcripts', f'{current_date}_transcript.txt')
         os.makedirs(os.path.dirname(file_path), exist_ok = True)
-        try:
-            with open(file_path, 'a') as file:
-                file.write(f"{datetime.now().strftime('%H:%M:%S')} - {transcript_message}\n")
-        except FileNotFoundError:
-            with open(file_path, 'w') as file:
-                file.write(f"{datetime.now().strftime('%H:%M:%S')} - {transcript_message}\n")
+        # Multiple threads call add_to_transcript() concurrently (Flask
+        # request threads, SystemTaskManager's/ParticipantManager's own
+        # background threads) -- without this lock, two overlapping
+        # opens/writes to the same file could interleave, corrupting or
+        # dropping a line instead of each landing as a clean, whole one.
+        with self._transcript_lock:
+            try:
+                with open(file_path, 'a') as file:
+                    file.write(f"{datetime.now().strftime('%H:%M:%S')} - {transcript_message}\n")
+            except FileNotFoundError:
+                with open(file_path, 'w') as file:
+                    file.write(f"{datetime.now().strftime('%H:%M:%S')} - {transcript_message}\n")
 
     def get_transcript(
         self, num_lines: str | int = 10, target: str = "transcript"

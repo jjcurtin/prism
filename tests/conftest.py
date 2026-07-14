@@ -85,9 +85,12 @@ def prism_instance(fake_prism_env):
     """
     from run_prism import PRISM
 
+    import threading
+
     p = PRISM.__new__(PRISM)
     p.mode = 'silent'
     p.repo_root = fake_prism_env
+    p._transcript_lock = threading.Lock()
     return p
 
 

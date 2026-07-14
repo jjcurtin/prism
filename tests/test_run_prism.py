@@ -52,6 +52,7 @@ def booted_prism_no_drive(fake_prism_env_no_drive):
     waitress `serve()` call with building the Flask app in-process so the
     test can hit it via test_client() instead of a real socket.
     """
+    import threading
     from run_prism import PRISM
     from task_managers._system_task_manager import SystemTaskManager
     from task_managers._participant_manager import ParticipantManager
@@ -59,6 +60,7 @@ def booted_prism_no_drive(fake_prism_env_no_drive):
     p = PRISM.__new__(PRISM)
     p.mode = 'silent'
     p.repo_root = fake_prism_env_no_drive
+    p._transcript_lock = threading.Lock()
     p.load_paths()
     p.load_api_keys()
     p.system_task_manager = SystemTaskManager(p)
@@ -156,11 +158,13 @@ def test_no_startup_directory_guard_exists():
 # instance with no PID file at all.
 
 def _make_bare_prism(repo_root):
+    import threading
     from run_prism import PRISM
     p = PRISM.__new__(PRISM)
     p.repo_root = repo_root
     p.mode = 'silent'
     p.logs_dir = str(repo_root / 'logs')
+    p._transcript_lock = threading.Lock()
     return p
 
 
@@ -202,6 +206,7 @@ def test_unlink_pid_file_if_owned_tolerates_a_missing_file(tmp_path):
 
 def test_init_succeeds_regardless_of_invocation_directory(monkeypatch, fake_prism_env_no_drive):
     import os
+    import threading
     from run_prism import PRISM
     from task_managers._system_task_manager import SystemTaskManager
     from task_managers._participant_manager import ParticipantManager
@@ -217,6 +222,7 @@ def test_init_succeeds_regardless_of_invocation_directory(monkeypatch, fake_pris
             p = PRISM.__new__(PRISM)
             p.mode = 'silent'
             p.repo_root = fake_prism_env_no_drive
+            p._transcript_lock = threading.Lock()
             p.load_paths()  # must not raise regardless of cwd
             p.load_api_keys()
             p.system_task_manager = SystemTaskManager(p)

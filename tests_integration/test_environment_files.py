@@ -61,8 +61,11 @@ def _load_app_for_environment(environment):
     points to, so this test can check "dev" and "prod" independently in the
     same run.
     """
+    import threading
+
     app = PRISM.__new__(PRISM)
     app.mode = 'silent'
+    app._transcript_lock = threading.Lock()
     app.load_paths(environment=environment)
     return app
 

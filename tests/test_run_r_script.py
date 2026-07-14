@@ -101,6 +101,28 @@ def test_run_allows_scripts_dir_that_differs_only_in_case(tmp_path, fake_app, mo
     assert not any('escapes' in msg for _, msg in fake_app.transcript)
 
 
+def test_run_rechecks_containment_immediately_before_subprocess_run(tmp_path, fake_app, mocker):
+    """Regression test for a fixed TOCTOU gap: the containment check used
+    to run once, well before subprocess.run -- a script swapped out (e.g. a
+    symlink repointed) in that window would slip through. Now
+    _escapes_scripts_dir() is called again immediately before
+    subprocess.run; simulating that second call detecting an escape (first
+    call says safe, second says escaped) proves the re-check actually
+    guards the call, not just that it runs twice harmlessly.
+    """
+    (tmp_path / 'cleanup.R').write_text('# fake R script')
+    fake_app.r_scripts_dir = str(tmp_path)
+    mock_run = mocker.patch('system_tasks._run_r_script.subprocess.run')
+    task = RunRScript(fake_app, 'cleanup.R')
+    mocker.patch.object(task, '_escapes_scripts_dir', side_effect=[False, True])
+
+    result = task.run()
+
+    assert result == 1
+    mock_run.assert_not_called()
+    assert any('re-checked immediately before running' in msg for _, msg in fake_app.transcript)
+
+
 def test_run_success_restores_cwd_and_logs_output(tmp_path, fake_app, mocker):
     (tmp_path / 'cleanup.R').write_text('# fake R script')
     fake_app.r_scripts_dir = str(tmp_path)

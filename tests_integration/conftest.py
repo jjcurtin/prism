@@ -42,10 +42,12 @@ def real_app():
     not a cwd-relative "../data/..." literal. This fixture used to chdir into
     src/ before 2026-07-10's move away from those hardcoded relative paths.
     """
+    import threading
     from run_prism import PRISM
 
     app = PRISM.__new__(PRISM)
     app.mode = 'silent'
+    app._transcript_lock = threading.Lock()
     app.load_paths()
     app.load_api_keys()
     return app

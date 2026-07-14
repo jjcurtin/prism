@@ -19,6 +19,42 @@ class RunRScript(SystemTask):
         super().__init__(app)
         self.r_script_path = r_script_path
 
+    def _escapes_scripts_dir(self, scripts_dir: str) -> bool:
+        """Resolves self.r_script_path against scripts_dir and checks
+        containment fresh on every call (never a cached result) -- called
+        once up front in run() below, and again immediately before the
+        subprocess.run call, to shrink the TOCTOU window between "checked
+        safe" and "actually executed" in case the path (e.g. a symlink
+        under scripts_dir) changes underneath in between. This narrows
+        that window, it doesn't close it -- a swap landing in the
+        remaining gap between this second check and the exec call itself
+        would still slip through; that residual is accepted rather than
+        chased, since subprocess.run offers no atomic check-then-exec.
+        """
+        script_full_path = os.path.join(scripts_dir, self.r_script_path)
+        resolved_script = os.path.realpath(script_full_path)
+        resolved_scripts_dir = os.path.realpath(scripts_dir)
+        try:
+            # normcase on both sides *before* commonpath, not after --
+            # commonpath compares path components as raw strings to find
+            # the common prefix, so case-folding only the result would
+            # already be too late: on a case-insensitive filesystem
+            # (Windows, older macOS), a script path differing only in case
+            # from scripts_dir would make commonpath conclude they share no
+            # common directory at all, falsely rejecting it as an escape.
+            normcased_scripts_dir = os.path.normcase(resolved_scripts_dir)
+            return os.path.commonpath([
+                os.path.normcase(resolved_script), normcased_scripts_dir
+            ]) != normcased_scripts_dir
+        except ValueError:
+            # commonpath raises ValueError when the paths can't be compared
+            # at all (e.g. mixed absolute/relative forms, or different
+            # drives on Windows) -- containment can't be verified, so
+            # refuse the same way an actual escape would, rather than
+            # letting this propagate as a generic unhandled-exception
+            # failure.
+            return True
+
     def run(self) -> int:
         """Refuses to execute if `r_script_path` resolves (via realpath)
         outside `scripts_dir` -- guards against a path-traversal-style script
@@ -45,32 +81,21 @@ class RunRScript(SystemTask):
         if not os.path.exists(script_full_path):
             self.app.add_to_transcript(f"R script {self.r_script_path} does not exist in {scripts_dir}. Please check the path.", "ERROR")
             return 1
-        resolved_script = os.path.realpath(script_full_path)
-        resolved_scripts_dir = os.path.realpath(scripts_dir)
-        try:
-            # normcase on both sides *before* commonpath, not after --
-            # commonpath compares path components as raw strings to find
-            # the common prefix, so case-folding only the result would
-            # already be too late: on a case-insensitive filesystem
-            # (Windows, older macOS), a script path differing only in case
-            # from scripts_dir would make commonpath conclude they share no
-            # common directory at all, falsely rejecting it as an escape.
-            normcased_scripts_dir = os.path.normcase(resolved_scripts_dir)
-            escapes = os.path.commonpath([
-                os.path.normcase(resolved_script), normcased_scripts_dir
-            ]) != normcased_scripts_dir
-        except ValueError:
-            # commonpath raises ValueError when the paths can't be compared
-            # at all (e.g. mixed absolute/relative forms, or different
-            # drives on Windows) -- containment can't be verified, so
-            # refuse the same way an actual escape would, rather than
-            # letting this propagate as a generic unhandled-exception
-            # failure.
-            escapes = True
-        if escapes:
+        if self._escapes_scripts_dir(scripts_dir):
             self.app.add_to_transcript(f"R script path {self.r_script_path} escapes the scripts directory {scripts_dir}. Refusing to run.", "ERROR")
             return 1
         try:
+            # Re-checked immediately before the actual subprocess.run call
+            # below (not just once, above) -- shrinks the TOCTOU window
+            # between "checked safe" and "actually executed" (see
+            # _escapes_scripts_dir's own docstring for what this does and
+            # doesn't close).
+            if self._escapes_scripts_dir(scripts_dir):
+                self.app.add_to_transcript(
+                    f"R script path {self.r_script_path} escapes the scripts directory {scripts_dir} "
+                    "(re-checked immediately before running). Refusing to run.", "ERROR"
+                )
+                return 1
             result = subprocess.run(
                 ['Rscript', self.r_script_path], capture_output = True, text = True,
                 cwd = scripts_dir, timeout = R_SCRIPT_TIMEOUT_SECONDS,
