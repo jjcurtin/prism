@@ -13,6 +13,22 @@ def _make_interface():
     return interface
 
 
+def test_api_202_is_treated_as_ok(mocker):
+    """send_studywide_survey (_routes.py) returns 202 once its background
+    send has started, not 200 -- api() must treat that as success too, not
+    fall into the generic non-200 error branch."""
+    interface = _make_interface()
+    mocker.patch.object(ui_state, 'timeout', 5)
+    response = mocker.Mock(status_code=202)
+    response.json.return_value = {"message": "Studywide ema send started."}
+    mocker.patch('prism_interface.requests.post', return_value=response)
+
+    ok, data = interface.api("POST", "participants/send_studywide_survey/ema/yes")
+
+    assert ok is True
+    assert data == {"message": "Studywide ema send started."}
+
+
 def test_api_non_200_prints_generic_message_when_body_has_no_error_key(mocker, capsys):
     interface = _make_interface()
     mocker.patch.object(ui_state, 'timeout', 5)

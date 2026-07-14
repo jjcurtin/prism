@@ -42,8 +42,10 @@ class PRISMInterface:
     def api(self, method: str, endpoint: str, json: dict[str, Any] | None = None) -> tuple[bool, Any]:
         """Talks to the PRISM Flask server over HTTP. Returns a (ok, data)
         tuple rather than a bare value: `ok` is True only for a real HTTP 200
-        response, `data` is the parsed JSON body in that case (None
-        otherwise). This keeps a legitimately falsy-but-successful response
+        or 202 response (202 is send_studywide_survey's own "accepted,
+        running in the background" status -- see _routes.py), `data` is the
+        parsed JSON body in that case (None otherwise). This keeps a
+        legitimately falsy-but-successful response
         (e.g. an empty list/dict) distinguishable from any of the several
         failure modes below (connection error, timeout, other exception, or
         a non-200 HTTP response) -- all of which previously collapsed to the
@@ -65,7 +67,7 @@ class PRISMInterface:
             else:
                 raise ValueError("Invalid HTTP method")
 
-            if r.status_code == 200:
+            if r.status_code in (200, 202):
                 return True, r.json()
             # Reads the server's own {"error": "..."} body (_routes.py's
             # consistent error-response shape) when present -- found by an

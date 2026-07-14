@@ -278,17 +278,17 @@ def test_feedback_off_menu_failure(fake_interface, capsys):
 
 def test_send_studywide_ema_menu_on_study_only_formats_yes_in_url(fake_interface, capsys):
     fake_interface.inputs_queue.put('y')
-    fake_interface.api = MagicMock(return_value=(True, {'message': 'sent'}))
+    fake_interface.api = MagicMock(return_value=(True, {'message': 'started'}))
 
     pmm.send_studywide_ema_menu(fake_interface)
 
     fake_interface.api.assert_called_once_with('POST', 'participants/send_studywide_survey/ema/yes')
-    assert 'Studywide EMA sent.' in capsys.readouterr().out
+    assert 'Studywide EMA send started' in capsys.readouterr().out
 
 
 def test_send_studywide_ema_menu_all_participants_formats_no_in_url(fake_interface):
     fake_interface.inputs_queue.put('n')
-    fake_interface.api = MagicMock(return_value=(True, {'message': 'sent'}))
+    fake_interface.api = MagicMock(return_value=(True, {'message': 'started'}))
 
     pmm.send_studywide_ema_menu(fake_interface)
 
@@ -301,17 +301,17 @@ def test_send_studywide_ema_menu_failure(fake_interface, capsys):
 
     pmm.send_studywide_ema_menu(fake_interface)
 
-    assert 'Failed to send studywide EMA' in capsys.readouterr().out
+    assert 'Failed to start studywide EMA send' in capsys.readouterr().out
 
 
 def test_send_studywide_feedback_menu_on_study_only_formats_yes_in_url(fake_interface, capsys):
     fake_interface.inputs_queue.put('y')
-    fake_interface.api = MagicMock(return_value=(True, {'message': 'sent'}))
+    fake_interface.api = MagicMock(return_value=(True, {'message': 'started'}))
 
     pmm.send_studywide_feedback_menu(fake_interface)
 
     fake_interface.api.assert_called_once_with('POST', 'participants/send_studywide_survey/feedback/yes')
-    assert 'Studywide feedback sent.' in capsys.readouterr().out
+    assert 'Studywide feedback send started' in capsys.readouterr().out
 
 
 def test_send_studywide_feedback_menu_failure(fake_interface, capsys):
@@ -320,7 +320,7 @@ def test_send_studywide_feedback_menu_failure(fake_interface, capsys):
 
     pmm.send_studywide_feedback_menu(fake_interface)
 
-    assert 'Failed to send studywide feedback' in capsys.readouterr().out
+    assert 'Failed to start studywide feedback send' in capsys.readouterr().out
 
 
 def test_participant_management_menu_no_participants_prints_nothing_paginated(fake_interface, monkeypatch, capsys):

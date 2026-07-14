@@ -40,9 +40,12 @@ def send_studywide_ema_menu(self: Interface) -> None:
     require_on_study_param = "yes" if require_on_study else "no"
     ok, _ = self.api("POST", f"participants/send_studywide_survey/ema/{url_segment(require_on_study_param)}")
     if ok:
-        success("Studywide EMA sent.", self)
+        # The send itself now runs on a background thread server-side and
+        # this 202 response only confirms it started, not that it finished
+        # -- see GET participants/studywide_survey_status for progress.
+        success("Studywide EMA send started; check studywide_survey_status for progress.", self)
     else:
-        error("Failed to send studywide EMA (no participants found, or every send failed).", self)
+        error("Failed to start studywide EMA send (no participants found, or one is already in progress).", self)
 
 def send_studywide_feedback_menu(self: Interface) -> None:
     require_on_study = prompt_confirmation(self, prompt = "Send to participants on study only?", default_value = "y")
@@ -50,9 +53,9 @@ def send_studywide_feedback_menu(self: Interface) -> None:
     require_on_study_param = "yes" if require_on_study else "no"
     ok, _ = self.api("POST", f"participants/send_studywide_survey/feedback/{url_segment(require_on_study_param)}")
     if ok:
-        success("Studywide feedback sent.", self)
+        success("Studywide feedback send started; check studywide_survey_status for progress.", self)
     else:
-        error("Failed to send studywide feedback (no participants found, or every send failed).", self)
+        error("Failed to start studywide feedback send (no participants found, or one is already in progress).", self)
 
 def ema_on_menu(self: Interface) -> None:
     ok, _ = self.api("POST", "participants/ema_on")

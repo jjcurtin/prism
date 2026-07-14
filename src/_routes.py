@@ -6,6 +6,7 @@ from typing import Any
 from flask import Flask, jsonify, request
 from flask.wrappers import Response
 from werkzeug.exceptions import HTTPException
+import threading
 import time
 from datetime import datetime
 
@@ -456,13 +457,35 @@ def create_flask_app(app_instance: App) -> Flask:
         app_instance.participant_manager.set_feedback_paused(True)
         return jsonify({"message": "Feedback sends paused for the rest of today."}), 200
 
+    # send_studywide_survey's background-send progress -- a small,
+    # thread-safe status blob (plain dict + lock), same minimal shape as
+    # _check_system.py's own daemon-thread-plus-result-dict pattern, just
+    # long-lived here (one per flask_app, not per call) since a caller
+    # needs to poll it across separate requests. Lives in this closure
+    # (not on app_instance) since only this route and its status GET
+    # sibling below touch it.
+    studywide_survey_status: dict[str, Any] = {
+        'in_progress': False,
+        'survey_type': None,
+        'scope': None,
+        'started_at': None,
+        'finished_at': None,
+        'attempted': 0,
+        'failed': 0,
+        'total_participants': 0,
+        'message': None,
+        'error': None,
+    }
+    studywide_survey_lock = threading.Lock()
+
     @flask_app.route('/participants/send_studywide_survey/<survey_type>/<require_on_study>', methods = ['POST'])
     def send_studywide_survey(survey_type: str, require_on_study: str) -> RouteResponse:
-        """Sends a one-off ema/feedback survey to every (optionally
-        on-study-filtered) participant right now, synchronously -- the
-        studywide counterpart to send_survey above, looped per participant
-        the same way study_announcement loops its own sends. Each
-        participant's send goes through add_task(one_time=True,
+        """Starts a one-off ema/feedback survey send to every (optionally
+        on-study-filtered) participant, running the per-participant send
+        loop on a background daemon thread instead of the request thread --
+        the studywide counterpart to send_survey above, looped per
+        participant the same way study_announcement loops its own sends.
+        Each participant's send goes through add_task(one_time=True,
         track=False) + finish_task(), the exact same mechanism (and the
         exact same duplicate-send race fix) send_survey already uses for
         a single participant; process_task() internally handles the
@@ -470,14 +493,25 @@ def create_flask_app(app_instance: App) -> Flask:
         feedback_paused_date pause switch's one_time carve-out, so
         neither needs to be re-checked here.
 
-        Runs the whole loop synchronously within this one request, same
-        as study_announcement -- for a very large roster this could hold
-        the request open for a while (each send is bounded by
-        SMS_SEND_TIMEOUT_SECONDS), a known, pre-existing tradeoff of that
-        established pattern, not something newly introduced here.
+        Used to run this whole loop synchronously within the request (same
+        as study_announcement still does) -- for a large roster, each send
+        bounded by SMS_SEND_TIMEOUT_SECONDS, that could hold a Flask worker
+        thread for a long time, and with only ~4 waitress worker threads
+        that was enough to starve the interface's own polling during a
+        large send. Returns immediately with 202 once the send is queued;
+        poll GET /participants/studywide_survey_status for progress/
+        completion (attempted/failed counts, and the same message/error
+        text this route used to return directly once the send finishes).
         """
         if survey_type not in ['ema', 'feedback']:
             return jsonify({"error": "Invalid survey type"}), 400
+
+        with studywide_survey_lock:
+            if studywide_survey_status['in_progress']:
+                return jsonify({
+                    "error": "A studywide survey send is already in progress; "
+                             "check /participants/studywide_survey_status."
+                }), 409
 
         on_study_only = require_on_study.lower() == 'yes'
         participants = app_instance.participant_manager.get_participant_ids_and_phone_numbers(
@@ -489,39 +523,76 @@ def create_flask_app(app_instance: App) -> Flask:
 
         scope = "on-study participants only" if on_study_only else "all participants"
         app_instance.add_to_transcript(
-            f"Studywide {survey_type} send ({scope}): {len(participants)} participant(s).", "INFO"
+            f"Studywide {survey_type} send ({scope}): {len(participants)} participant(s) -- running in background.",
+            "INFO",
         )
 
-        send_start = datetime.now()
-        attempted = 0
-        failed = 0
-        for unique_id, phone_number in participants:
-            if not phone_number.strip():
-                continue
-            attempted += 1
-            task = app_instance.participant_manager.add_task(
-                survey_type, datetime.now().strftime('%H:%M:%S'), participant_id = unique_id,
-                one_time = True, track = False,
-            )
-            if app_instance.participant_manager.finish_task(task) != 0:
-                failed += 1
-        elapsed_seconds = (datetime.now() - send_start).total_seconds()
-        app_instance.add_to_transcript(
-            f"Studywide {survey_type} send finished in {elapsed_seconds:.1f}s "
-            f"({attempted} attempted, {failed} failed).", "INFO"
-        )
-        if attempted == 0:
+        with studywide_survey_lock:
+            studywide_survey_status.update({
+                'in_progress': True,
+                'survey_type': survey_type,
+                'scope': scope,
+                'started_at': datetime.now().isoformat(),
+                'finished_at': None,
+                'attempted': 0,
+                'failed': 0,
+                'total_participants': len(participants),
+                'message': None,
+                'error': None,
+            })
+
+        def _run_studywide_send() -> None:
+            send_start = datetime.now()
+            attempted = 0
+            failed = 0
+            for unique_id, phone_number in participants:
+                if not phone_number.strip():
+                    continue
+                attempted += 1
+                task = app_instance.participant_manager.add_task(
+                    survey_type, datetime.now().strftime('%H:%M:%S'), participant_id = unique_id,
+                    one_time = True, track = False,
+                )
+                if app_instance.participant_manager.finish_task(task) != 0:
+                    failed += 1
+                with studywide_survey_lock:
+                    studywide_survey_status['attempted'] = attempted
+                    studywide_survey_status['failed'] = failed
+            elapsed_seconds = (datetime.now() - send_start).total_seconds()
             app_instance.add_to_transcript(
-                f"Studywide {survey_type} send failed: no participant in scope had a valid phone number on file", "ERROR"
+                f"Studywide {survey_type} send finished in {elapsed_seconds:.1f}s "
+                f"({attempted} attempted, {failed} failed).", "INFO"
             )
-            return jsonify({"error": "No participant in scope had a valid phone number on file; nothing was sent."}), 502
-        if failed == attempted:
-            return jsonify({"error": f"Failed to send {survey_type} to any participant"}), 502
-        if failed:
-            return jsonify({
-                "message": f"Studywide {survey_type} sent, but failed for {failed} of {attempted} participants."
-            }), 200
-        return jsonify({"message": f"Studywide {survey_type} sent to {scope}."}), 200
+            message: str | None = None
+            error: str | None = None
+            if attempted == 0:
+                app_instance.add_to_transcript(
+                    f"Studywide {survey_type} send failed: no participant in scope had a valid phone number on file",
+                    "ERROR",
+                )
+                error = "No participant in scope had a valid phone number on file; nothing was sent."
+            elif failed == attempted:
+                error = f"Failed to send {survey_type} to any participant"
+            elif failed:
+                message = f"Studywide {survey_type} sent, but failed for {failed} of {attempted} participants."
+            else:
+                message = f"Studywide {survey_type} sent to {scope}."
+            with studywide_survey_lock:
+                studywide_survey_status['in_progress'] = False
+                studywide_survey_status['finished_at'] = datetime.now().isoformat()
+                studywide_survey_status['message'] = message
+                studywide_survey_status['error'] = error
+
+        threading.Thread(target = _run_studywide_send, daemon = True, name = f"studywide-{survey_type}-send").start()
+        return jsonify({
+            "message": f"Studywide {survey_type} send started for {scope} ({len(participants)} participant(s)); "
+                       "poll /participants/studywide_survey_status for progress.",
+        }), 202
+
+    @flask_app.route('/participants/studywide_survey_status', methods = ['GET'])
+    def get_studywide_survey_status() -> RouteResponse:
+        with studywide_survey_lock:
+            return jsonify(dict(studywide_survey_status)), 200
 
     ########################
     #  Error handling      #

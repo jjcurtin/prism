@@ -5,6 +5,7 @@ a real `create_flask_app(app_instance)`, with `app_instance.system_task_manager`
 `.participant_manager` as MagicMocks (`routes_app_instance` fixture) --
 no real network, no real config/API files.
 """
+import threading
 from unittest.mock import MagicMock
 
 import pytest
@@ -903,6 +904,32 @@ def test_get_send_counts(routes_client, routes_app_instance):
 # ------------------------------------------------------------
 # send_studywide_survey -- studywide EMA/feedback bulk send
 # ------------------------------------------------------------
+#
+# The send loop runs on a background daemon thread (fixed bug: it used to
+# run synchronously on the request thread, which could hold one of
+# waitress's ~4 worker threads for the whole roster's send duration and
+# starve the interface's own polling). The POST route now only starts the
+# send and returns 202; these tests poll the studywide_survey_status GET
+# route until the background thread reports it's done, then assert against
+# that final status instead of the (no longer present) synchronous
+# response body.
+
+def _wait_for_studywide_survey_done(routes_client, timeout=2.0):
+    """Polls GET /participants/studywide_survey_status until in_progress
+    is False (the background thread has finished updating it) or the
+    timeout elapses, and returns the final status dict. The mocked
+    participant_manager calls in these tests are instantaneous, so the
+    background thread finishes almost immediately in practice -- this loop
+    exists only to avoid a flaky race against exactly when it does.
+    """
+    import time as _time
+    deadline = _time.monotonic() + timeout
+    status = routes_client.get('/participants/studywide_survey_status').get_json()
+    while status['in_progress'] and _time.monotonic() < deadline:
+        _time.sleep(0.01)
+        status = routes_client.get('/participants/studywide_survey_status').get_json()
+    return status
+
 
 def test_send_studywide_survey_invalid_type(routes_client):
     resp = routes_client.post('/participants/send_studywide_survey/not_a_type/yes')
@@ -918,7 +945,7 @@ def test_send_studywide_survey_no_participants_is_404(routes_client, routes_app_
     routes_app_instance.participant_manager.add_task.assert_not_called()
 
 
-def test_send_studywide_survey_sends_one_time_task_per_participant(routes_client, routes_app_instance):
+def test_send_studywide_survey_starts_in_background_and_returns_202(routes_client, routes_app_instance):
     routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.return_value = [
         ('000000000', '5555550100'), ('000000001', '5555550101'),
     ]
@@ -928,7 +955,23 @@ def test_send_studywide_survey_sends_one_time_task_per_participant(routes_client
 
     resp = routes_client.post('/participants/send_studywide_survey/ema/yes')
 
-    assert resp.status_code == 200
+    assert resp.status_code == 202
+    assert 'started' in resp.get_json()['message']
+
+
+def test_send_studywide_survey_sends_one_time_task_per_participant(routes_client, routes_app_instance):
+    routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.return_value = [
+        ('000000000', '5555550100'), ('000000001', '5555550101'),
+    ]
+    fake_task = {'task_type': 'ema', 'one_time': True}
+    routes_app_instance.participant_manager.add_task.return_value = fake_task
+    routes_app_instance.participant_manager.finish_task.return_value = 0
+
+    resp = routes_client.post('/participants/send_studywide_survey/ema/yes')
+    assert resp.status_code == 202
+    status = _wait_for_studywide_survey_done(routes_client)
+
+    assert status['in_progress'] is False
     assert routes_app_instance.participant_manager.add_task.call_count == 2
     for call in routes_app_instance.participant_manager.add_task.call_args_list:
         args, kwargs = call
@@ -939,6 +982,8 @@ def test_send_studywide_survey_sends_one_time_task_per_participant(routes_client
         '000000000', '000000001',
     }
     assert routes_app_instance.participant_manager.finish_task.call_count == 2
+    assert status['attempted'] == 2
+    assert status['failed'] == 0
 
 
 def test_send_studywide_survey_skips_blank_phone_numbers(routes_client, routes_app_instance):
@@ -956,11 +1001,12 @@ def test_send_studywide_survey_skips_blank_phone_numbers(routes_client, routes_a
     routes_app_instance.participant_manager.finish_task.return_value = 0
 
     resp = routes_client.post('/participants/send_studywide_survey/ema/yes')
+    assert resp.status_code == 202
+    status = _wait_for_studywide_survey_done(routes_client)
 
-    assert resp.status_code == 200
     assert routes_app_instance.participant_manager.add_task.call_count == 1
     assert routes_app_instance.participant_manager.add_task.call_args.kwargs['participant_id'] == '000000000'
-    assert resp.get_json()['message'] == 'Studywide ema sent to on-study participants only.'
+    assert status['message'] == 'Studywide ema sent to on-study participants only.'
 
 
 def test_send_studywide_survey_passes_on_study_only_flag_through(routes_client, routes_app_instance):
@@ -971,14 +1017,15 @@ def test_send_studywide_survey_passes_on_study_only_flag_through(routes_client, 
     routes_app_instance.participant_manager.finish_task.return_value = 0
 
     resp = routes_client.post('/participants/send_studywide_survey/feedback/yes')
+    assert resp.status_code == 202
+    _wait_for_studywide_survey_done(routes_client)
 
-    assert resp.status_code == 200
     routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.assert_called_once_with(
         on_study_only = True
     )
 
 
-def test_send_studywide_survey_all_fail_is_502(routes_client, routes_app_instance):
+def test_send_studywide_survey_all_fail_is_reported_as_error_in_status(routes_client, routes_app_instance):
     routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.return_value = [
         ('000000000', '5555550100'), ('000000001', '5555550101'),
     ]
@@ -986,8 +1033,11 @@ def test_send_studywide_survey_all_fail_is_502(routes_client, routes_app_instanc
     routes_app_instance.participant_manager.finish_task.return_value = -1
 
     resp = routes_client.post('/participants/send_studywide_survey/ema/yes')
+    assert resp.status_code == 202
+    status = _wait_for_studywide_survey_done(routes_client)
 
-    assert resp.status_code == 502
+    assert status['error'] == 'Failed to send ema to any participant'
+    assert status['message'] is None
 
 
 def test_send_studywide_survey_partial_failure_notes_count(routes_client, routes_app_instance):
@@ -998,9 +1048,11 @@ def test_send_studywide_survey_partial_failure_notes_count(routes_client, routes
     routes_app_instance.participant_manager.finish_task.side_effect = [0, -1]
 
     resp = routes_client.post('/participants/send_studywide_survey/ema/yes')
+    assert resp.status_code == 202
+    status = _wait_for_studywide_survey_done(routes_client)
 
-    assert resp.status_code == 200
-    assert '1 of 2' in resp.get_json()['message']
+    assert '1 of 2' in status['message']
+    assert status['error'] is None
 
 
 def test_send_studywide_survey_logs_scope_and_elapsed_time(routes_client, routes_app_instance):
@@ -1011,28 +1063,70 @@ def test_send_studywide_survey_logs_scope_and_elapsed_time(routes_client, routes
     routes_app_instance.participant_manager.finish_task.return_value = 0
 
     resp = routes_client.post('/participants/send_studywide_survey/ema/no')
+    assert resp.status_code == 202
+    _wait_for_studywide_survey_done(routes_client)
 
-    assert resp.status_code == 200
     messages = [msg for _, msg in routes_app_instance.transcript]
     assert any('Studywide ema send' in msg and 'all participants' in msg for msg in messages)
     assert any('Studywide ema send finished in' in msg for msg in messages)
 
 
-def test_send_studywide_survey_zero_attempted_is_502(routes_client, routes_app_instance):
+def test_send_studywide_survey_zero_attempted_is_reported_as_error_in_status(routes_client, routes_app_instance):
     """Regression test for a fixed bug: when every participant in scope had
     a blank phone number, `attempted` stayed 0, which made the
     `attempted and failed == attempted` all-failed check vacuously False --
-    the route fell through and reported a 200 success despite never
-    attempting a single send.
+    the route fell through and reported success despite never attempting a
+    single send.
     """
     routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.return_value = [
         ('000000000', ''), ('000000001', '   '),
     ]
 
     resp = routes_client.post('/participants/send_studywide_survey/ema/yes')
+    assert resp.status_code == 202
+    status = _wait_for_studywide_survey_done(routes_client)
 
-    assert resp.status_code == 502
+    assert status['error'] == 'No participant in scope had a valid phone number on file; nothing was sent.'
     routes_app_instance.participant_manager.add_task.assert_not_called()
+
+
+def test_send_studywide_survey_already_in_progress_is_409(routes_client, routes_app_instance):
+    """A second bulk send started while one is already running is rejected
+    outright rather than allowed to race the first (both loops would share
+    the same status blob and clobber each other's progress counters)."""
+    started = threading.Event()
+    release = threading.Event()
+
+    def slow_finish_task(task):
+        started.set()
+        release.wait(timeout=2)
+        return 0
+
+    routes_app_instance.participant_manager.get_participant_ids_and_phone_numbers.return_value = [
+        ('000000000', '5555550100'),
+    ]
+    routes_app_instance.participant_manager.add_task.return_value = {'task_type': 'ema', 'one_time': True}
+    routes_app_instance.participant_manager.finish_task.side_effect = slow_finish_task
+
+    first_resp = routes_client.post('/participants/send_studywide_survey/ema/yes')
+    assert first_resp.status_code == 202
+    assert started.wait(timeout=2), "background send never reached finish_task"
+
+    second_resp = routes_client.post('/participants/send_studywide_survey/ema/yes')
+    assert second_resp.status_code == 409
+
+    release.set()
+    _wait_for_studywide_survey_done(routes_client)
+
+
+def test_studywide_survey_status_before_any_send_is_idle(routes_client):
+    resp = routes_client.get('/participants/studywide_survey_status')
+    assert resp.status_code == 200
+    status = resp.get_json()
+    assert status['in_progress'] is False
+    assert status['survey_type'] is None
+    assert status['attempted'] == 0
+    assert status['failed'] == 0
 
 
 # ------------------------------------------------------------
