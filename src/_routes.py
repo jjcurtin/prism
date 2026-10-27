@@ -383,7 +383,7 @@ def create_flask_app(app_instance: App) -> Flask:
         # phone_number) so both the live send log and the silent-mode
         # simulated-send log can name which participant a message was
         # sent/simulated for.
-        on_study_only = require_on_study.lower() == 'yes'
+        on_study_only = require_on_study.lower() in ('true', 'yes')
         participants = app_instance.participant_manager.get_participant_ids_and_phone_numbers(
             on_study_only = on_study_only
         )
@@ -526,7 +526,7 @@ def create_flask_app(app_instance: App) -> Flask:
                 }), 409
             studywide_survey_status['in_progress'] = True
 
-        on_study_only = require_on_study.lower() == 'yes'
+        on_study_only = require_on_study.lower() in ('true', 'yes')
         participants = app_instance.participant_manager.get_participant_ids_and_phone_numbers(
             on_study_only = on_study_only
         )

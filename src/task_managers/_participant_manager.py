@@ -260,7 +260,7 @@ class ParticipantManager(TaskManager):
                     else:
                         self.app.add_to_transcript(
                             f"Skipping participant row {row_number}: invalid on_study value "
-                            f"{row.get('on_study')!r}; expected yes/no.", "ERROR"
+                            f"{row.get('on_study')!r}; expected true/false.", "ERROR"
                         )
                         continue
                     # Rejected (not silently loaded) for a non-blank value
@@ -533,7 +533,7 @@ class ParticipantManager(TaskManager):
                         # client that sends more than the 9 documented fields,
                         # not just the interface's own menu.
                         row = {header: participant.get(header, '') for header in PARTICIPANT_CSV_HEADERS}
-                        row['on_study'] = 'yes' if participant['on_study'] else 'no'
+                        row['on_study'] = 'true' if participant['on_study'] else 'false'
                         writer.writerow(row)
                 self._last_written_version = my_version
                 return 0
@@ -695,9 +695,9 @@ class ParticipantManager(TaskManager):
 
         Also coerces on_study to a real bool the same way (found in the
         same review: this method never coerced it at all, unlike
-        update_participant. A JSON string "no" is truthy in Python, so
-        save_participants()'s `'yes' if participant['on_study'] else
-        'no'` wrote the literal string "yes" to disk -- the opposite of
+        update_participant. A JSON string "false" is truthy in Python, so
+        save_participants()'s `'true' if participant['on_study'] else
+        'false'` wrote the literal string "true" to disk -- the opposite of
         what the caller asked for -- and process_task()'s off-study skip
         (`participant['on_study'] is False`) also never matches a string,
         so an intentionally off-study participant kept receiving

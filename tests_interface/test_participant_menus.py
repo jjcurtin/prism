@@ -90,9 +90,9 @@ def test_refresh_participants_menu_failure_reports_error_without_second_call(fak
 # send_announcement_menu
 # ------------------------------------------------------------
 
-def test_send_announcement_menu_on_study_only_formats_yes_in_url(fake_interface, monkeypatch, capsys):
+def test_send_announcement_menu_on_study_only_formats_true_in_url(fake_interface, monkeypatch, capsys):
     """Regression test for the earlier-this-session fix: require_on_study_param
-    must be the literal string 'yes'/'no', not str(bool) ('True'/'False')."""
+    must be the literal lowercase string 'true'/'false', not str(bool) ('True'/'False')."""
     fake_interface.inputs_queue.put('y')
     monkeypatch.setattr(pmm, 'print_twilio_terminal_prompt', lambda: 'hello participants')
     fake_interface.api = MagicMock(return_value=(True, {'sent': True}))
@@ -100,12 +100,12 @@ def test_send_announcement_menu_on_study_only_formats_yes_in_url(fake_interface,
     pmm.send_announcement_menu(fake_interface)
 
     fake_interface.api.assert_called_once_with(
-        'POST', 'participants/study_announcement/yes', json={'message': 'hello participants'}
+        'POST', 'participants/study_announcement/true', json={'message': 'hello participants'}
     )
     assert 'Study announcement sent.' in capsys.readouterr().out
 
 
-def test_send_announcement_menu_all_participants_formats_no_in_url(fake_interface, monkeypatch):
+def test_send_announcement_menu_all_participants_formats_false_in_url(fake_interface, monkeypatch):
     fake_interface.inputs_queue.put('n')
     monkeypatch.setattr(pmm, 'print_twilio_terminal_prompt', lambda: 'hi all')
     fake_interface.api = MagicMock(return_value=(True, {'sent': True}))
@@ -113,7 +113,7 @@ def test_send_announcement_menu_all_participants_formats_no_in_url(fake_interfac
     pmm.send_announcement_menu(fake_interface)
 
     fake_interface.api.assert_called_once_with(
-        'POST', 'participants/study_announcement/no', json={'message': 'hi all'}
+        'POST', 'participants/study_announcement/false', json={'message': 'hi all'}
     )
 
 
@@ -276,23 +276,23 @@ def test_feedback_off_menu_failure(fake_interface, capsys):
 # send_studywide_ema_menu / send_studywide_feedback_menu
 # ------------------------------------------------------------
 
-def test_send_studywide_ema_menu_on_study_only_formats_yes_in_url(fake_interface, capsys):
+def test_send_studywide_ema_menu_on_study_only_formats_true_in_url(fake_interface, capsys):
     fake_interface.inputs_queue.put('y')
     fake_interface.api = MagicMock(return_value=(True, {'message': 'started'}))
 
     pmm.send_studywide_ema_menu(fake_interface)
 
-    fake_interface.api.assert_called_once_with('POST', 'participants/send_studywide_survey/ema/yes')
+    fake_interface.api.assert_called_once_with('POST', 'participants/send_studywide_survey/ema/true')
     assert 'Studywide EMA send started' in capsys.readouterr().out
 
 
-def test_send_studywide_ema_menu_all_participants_formats_no_in_url(fake_interface):
+def test_send_studywide_ema_menu_all_participants_formats_false_in_url(fake_interface):
     fake_interface.inputs_queue.put('n')
     fake_interface.api = MagicMock(return_value=(True, {'message': 'started'}))
 
     pmm.send_studywide_ema_menu(fake_interface)
 
-    fake_interface.api.assert_called_once_with('POST', 'participants/send_studywide_survey/ema/no')
+    fake_interface.api.assert_called_once_with('POST', 'participants/send_studywide_survey/ema/false')
 
 
 def test_send_studywide_ema_menu_failure(fake_interface, capsys):
@@ -304,13 +304,13 @@ def test_send_studywide_ema_menu_failure(fake_interface, capsys):
     assert 'Failed to start studywide EMA send' in capsys.readouterr().out
 
 
-def test_send_studywide_feedback_menu_on_study_only_formats_yes_in_url(fake_interface, capsys):
+def test_send_studywide_feedback_menu_on_study_only_formats_true_in_url(fake_interface, capsys):
     fake_interface.inputs_queue.put('y')
     fake_interface.api = MagicMock(return_value=(True, {'message': 'started'}))
 
     pmm.send_studywide_feedback_menu(fake_interface)
 
-    fake_interface.api.assert_called_once_with('POST', 'participants/send_studywide_survey/feedback/yes')
+    fake_interface.api.assert_called_once_with('POST', 'participants/send_studywide_survey/feedback/true')
     assert 'Studywide feedback send started' in capsys.readouterr().out
 
 

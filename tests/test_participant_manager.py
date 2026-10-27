@@ -1840,6 +1840,28 @@ def test_save_participants_round_trips_through_load(tmp_path, fake_app):
     assert pm.participants[0]['on_study'] is True
 
 
+def test_save_participants_writes_on_study_as_true_false(tmp_path, fake_app):
+    """Regression test for a fixed bug: save_participants() wrote on_study
+    as "yes"/"no", so any interface save (e.g. adding one participant)
+    rewrote every row of study_participants.csv away from the true/false
+    values the lab uses."""
+    import csv
+    csv_file = tmp_path / 'study_participants.csv'
+    fake_app.participants_path = str(csv_file)
+    pm = make_manager(fake_app)
+    pm.file_path = str(csv_file)
+    pm.participants = [
+        dict(PARTICIPANT, unique_id='1', on_study=True),
+        dict(PARTICIPANT, unique_id='2', on_study=False),
+    ]
+
+    assert pm.save_participants() == 0
+
+    with open(csv_file, newline='') as f:
+        values = [row['on_study'] for row in csv.DictReader(f)]
+    assert values == ['true', 'false']
+
+
 def test_save_participants_then_load_participants_round_trips_embedded_comma_and_quote(tmp_path, fake_app):
     """Regression test for a fixed bug: the old hand-rolled writer/reader
     (line.split(',') + strip('"'), and f-string quoting with no escaping)

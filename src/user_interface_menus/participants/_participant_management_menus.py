@@ -25,7 +25,7 @@ def send_announcement_menu(self: Interface) -> None:
         error("Message cannot be empty. Please try again.", self)
         return
     
-    require_on_study_param = "yes" if require_on_study else "no"
+    require_on_study_param = "true" if require_on_study else "false"
     ok, _ = self.api(
         "POST", f"participants/study_announcement/{url_segment(require_on_study_param)}", json = {"message": message}
     )
@@ -37,7 +37,7 @@ def send_announcement_menu(self: Interface) -> None:
 def send_studywide_ema_menu(self: Interface) -> None:
     require_on_study = prompt_confirmation(self, prompt = "Send to participants on study only?", default_value = "y")
     print("Sending to participants on study only." if require_on_study else "Sending to all participants.")
-    require_on_study_param = "yes" if require_on_study else "no"
+    require_on_study_param = "true" if require_on_study else "false"
     ok, _ = self.api("POST", f"participants/send_studywide_survey/ema/{url_segment(require_on_study_param)}")
     if ok:
         # The send itself now runs on a background thread server-side and
@@ -50,7 +50,7 @@ def send_studywide_ema_menu(self: Interface) -> None:
 def send_studywide_feedback_menu(self: Interface) -> None:
     require_on_study = prompt_confirmation(self, prompt = "Send to participants on study only?", default_value = "y")
     print("Sending to participants on study only." if require_on_study else "Sending to all participants.")
-    require_on_study_param = "yes" if require_on_study else "no"
+    require_on_study_param = "true" if require_on_study else "false"
     ok, _ = self.api("POST", f"participants/send_studywide_survey/feedback/{url_segment(require_on_study_param)}")
     if ok:
         success("Studywide feedback send started; check studywide_survey_status for progress.", self)
@@ -185,7 +185,7 @@ def participant_management_menu(self: Interface) -> None:
         print_dashes()
         for p in page:
             row = "".join(
-                f"{('yes' if p[field] else 'no') if field == 'on_study' else p[field]:<{width}}"
+                f"{('true' if p[field] else 'false') if field == 'on_study' else p[field]:<{width}}"
                 for _, field, width in columns
             )
             print(row)

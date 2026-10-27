@@ -536,9 +536,9 @@ Current Filter Settings: All
 --------------------------------------------------------------------------------
 SUBID     INITIALS  UNIQUE_ID  ON_STUDY  PHONE_NUMBER
 --------------------------------------------------------------------------------
-1001      JMS       100000001  yes       6085551234
-1002      AKT       100000002  yes       6085555678
-1003      RQP       100000003  no        6085559012
+1001      JMS       100000001  true      6085551234
+1002      AKT       100000002  true      6085555678
+1003      RQP       100000003  false     6085559012
 --------------------------------------------------------------------------------
 Showing 1-3 of 3 participants.
 ```
@@ -601,7 +601,7 @@ regardless of which page is showing.
 ### Adding a participant
 
 `add` walks you through: first name, last name, a 9-digit unique ID (leave
-blank and PRISM will generate one for you), on-study yes/no, phone number
+blank and PRISM will generate one for you), on-study true/false, phone number
 (optional), and four daily times in `HH:MM:SS` format — EMA send, EMA
 reminder, feedback send, and feedback reminder. If you leave a time blank,
 or type it in the wrong format, PRISM fills in a sensible default and tells
