@@ -1369,7 +1369,7 @@ def test_process_task_off_study_one_time_task_still_sends(fake_app, mocker):
     pm.participants = [participant]
     fake_app.mode = 'live'
     fake_app.ema_survey_id = 'fake_survey'
-    fake_app.ema_message = "Hello, it's time to take your daily survey."
+    fake_app.ema_message = "Hello, it's time to complete your daily reflection."
     send_sms = mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
 
     result = pm.process_task({'task_type': 'ema', 'participant_id': '000000000', 'one_time': True})
@@ -1383,7 +1383,7 @@ def test_process_task_sends_ema_sms_in_live_mode(fake_app, mocker):
     pm.participants = [dict(PARTICIPANT)]
     fake_app.mode = 'live'
     fake_app.ema_survey_id = 'fake_survey'
-    fake_app.ema_message = "Hello, it's time to take your daily survey."
+    fake_app.ema_message = "Hello, it's time to complete your daily reflection."
     send_sms = mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
 
     result = pm.process_task({'task_type': 'ema', 'participant_id': '000000000'})
@@ -1398,7 +1398,7 @@ def test_process_task_scheduled_ema_skipped_while_paused(fake_app, mocker):
     pm.set_ema_paused(True)
     fake_app.mode = 'live'
     fake_app.ema_survey_id = 'fake_survey'
-    fake_app.ema_message = "Hello, it's time to take your daily survey."
+    fake_app.ema_message = "Hello, it's time to complete your daily reflection."
     send_sms = mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
 
     result = pm.process_task({'task_type': 'ema', 'participant_id': '000000000'})
@@ -1445,7 +1445,7 @@ def test_process_task_feedback_pause_does_not_affect_ema(fake_app, mocker):
     pm.set_feedback_paused(True)
     fake_app.mode = 'live'
     fake_app.ema_survey_id = 'fake_survey'
-    fake_app.ema_message = "Hello, it's time to take your daily survey."
+    fake_app.ema_message = "Hello, it's time to complete your daily reflection."
     send_sms = mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
 
     result = pm.process_task({'task_type': 'ema', 'participant_id': '000000000'})
@@ -1465,7 +1465,7 @@ def test_process_task_one_time_ema_send_bypasses_pause(fake_app, mocker):
     pm.set_ema_paused(True)
     fake_app.mode = 'live'
     fake_app.ema_survey_id = 'fake_survey'
-    fake_app.ema_message = "Hello, it's time to take your daily survey."
+    fake_app.ema_message = "Hello, it's time to complete your daily reflection."
     send_sms = mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
 
     result = pm.process_task({'task_type': 'ema', 'participant_id': '000000000', 'one_time': True})
@@ -1489,7 +1489,7 @@ def test_finish_task_one_time_survey_send_removes_only_the_one_time_task(fake_ap
     pm = make_manager(fake_app)
     pm.participants = [dict(PARTICIPANT)]
     fake_app.ema_survey_id = 'fake_survey'
-    fake_app.ema_message = "Hello, it's time to take your daily survey."
+    fake_app.ema_message = "Hello, it's time to complete your daily reflection."
     mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
     recurring_task = pm.add_task('ema', '09:00:00', participant_id='000000000')
 
@@ -1505,7 +1505,7 @@ def test_finish_task_one_time_survey_send_removed_even_on_failure(fake_app, mock
     pm.participants = [dict(PARTICIPANT)]
     fake_app.mode = 'live'
     fake_app.ema_survey_id = 'fake_survey'
-    fake_app.ema_message = "Hello, it's time to take your daily survey."
+    fake_app.ema_message = "Hello, it's time to complete your daily reflection."
     mocker.patch('task_managers._participant_manager.send_sms', side_effect=Exception('boom'))
     mocker.patch('task_managers._participant_manager.notify_coordinators')
 
@@ -1553,7 +1553,7 @@ def test_process_task_ema_reminder_sent_when_not_yet_opened(tmp_path, fake_app, 
     fake_app.reminders_path = str(reminders_file)
     fake_app.mode = 'live'
     fake_app.ema_survey_id = 'fake_survey'
-    fake_app.ema_reminder_message = "Hello, you have not yet completed your daily survey for today."
+    fake_app.ema_reminder_message = "Hello, you have not yet completed your daily reflection for today."
     pm = make_manager(fake_app)
     pm.participants = [dict(PARTICIPANT)]
     send_sms = mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
@@ -1577,7 +1577,7 @@ def test_process_task_reminders_file_missing_sends_reminder_anyway(fake_app, moc
     fake_app.mode = 'live'
     fake_app.reminders_path = '/nonexistent/reminders.csv'
     fake_app.ema_survey_id = 'fake_survey'
-    fake_app.ema_reminder_message = "Hello, you have not yet completed your daily survey for today."
+    fake_app.ema_reminder_message = "Hello, you have not yet completed your daily reflection for today."
     pm = make_manager(fake_app)
     pm.participants = [dict(PARTICIPANT)]
     send_sms = mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
@@ -1689,7 +1689,7 @@ def test_process_task_send_sms_failure_notifies_coordinators_and_returns_neg1(fa
     pm = make_manager(fake_app)
     pm.participants = [dict(PARTICIPANT)]
     fake_app.ema_survey_id = 'fake_survey'
-    fake_app.ema_message = "Hello, it's time to take your daily survey."
+    fake_app.ema_message = "Hello, it's time to complete your daily reflection."
     mocker.patch('task_managers._participant_manager.send_sms', side_effect=RuntimeError('twilio down'))
     notify = mocker.patch('task_managers._participant_manager.notify_coordinators', return_value=0)
 
@@ -1719,7 +1719,7 @@ def test_process_task_send_sms_reports_failure_via_return_value_notifies_coordin
     pm = make_manager(fake_app)
     pm.participants = [dict(PARTICIPANT)]
     fake_app.ema_survey_id = 'fake_survey'
-    fake_app.ema_message = "Hello, it's time to take your daily survey."
+    fake_app.ema_message = "Hello, it's time to complete your daily reflection."
     mocker.patch('task_managers._participant_manager.send_sms', return_value=1)  # 1 of 1 recipients failed
     notify = mocker.patch('task_managers._participant_manager.notify_coordinators', return_value=0)
 
@@ -1740,7 +1740,7 @@ def test_process_task_silent_mode_logs_simulated_send_not_sms_sent(fake_app, moc
     pm = make_manager(fake_app)
     pm.participants = [dict(PARTICIPANT)]
     fake_app.ema_survey_id = 'fake_survey'
-    fake_app.ema_message = "Hello, it's time to take your daily survey."
+    fake_app.ema_message = "Hello, it's time to complete your daily reflection."
     send_sms = mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
 
     result = pm.process_task({'task_type': 'ema', 'participant_id': '000000000'})
@@ -1789,7 +1789,7 @@ def test_process_task_notify_coordinators_failure_after_send_failure_does_not_pr
     pm = make_manager(fake_app)
     pm.participants = [dict(PARTICIPANT)]
     fake_app.ema_survey_id = 'fake_survey'
-    fake_app.ema_message = "Hello, it's time to take your daily survey."
+    fake_app.ema_message = "Hello, it's time to complete your daily reflection."
     mocker.patch('task_managers._participant_manager.send_sms', side_effect=RuntimeError('twilio down'))
     mocker.patch(
         'task_managers._participant_manager.notify_coordinators',
@@ -1997,7 +1997,7 @@ def test_process_task_records_send_count_on_success_live_mode(fake_app, mocker):
     pm.participants = [dict(PARTICIPANT)]
     fake_app.mode = 'live'
     fake_app.ema_survey_id = 'fake_survey'
-    fake_app.ema_message = "Hello, it's time to take your daily survey."
+    fake_app.ema_message = "Hello, it's time to complete your daily reflection."
     mocker.patch('task_managers._participant_manager.send_sms', return_value=0)
 
     pm.process_task({'task_type': 'ema', 'participant_id': '000000000'})
@@ -2022,7 +2022,7 @@ def test_process_task_does_not_record_send_count_on_failure(fake_app, mocker):
     pm.participants = [dict(PARTICIPANT)]
     fake_app.mode = 'live'
     fake_app.ema_survey_id = 'fake_survey'
-    fake_app.ema_message = "Hello, it's time to take your daily survey."
+    fake_app.ema_message = "Hello, it's time to complete your daily reflection."
     mocker.patch('task_managers._participant_manager.send_sms', return_value=1)  # 1 recipient failed
     mocker.patch('task_managers._participant_manager.notify_coordinators')
 

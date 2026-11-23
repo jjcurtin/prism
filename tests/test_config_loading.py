@@ -150,7 +150,7 @@ def test_load_api_keys_falls_back_to_message_defaults_when_columns_missing(prism
     prism_instance.load_api_keys()
 
     assert prism_instance.ema_survey_id == 'fake_ema_survey'
-    assert prism_instance.ema_message == "Hello, it's time to take your daily survey."
+    assert prism_instance.ema_message == "Hello, it's time to complete your daily reflection."
     assert prism_instance.feedback_reminder_message == (
         "Hello, you have not yet viewed your daily recovery message for today."
     )

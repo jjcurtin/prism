@@ -369,8 +369,8 @@ class PRISM():
     # is actually present, so one missing column doesn't take down the
     # whole file's worth of fields.
     API_FIELD_DEFAULTS: dict[str, str] = {
-        'ema_message': "Hello, it's time to take your daily survey.",
-        'ema_reminder_message': "Hello, you have not yet completed your daily survey for today.",
+        'ema_message': "Hello, it's time to complete your daily reflection.",
+        'ema_reminder_message': "Hello, you have not yet completed your daily reflection for today.",
         'feedback_message': "Hello, it's time to see your daily recovery message.",
         'feedback_reminder_message': "Hello, you have not yet viewed your daily recovery message for today.",
         'coordinator_alert_message': "{name}: {task_type} #{task_number} {outcome}. Script was executed at {task_start}.",
